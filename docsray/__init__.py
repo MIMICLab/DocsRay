@@ -1,4 +1,3 @@
-# docsray/__init__.py
 """
 DocsRay - PDF Question-Answering System with MCP Integration
 """
@@ -19,8 +18,11 @@ CACHE_DIR = DOCSRAY_HOME / "cache"
 for dir_path in [DOCSRAY_HOME, DATA_DIR, MODEL_DIR, CACHE_DIR]:
     dir_path.mkdir(parents=True, exist_ok=True)
 
-# Export main components
-from .chatbot import PDFChatBot
-from .mcp_server import Server as MCPServer
+# Conditional imports to avoid circular dependencies
+__all__ = ["__version__", "DOCSRAY_HOME", "DATA_DIR", "MODEL_DIR", "CACHE_DIR"]
 
-__all__ = ["PDFChatBot", "MCPServer", "__version__"]
+try:
+    from .chatbot import PDFChatBot
+    __all__.append("PDFChatBot")
+except ImportError:
+    pass  # During installation, dependencies might not be available yet

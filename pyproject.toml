@@ -1,15 +1,14 @@
-# pyproject.toml
 [build-system]
-requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.2"]
+requires = ["setuptools>=45", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "DocsRay"
+name = "docsray"
 version = "0.1.0"
 description = "PDF Question-Answering System with MCP Integration"
 readme = "README.md"
 requires-python = ">=3.8"
-license = {text = "MIT"}
+license = "MIT"  # 수정: text 대신 string으로
 authors = [
     {name = "Taehoon Kim", email = "taehoonkim@sogang.ac.kr"},
 ]
@@ -17,9 +16,16 @@ keywords = ["pdf", "rag", "mcp", "llm", "embedding"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
 ]
+dynamic = ["dependencies", "optional-dependencies"]  # 추가: dynamic 설정
+
+[project.scripts]  # 추가: entry points를 여기에 정의
+docsray = "docsray.cli:main"
+docsray-mcp = "docsray.mcp_server:main"
+docsray-web = "docsray.web_demo:main"
+docsray-api = "docsray.app:main"
+docsray-download-models = "docsray.download_models:main"
 
 [project.urls]
 Homepage = "https://github.com/MIMICLab/DocsRay"
@@ -30,3 +36,6 @@ Issues = "https://github.com/MIMICLab/DocsRay/issues"
 [tool.setuptools.packages.find]
 include = ["docsray*"]
 exclude = ["tests*"]
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}

@@ -125,7 +125,7 @@ class EmbeddingModel:
             embs = np.add(_l2_normalize(embs_1), _l2_normalize(embs_2))   # element-wise sum
             embs = _l2_normalize(embs)        
             return embs
-
+# 기존 코드 (line 95-103) 대신:
 
 if torch.cuda.is_available():
     device = "cuda"
@@ -134,8 +134,33 @@ elif torch.backends.mps.is_available():
 else:
     device = "cpu"
 
-from docsray import MODEL_DIR
-model_name_1 = str(MODEL_DIR / "bge-m3-gguf" / "bge-m3-Q8_0.gguf")
-model_name_2 = str(MODEL_DIR / "multilingual-e5-large-gguf" / "multilingual-e5-large-Q8_0.gguf")
+# Lazy initialization
+embedding_model = None
 
-embedding_model = EmbeddingModel(model_name_1=model_name_1, model_name_2=model_name_2, device=device)
+def get_embedding_model():
+    """Get or create the embedding model instance"""
+    global embedding_model
+    if embedding_model is None:
+        try:
+            from docsray import MODEL_DIR
+        except ImportError:
+            MODEL_DIR = Path.home() / ".docsray" / "models"
+        
+        model_name_1 = str(MODEL_DIR / "bge-m3-gguf" / "bge-m3-Q8_0.gguf")
+        model_name_2 = str(MODEL_DIR / "multilingual-e5-large-gguf" / "multilingual-e5-large-Q8_0.gguf")
+        
+        if not os.path.exists(model_name_1) or not os.path.exists(model_name_2):
+            raise FileNotFoundError(
+                f"Model files not found. Please run 'docsray download-models' first.\n"
+                f"Expected locations:\n  {model_name_1}\n  {model_name_2}"
+            )
+        
+        embedding_model = EmbeddingModel(model_name_1=model_name_1, model_name_2=model_name_2, device=device)
+    
+    return embedding_model
+
+# For backward compatibility
+try:
+    embedding_model = get_embedding_model()
+except:
+    pass

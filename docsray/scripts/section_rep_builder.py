@@ -7,7 +7,8 @@ sys.path.append(str(ROOT))
 
 import json
 import numpy as np
-from docsray.inference.embedding_model import embedding_model
+from docsray.inference.embedding_model import get_embedding_model
+
 
 def build_section_reps(sections, chunk_index):
     """
@@ -35,6 +36,8 @@ def build_section_reps(sections, chunk_index):
     list[dict]
         The updated *sections* list with the two new embedding fields.
     """
+    embedding_model = get_embedding_model()
+    
     # 1) Section title embeddings (batch)
     titles = [sec["title"] for sec in sections]
     title_embs = embedding_model.get_embeddings(titles)  # shape: (num_sections, dim)

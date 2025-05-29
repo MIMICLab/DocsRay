@@ -1,5 +1,4 @@
 # src/search/section_coarse_search.py
-from docsray.inference.embedding_model import embedding_model
 import numpy as np
 import torch
 

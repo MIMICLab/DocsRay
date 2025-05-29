@@ -20,7 +20,7 @@ from sklearn.cluster import KMeans
 
 # LLM for outline generation
 
-from docsray.inference.llm_model import local_llm, local_llm_large
+from docsray.inference.llm_model import get_llm_models
 
 
 def build_sections_from_layout(pages_text: List[str],
@@ -38,6 +38,7 @@ def build_sections_from_layout(pages_text: List[str],
       3) For each final block, ask the LLM to propose a short title.
     Returns a list of dicts identical in structure to build_sections_from_toc.
     """
+    local_llm, local_llm_large = get_llm_models()
 
     total_pages = len(pages_text)
     if total_pages == 0:

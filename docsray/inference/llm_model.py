@@ -70,6 +70,7 @@ class LocalLLM:
         result = answer['choices'][0]['text']
         return result.strip()
 
+# 기존 코드 (line 78-87) 대신:
 
 if torch.cuda.is_available():
     device = "cuda"
@@ -78,10 +79,36 @@ elif torch.backends.mps.is_available():
 else:
     device = "cpu"
 
-from docsray import MODEL_DIR
-small_model_path = str(MODEL_DIR / "gemma-3-1b-it-GGUF" / "gemma-3-1b-it-Q8_0.gguf")
-large_model_path = str(MODEL_DIR / "trillion-7b-preview-GGUF" / "trillion-7b-preview.q8_0.gguf")
+# Lazy initialization
+local_llm = None
+local_llm_large = None
 
-# Always load the small model
-local_llm = LocalLLM(model_name=small_model_path, device=device)
-local_llm_large = LocalLLM(model_name=large_model_path, device=device)
+def get_llm_models():
+    """Get or create the LLM model instances"""
+    global local_llm, local_llm_large
+    
+    if local_llm is None or local_llm_large is None:
+        try:
+            from docsray import MODEL_DIR
+        except ImportError:
+            MODEL_DIR = Path.home() / ".docsray" / "models"
+        
+        small_model_path = str(MODEL_DIR / "gemma-3-1b-it-GGUF" / "gemma-3-1b-it-Q8_0.gguf")
+        large_model_path = str(MODEL_DIR / "trillion-7b-preview-GGUF" / "trillion-7b-preview.q8_0.gguf")
+        
+        if not os.path.exists(small_model_path) or not os.path.exists(large_model_path):
+            raise FileNotFoundError(
+                f"Model files not found. Please run 'docsray download-models' first.\n"
+                f"Expected locations:\n  {small_model_path}\n  {large_model_path}"
+            )
+        
+        local_llm = LocalLLM(model_name=small_model_path, device=device)
+        local_llm_large = LocalLLM(model_name=large_model_path, device=device)
+    
+    return local_llm, local_llm_large
+
+# For backward compatibility
+try:
+    local_llm, local_llm_large = get_llm_models()
+except:
+    pass

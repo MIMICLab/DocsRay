@@ -5,8 +5,8 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import json
 from docsray.search.section_coarse_search import coarse_search_sections
 from docsray.search.fine_search import fine_search_chunks
-from docsray.inference.embedding_model import embedding_model
-from docsray.inference.llm_model import local_llm, local_llm_large
+from docsray.inference.embedding_model import get_embedding_model
+from docsray.inference.llm_model import get_llm_models
 
 DEFAULT_SYSTEM_PROMPT = (
     "You are a document-grounded assistant.\n"
@@ -90,6 +90,9 @@ class PDFChatBot:
         str
             The LLM’s answer text.
         """
+        embedding_model = get_embedding_model()
+        local_llm, local_llm_large = get_llm_models()
+
         chunk_index = self.chunk_index
         sections = self.sections
 
