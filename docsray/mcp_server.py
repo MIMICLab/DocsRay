@@ -16,23 +16,30 @@ SCRIPT_DIR = Path(__file__).parent.absolute()
 base_dir = SCRIPT_DIR / "data"
 
 # Check models before importing DocsRay modules
+# 기존 코드 (line 15-50)를 다음으로 교체:
+
 def ensure_models_exist():
     """Check if model files exist"""
+    try:
+        from docsray import MODEL_DIR
+    except ImportError:
+        MODEL_DIR = Path.home() / ".docsray" / "models"
+    
     models = [
         {
-            "dir": base_dir / "hub" / "bge-m3-gguf",
+            "dir": MODEL_DIR / "bge-m3-gguf",
             "file": "bge-m3-Q8_0.gguf",
         },
         {
-            "dir": base_dir / "hub" / "multilingual-e5-large-gguf",
+            "dir": MODEL_DIR / "multilingual-e5-large-gguf",
             "file": "multilingual-e5-large-Q8_0.gguf",
         },
         {
-            "dir": base_dir / "hub" / "gemma-3-1b-it-GGUF",
+            "dir": MODEL_DIR / "gemma-3-1b-it-GGUF",
             "file": "gemma-3-1b-it-Q8_0.gguf",
         },
         {
-            "dir": base_dir / "hub" / "trillion-7b-preview-GGUF",
+            "dir": MODEL_DIR / "trillion-7b-preview-GGUF",
             "file": "trillion-7b-preview.q8_0.gguf",
         }
     ]
@@ -45,9 +52,10 @@ def ensure_models_exist():
     
     if missing_models:
         print("❌ Required model files are missing:", file=sys.stderr)
+        print(f"Expected location: {MODEL_DIR}", file=sys.stderr)
         print("Please download models first with:", file=sys.stderr)
-        print("  python download_models.py", file=sys.stderr)
-        raise RuntimeError(f"{len(missing_models)} model files are missing.")
+        print("  docsray download-models", file=sys.stderr)
+        raise RuntimeError(f"{len(missing_models)} model files are missing: {', '.join(missing_models)}")
     
     print("✅ All required models are ready.", file=sys.stderr)
 
