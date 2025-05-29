@@ -72,8 +72,8 @@ pip install docsray
 ### Development Installation
 
 ```bash
-git clone https://github.com/yourusername/docsray.git
-cd docsray
+git clone https://github.com/MIMICLab/DocsRay.git
+cd DocsRay
 pip install -e .
 ```
 
@@ -137,7 +137,7 @@ docsray mcp
 docsray web
 ```
 
-Access the web interface at `http://localhost:44665`. Default credentials:
+Access the web interface at `http://localhost:8008`. Default credentials:
 - Username: `admin`
 - Password: `password`
 
