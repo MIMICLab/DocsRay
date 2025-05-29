@@ -1,77 +1,31 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
+requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "docsray"
 version = "0.1.0"
 description = "PDF Question-Answering System with MCP Integration"
+authors = [{name = "Taehoon Kim", email = "taehoonkim@sogang.ac.kr"}]
 readme = "README.md"
 requires-python = ">=3.8"
-license = {text = "MIT"}
-authors = [
-    {name = "Taehoon Kim", email = "taehoonkim@sogang.ac.kr"},
-]
-keywords = ["pdf", "rag", "mcp", "llm", "embedding", "claude", "anthropic"]
-classifiers = [
-    "Development Status :: 3 - Alpha",
-    "Intended Audience :: Developers",
-    "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: MIT License",
-    "Operating System :: OS Independent",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Topic :: Scientific/Engineering :: Artificial Intelligence",
-    "Topic :: Text Processing :: Indexing",
-]
 
 dependencies = [
     "PyMuPDF",
-    "pdfplumber", 
     "sentence-transformers",
     "tiktoken",
-    "transformers",
+    "transformers", 
     "llama-cpp-python",
     "torch",
-    "protobuf",
     "fastapi",
     "mcp",
     "uvicorn",
     "numpy",
-    "pandas",
-    "pillow",
-    "pytesseract", 
-    "scikit-learn",
     "gradio",
-    "opencv-python",
-]
-
-[project.optional-dependencies]
-dev = [
-    "pytest",
-    "pytest-cov",
-    "black",
-    "flake8",
-    "build",
-    "twine",
 ]
 
 [project.scripts]
 docsray = "docsray.cli:main"
 
-[project.urls]
-Homepage = "https://github.com/MIMICLab/DocsRay"
-Documentation = "https://github.com/MIMICLab/DocsRay/blob/main/README.md"
-Repository = "https://github.com/MIMICLab/DocsRay"
-Issues = "https://github.com/MIMICLab/DocsRay/issues"
-
 [tool.setuptools.packages.find]
 include = ["docsray*"]
-exclude = ["tests*", "data*"]
-
-[tool.setuptools.package-data]
-docsray = ["data/*"]
