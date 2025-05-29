@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=45", "wheel"]
+requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,24 +8,60 @@ version = "0.1.0"
 description = "PDF Question-Answering System with MCP Integration"
 readme = "README.md"
 requires-python = ">=3.8"
-license = "MIT"  # 수정: text 대신 string으로
+license = {text = "MIT"}
 authors = [
     {name = "Taehoon Kim", email = "taehoonkim@sogang.ac.kr"},
 ]
-keywords = ["pdf", "rag", "mcp", "llm", "embedding"]
+keywords = ["pdf", "rag", "mcp", "llm", "embedding", "claude", "anthropic"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Text Processing :: Indexing",
 ]
-dynamic = ["dependencies", "optional-dependencies"]  # 추가: dynamic 설정
 
-[project.scripts]  # 추가: entry points를 여기에 정의
+dependencies = [
+    "PyMuPDF",
+    "pdfplumber", 
+    "sentence-transformers",
+    "tiktoken",
+    "transformers",
+    "llama-cpp-python",
+    "torch",
+    "protobuf",
+    "fastapi",
+    "mcp",
+    "uvicorn",
+    "numpy",
+    "pandas",
+    "pillow",
+    "pytesseract", 
+    "scikit-learn",
+    "gradio",
+    "opencv-python",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-cov",
+    "black",
+    "flake8",
+    "build",
+    "twine",
+]
+
+[project.scripts]
 docsray = "docsray.cli:main"
-docsray-mcp = "docsray.mcp_server:main"
-docsray-web = "docsray.web_demo:main"
-docsray-api = "docsray.app:main"
-docsray-download-models = "docsray.download_models:main"
 
 [project.urls]
 Homepage = "https://github.com/MIMICLab/DocsRay"
@@ -35,7 +71,7 @@ Issues = "https://github.com/MIMICLab/DocsRay/issues"
 
 [tool.setuptools.packages.find]
 include = ["docsray*"]
-exclude = ["tests*"]
+exclude = ["tests*", "data*"]
 
-[tool.setuptools.dynamic]
-dependencies = {file = ["requirements.txt"]}
+[tool.setuptools.package-data]
+docsray = ["data/*"]

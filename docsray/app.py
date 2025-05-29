@@ -39,5 +39,16 @@ def ask_question(question: str = Body(..., embed=True)):
     answer_output, reference_output = chatbot.answer(question)
     return {"answer": answer_output, "reference": reference_output}
 
+def main():
+    """Entry point for docsray-api command"""
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="Launch DocsRay API server")
+    parser.add_argument("--host", default="0.0.0.0", help="Host address")
+    parser.add_argument("--port", type=int, default=8000, help="Port number")
+    args = parser.parse_args()
+    
+    uvicorn.run(app, host=args.host, port=args.port)
+
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    main()

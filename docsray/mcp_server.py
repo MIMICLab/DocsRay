@@ -608,9 +608,10 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
         error_details = traceback.format_exc()
         return [TextContent(type="text", text=f"❌ Error: {str(e)}\n\nDetails:\n{error_details}")]
 
-# Main Entry Point
-async def main():
-    """Run the MCP server."""
+# docsray/mcp_server.py의 마지막 부분을 다음과 같이 수정
+
+async def run_mcp_server():
+    """Run the MCP server (async version)."""
     print(f"Starting DocsRay MCP Server (Enhanced with Directory Management)...", file=sys.stderr)
     print(f"Default PDF Folder: {DEFAULT_PDF_FOLDER}", file=sys.stderr)
     print(f"Current PDF Folder: {current_pdf_folder}", file=sys.stderr)
@@ -634,5 +635,16 @@ async def main():
             server.create_initialization_options()
         )
 
+def main():
+    """Entry point for docsray mcp command (sync version for PyPI)."""
+    try:
+        asyncio.run(run_mcp_server())
+    except KeyboardInterrupt:
+        print("\n🛑 MCP Server stopped by user", file=sys.stderr)
+    except Exception as e:
+        print(f"❌ MCP Server error: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc()
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()  

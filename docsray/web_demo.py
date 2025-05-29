@@ -399,19 +399,19 @@ with gr.Blocks() as demo:
     question_input.submit(ask_question, inputs=[question_input, sections_state, index_state, prompt_input, username_state, use_index], outputs=[answer_output, reference_output])
     ask_btn.click(ask_question, inputs=[question_input, sections_state, index_state, prompt_input, username_state, use_index], outputs=[answer_output, reference_output])
 
-if __name__ == "__main__":
+def main():
+    """Entry point for docsray-web command"""
     import argparse
-
+    
     parser = argparse.ArgumentParser(description="Launch DocsRay Gradio demo")
-    parser.add_argument(
-        "--share",
-        action="store_true",
-        help="Expose a public Gradio link.",
-    )
-    args, _ = parser.parse_known_args()
-
+    parser.add_argument("--share", action="store_true", help="Expose a public Gradio link")
+    parser.add_argument("--port", type=int, default=44665, help="Port number")
+    args = parser.parse_args()
+    
     demo.launch(
         server_name="0.0.0.0",
-        server_port=44665,
+        server_port=args.port,
         share=args.share,
     )
+if __name__ == "__main__":
+    main()
