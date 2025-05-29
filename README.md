@@ -137,7 +137,7 @@ docsray mcp
 docsray web
 ```
 
-Access the web interface at `http://localhost:8008`. Default credentials:
+Access the web interface at `http://localhost:44665`. Default credentials:
 - Username: `admin`
 - Password: `password`
 
