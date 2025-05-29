@@ -22,8 +22,8 @@ Examples:
   # Start web interface
   docsray web
   
-  # Start API server
-  docsray api
+  # Start API server with PDF
+  docsray api --pdf /path/to/document.pdf --port 8000
   
   # Configure Claude Desktop
   docsray configure-claude
@@ -51,10 +51,13 @@ Examples:
     web_parser.add_argument("--share", action="store_true", help="Create public link")
     web_parser.add_argument("--port", type=int, default=44665, help="Port number")
     
-    # API server command
+    # API server command - 개선된 부분
     api_parser = subparsers.add_parser("api", help="Start API server")
     api_parser.add_argument("--port", type=int, default=8000, help="Port number")
     api_parser.add_argument("--host", default="0.0.0.0", help="Host address")
+    api_parser.add_argument("--pdf", type=str, help="Path to PDF file to load")
+    api_parser.add_argument("--system-prompt", type=str, help="Custom system prompt")
+    api_parser.add_argument("--reload", action="store_true", help="Enable hot reload for development")
     
     # Configure Claude command
     config_parser = subparsers.add_parser("configure-claude", help="Configure Claude Desktop")
@@ -83,17 +86,26 @@ Examples:
         asyncio.run(mcp_main())
     
     elif args.command == "web":
-        from docsray.web_demo import demo
-        demo.launch(
-            server_name="0.0.0.0",
-            server_port=args.port,
-            share=args.share
-        )
+        from docsray.web_demo import main as web_main
+        # web_main 함수에 인자 전달
+        sys.argv = ["docsray-web"]
+        if args.share:
+            sys.argv.append("--share")
+        if args.port:
+            sys.argv.extend(["--port", str(args.port)])
+        web_main()
     
     elif args.command == "api":
-        import uvicorn
-        from docsray.app import app
-        uvicorn.run(app, host=args.host, port=args.port)
+        from docsray.app import main as api_main
+        # api_main 함수에 인자 전달
+        sys.argv = ["docsray-api", "--host", args.host, "--port", str(args.port)]
+        if args.pdf:
+            sys.argv.extend(["--pdf", args.pdf])
+        if args.system_prompt:
+            sys.argv.extend(["--system-prompt", args.system_prompt])
+        if args.reload:
+            sys.argv.append("--reload")
+        api_main()
     
     elif args.command == "configure-claude":
         configure_claude_desktop()

@@ -2,8 +2,8 @@
 DocsRay - PDF Question-Answering System with MCP Integration
 """
 
-__version__ = "0.1.0"
-__author__ = "MIMIC LAB"
+__version__ = "0.1.1"
+__author__ = "Taehoon Kim"
 
 import os
 from pathlib import Path

@@ -125,7 +125,11 @@ docsray ask "What is the main topic?" --pdf document.pdf
 docsray web
 
 # Start API server
-docsray api --port 8000
+docsray api --pdf /path/to/document.pdf --port 8000
+
+docsray api --pdf /path/to/document.pdf --system-prompt "You are a technical document assistant."
+
+docsray api --pdf /path/to/document.pdf --reload
 
 # Start MCP server
 docsray mcp
