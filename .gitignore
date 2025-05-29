@@ -1,0 +1,84 @@
+# --------------------------
+# Python Byte-Compiled Files
+# --------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+
+# --------------------------
+# Cython / C Extensions
+# --------------------------
+*.so
+*.dylib
+*.dll
+
+# --------------------------
+# Distribution / Packaging
+# --------------------------
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# --------------------------
+# Virtual Environments
+# --------------------------
+env/
+venv/
+.venv/
+.gradio/
+# --------------------------
+# VSCode Settings
+# --------------------------
+.vscode/
+
+# --------------------------
+# MyPy / Pytest Cache / Coverage
+# --------------------------
+.mypy_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+.cache/
+
+# --------------------------
+# PyInstaller
+# --------------------------
+*.spec
+
+# --------------------------
+# Logs / Temp Files
+# --------------------------
+*.log
+*.tmp
+
+# --------------------------
+# Jupyter Notebooks
+# --------------------------
+.ipynb_checkpoints
+
+# --------------------------
+# System Files
+# --------------------------
+.DS_Store
+Thumbs.db
+
+# --------------------------
+# Project Data and Checkpoints
+# --------------------------
+checkpoints/
+data/
+# (Optional) If you store model weights in a specific folder:
+# models/

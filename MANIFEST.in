@@ -1,0 +1,7 @@
+# MANIFEST.in
+include README.md
+include LICENSE
+include requirements.txt
+recursive-include docsray/data *
+global-exclude *.pyc
+global-exclude __pycache__

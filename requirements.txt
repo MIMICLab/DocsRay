@@ -1,0 +1,37 @@
+# PyMuPDF (fitz) for PDF parsing
+PyMuPDF
+pdfplumber
+
+# SentenceTransformers (incl. dependencies like HuggingFace Transformers)
+sentence-transformers
+
+# For chunking and embedding
+tiktoken
+
+# HuggingFace Transformers
+transformers
+llama-cpp-python
+
+# PyTorch 
+torch
+
+# For Gemma
+protobuf
+
+# FastAPI for serving the chatbot
+fastapi
+
+# For Model Context Protocol
+mcp
+
+# Uvicorn for ASGI server
+uvicorn
+
+# numpy for vector operations
+numpy
+pandas
+pillow
+pytesseract
+scikit-learn
+gradio
+opencv-python
