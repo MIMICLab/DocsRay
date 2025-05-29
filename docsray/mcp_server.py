@@ -16,7 +16,6 @@ SCRIPT_DIR = Path(__file__).parent.absolute()
 base_dir = SCRIPT_DIR / "data"
 
 # Check models before importing DocsRay modules
-# 기존 코드 (line 15-50)를 다음으로 교체:
 
 def ensure_models_exist():
     """Check if model files exist"""
@@ -78,7 +77,7 @@ DATA_DIR = base_dir / "mcp_data"
 CACHE_DIR = DATA_DIR / "cache"
 CONFIG_FILE = DATA_DIR / "config.json"
 DEFAULT_PDF_FOLDER = base_dir / "original"  # Default folder to scan for PDFs
-EXTRACT_TIMEOUT = 1200  # 20 minutes
+EXTRACT_TIMEOUT = 1800  # 30 minutes
 
 # Create directories
 CACHE_DIR.mkdir(parents=True, exist_ok=True)

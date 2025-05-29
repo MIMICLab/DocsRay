@@ -145,7 +145,8 @@ def configure_claude_desktop():
             "docsray": {
                 "command": sys.executable,  # Current Python interpreter
                 "args": [str(mcp_server_path)],
-                "cwd": str(docsray_path.parent)
+                "cwd": str(docsray_path.parent),
+                "timeout": 1800000,  #  30 minutes
             }
         }
     }
