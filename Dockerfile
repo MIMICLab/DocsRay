@@ -27,13 +27,13 @@ RUN pip install --no-cache-dir -e .
 # Create necessary directories
 RUN mkdir -p /app/data/mcp_data/cache /app/data/original
 
-# Download models during build to cache them in the image
-# This speeds up container startup significantly
-RUN python -m docsray.download_models
-
 # Set environment variable for MCP mode
 ENV DOCSRAY_MCP_MODE=1
 ENV DOCSRAY_HOME=/app/.docsray
+
+# Create model directory but don't download models during build
+# Models will be downloaded on first run
+RUN mkdir -p /app/.docsray/models
 
 # Expose port (MCP uses stdio, but this is for health checks if needed)
 EXPOSE 8000
