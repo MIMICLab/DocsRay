@@ -39,4 +39,4 @@ ENV DOCSRAY_HOME=/app/.docsray
 EXPOSE 8000
 
 # Start MCP server
-CMD ["python", "-m", "mcp_server"]
+CMD ["python", "-m", "docsray.mcp_server"]
