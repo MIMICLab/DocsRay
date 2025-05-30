@@ -35,8 +35,15 @@ ENV DOCSRAY_HOME=/app/.docsray
 # Models will be downloaded on first run
 RUN mkdir -p /app/.docsray/models
 
+# Copy and setup entrypoint script
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
 # Expose port (MCP uses stdio, but this is for health checks if needed)
 EXPOSE 8000
+
+# Use entrypoint to handle model downloads
+ENTRYPOINT ["/app/entrypoint.sh"]
 
 # Start MCP server
 CMD ["python", "-m", "docsray.mcp_server"]
