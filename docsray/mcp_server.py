@@ -589,7 +589,7 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             
             # Create chatbot and get answer
             chatbot = PDFChatBot(current_sections, current_index, system_prompt=current_prompt)
-            answer_output, reference_output = chatbot.answer(question, fine_only=fine_only)
+            answer_output, reference_output = chatbot.answer(question, max_iterations =1, fine_only=fine_only)
             
             # Format response
             response = f"📄 **Current PDF:** {current_pdf_name}\n"
@@ -607,7 +607,6 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
         error_details = traceback.format_exc()
         return [TextContent(type="text", text=f"❌ Error: {str(e)}\n\nDetails:\n{error_details}")]
 
-# docsray/mcp_server.py의 마지막 부분을 다음과 같이 수정
 
 async def run_mcp_server():
     """Run the MCP server (async version)."""
