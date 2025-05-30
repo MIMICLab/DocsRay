@@ -1,6 +1,6 @@
 # DocsRay 
 [![PyPI Status](https://badge.fury.io/py/docsray.svg)](https://badge.fury.io/py/docsray)
-[![license](https://img.shields.io/badge/MIT-blue.svg)](https://github.com/MIMICLab/DocsRay/blob/main/LICENSE)
+[![license](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/MIMICLab/DocsRay/blob/main/LICENSE)
 [![smithery badge](https://smithery.ai/badge/@MIMICLab/docsray)](https://smithery.ai/server/@MIMICLab/docsray)  [![Hugging Face Spaces](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue)](https://huggingface.co/spaces/tgisaturday/DocsRay)
 
 
