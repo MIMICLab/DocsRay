@@ -6,7 +6,7 @@ mcp_version: 1.0.0
 # MCP server start configuration
 start:
   # Since MCP uses stdio, we run the Python module directly
-  command: ["python", "-m", "docsray.mcp_server"]
+  command: ["python", "-m", "mcp_server"]
   # MCP servers communicate via stdio, not HTTP ports
   # But we can specify a port for health checks if needed
   port: null
