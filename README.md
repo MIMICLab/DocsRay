@@ -1,15 +1,13 @@
 # DocsRay 
 [![PyPI Status](https://badge.fury.io/py/docsray.svg)](https://badge.fury.io/py/docsray)
 [![license](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/MIMICLab/DocsRay/blob/main/LICENSE)
-[![smithery badge](https://smithery.ai/badge/@MIMICLab/docsray)](https://smithery.ai/server/@MIMICLab/docsray)  [![Hugging Face Spaces](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue)](https://huggingface.co/spaces/tgisaturday/DocsRay)
+[![smithery badge](https://smithery.ai/badge/@MIMICLab/docsray)](https://smithery.ai/server/@MIMICLab/docsray)
 
 
 A powerful PDF Question-Answering System that uses advanced embedding models and LLMs with Coarse-to-Fine search (RAG) approach. Features seamless MCP (Model Context Protocol) integration with Claude Desktop and comprehensive directory management capabilities.
 
 ## Try It Online
 - [Demo running on H100](https://docsray.com/) 
-
-- [Huggingface Spaces🤗 on CPU](https://huggingface.co/spaces/tgisaturday/DocsRay) 
 
 ## 🚀 Quick Start
 
