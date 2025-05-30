@@ -15,50 +15,42 @@ from pathlib import Path
 SCRIPT_DIR = Path(__file__).parent.absolute()
 base_dir = SCRIPT_DIR / "data"
 
-# Check models before importing DocsRay modules
-
-def ensure_models_exist():
-    """Check if model files exist"""
+def check_models():
+    """Check if models exist but don't raise error"""
+    global MODELS_AVAILABLE, MODEL_ERROR
     try:
         from docsray import MODEL_DIR
     except ImportError:
         MODEL_DIR = Path.home() / ".docsray" / "models"
     
     models = [
-        {
-            "dir": MODEL_DIR / "bge-m3-gguf",
-            "file": "bge-m3-Q8_0.gguf",
-        },
-        {
-            "dir": MODEL_DIR / "multilingual-e5-large-gguf",
-            "file": "multilingual-e5-large-Q8_0.gguf",
-        },
-        {
-            "dir": MODEL_DIR / "gemma-3-1b-it-GGUF",
-            "file": "gemma-3-1b-it-Q8_0.gguf",
-        },
-        {
-            "dir": MODEL_DIR / "trillion-7b-preview-GGUF",
-            "file": "trillion-7b-preview.q8_0.gguf",
-        }
+        MODEL_DIR / "bge-m3-gguf" / "bge-m3-Q8_0.gguf",
+        MODEL_DIR / "multilingual-e5-large-gguf" / "multilingual-e5-large-Q8_0.gguf",
+        MODEL_DIR / "gemma-3-1b-it-GGUF" / "gemma-3-1b-it-Q8_0.gguf",
+        MODEL_DIR / "trillion-7b-preview-GGUF" / "trillion-7b-preview.q8_0.gguf",
     ]
     
-    missing_models = []
-    for model in models:
-        model_path = model["dir"] / model["file"]
-        if not model_path.exists():
-            missing_models.append(model["file"])
+    missing_models = [m for m in models if not m.exists()]
     
     if missing_models:
-        print("❌ Required model files are missing:", file=sys.stderr)
-        print(f"Expected location: {MODEL_DIR}", file=sys.stderr)
-        print("Please download models first with:", file=sys.stderr)
-        print("  docsray download-models", file=sys.stderr)
-        raise RuntimeError(f"{len(missing_models)} model files are missing: {', '.join(missing_models)}")
+        MODEL_ERROR = f"Missing {len(missing_models)} model files. Run 'docsray download-models' to download."
+        MODELS_AVAILABLE = False
+        print(f"⚠️ Warning: {MODEL_ERROR}", file=sys.stderr)
+    else:
+        MODELS_AVAILABLE = True
+        print("✅ All required models are ready.", file=sys.stderr)
     
-    print("✅ All required models are ready.", file=sys.stderr)
+    return MODELS_AVAILABLE
 
-ensure_models_exist()
+check_models()
+
+if MODELS_AVAILABLE:
+    try:
+        from docsray.chatbot import PDFChatBot, DEFAULT_SYSTEM_PROMPT
+        from docsray.scripts import pdf_extractor, chunker, build_index, section_rep_builder
+    except ImportError as e:
+        MODELS_AVAILABLE = False
+        MODEL_ERROR = f"Failed to import DocsRay modules: {e}"
 
 # Set environment variable to indicate MCP mode
 os.environ['DOCSRAY_MCP_MODE'] = '1'
@@ -428,6 +420,16 @@ async def list_tools() -> List[Tool]:
 @server.call_tool()
 async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
     """Execute a tool and return results."""
+    if not MODELS_AVAILABLE and name not in ["get_current_directory", "set_current_directory", "get_directory_info"]:
+        return [TextContent(
+            type="text", 
+            text=f"❌ Models not available. {MODEL_ERROR}\n\n"
+                 f"To use this tool, please:\n"
+                 f"1. Install DocsRay: pip install docsray\n"
+                 f"2. Download models: docsray download-models\n"
+                 f"3. Restart the server"
+        )]
+    
     global current_sections, current_index, current_pdf_name
     
     try:
