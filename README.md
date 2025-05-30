@@ -383,10 +383,10 @@ twine upload dist/*
 This project is licensed under the MIT License. See [LICENSE](LICENSE) file for details.
 
 **Note**: Individual model licenses may have different requirements. Please check:
-- BGE-M3: MIT License
-- E5-Large: MIT License
-- Gemma-3-1B: Gemma Terms of Use
-- Trillion-7B: Custom License
+- BAAI/bge-m3: MIT License
+- intfloat/multilingual-e5-large: MIT License
+- gemma3-1B-it: Gemma Terms of Use
+- Trillion-7B-preview: Apache-2.0 License
 
 ## 🤝 Contributing
 
