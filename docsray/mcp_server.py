@@ -9,8 +9,10 @@ import os
 import concurrent.futures
 import pickle
 import sys
+import time
 from typing import Any, Dict, List, Optional, Tuple
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 SCRIPT_DIR = Path(__file__).parent.absolute()
 base_dir = SCRIPT_DIR / "data"
@@ -37,8 +39,8 @@ def ensure_models_exist():
             "file": "gemma-3-1b-it-Q8_0.gguf",
         },
         {
-            "dir": MODEL_DIR / "trillion-7b-preview-GGUF",
-            "file": "trillion-7b-preview.q8_0.gguf",
+            "dir": MODEL_DIR / "gemma-3-4b-it-GGUF",
+            "file": "gemma-3-4b-it-Q8_0.gguf",
         }
     ]
     
@@ -61,6 +63,9 @@ ensure_models_exist()
 
 # Set environment variable to indicate MCP mode
 os.environ['DOCSRAY_MCP_MODE'] = '1'
+
+
+from docsray import FAST_MODE
 
 # MCP imports
 from mcp.server import Server
@@ -350,20 +355,40 @@ def get_pdf_list(folder_path: Optional[str] = None) -> List[str]:
     
     return sorted(pdf_files)
 
-# Document Summarization Function
-def summarize_document_by_sections(sections: List, chunk_index: List, max_chunks_per_section: int = 5) -> str:
+
+def _section_cache_path(pdf_name: str, section_idx: int, detail_level: str) -> Path:
+    """Return cache path for individual section summary."""
+    return CACHE_DIR / f"{pdf_name}_section_{section_idx}_{detail_level}.txt"
+
+def summarize_document_by_sections(sections: List, chunk_index: List, 
+                                   max_chunks_per_section: int = 5,
+                                   brief_mode: bool = False) -> str:
     """
     Create a comprehensive summary of the document organized by sections.
-    
-    Args:
-        sections: List of section dictionaries
-        chunk_index: List of chunk dictionaries with embeddings and metadata
-        max_chunks_per_section: Maximum number of chunks to use per section for summary
-    
-    Returns:
-        Formatted summary string
+    Process in batches of 10 sections per call.
     """
     local_llm, local_llm_large = get_llm_models()
+    
+    # Use smaller model for everything in fast mode
+    if brief_mode or FAST_MODE:
+        summary_model = local_llm
+        overall_model = local_llm
+    else:
+        summary_model = local_llm
+        overall_model = local_llm_large
+    
+    # Determine detail level for cache
+    if FAST_MODE:
+        detail_level = "brief"
+    elif max_chunks_per_section <= 3:
+        detail_level = "brief"
+        BATCH_SIZE = 20
+    elif max_chunks_per_section >= 8:
+        detail_level = "detailed"
+        BATCH_SIZE = 5
+    else:
+        detail_level = "standard"
+        BATCH_SIZE = 10
     
     summary_parts = []
     summary_parts.append(f"# 📄 Document Summary: {current_pdf_name}\n")
@@ -376,86 +401,288 @@ def summarize_document_by_sections(sections: List, chunk_index: List, max_chunks
     
     summary_parts.append("\n## 📊 Section Summaries\n")
     
-    # Summarize each section
+    # Check which sections need processing
+    sections_to_process = []
+    cached_summaries = {}
+    
     for i, section in enumerate(sections):
-        title = section.get("title", f"Section {i+1}")
-        start_page = section.get("start_page", 0)
-        end_page = section.get("end_page", start_page)
-        
-        summary_parts.append(f"### {i+1}. {title}")
-        summary_parts.append(f"*Pages {start_page}-{end_page}*\n")
-        
-        # Get chunks for this section
-        section_chunks = [
-            chunk for chunk in chunk_index 
-            if chunk["metadata"].get("section_title") == title
-        ]
-        
-        if not section_chunks:
-            summary_parts.append("*No content found for this section.*\n")
-            continue
-        
-        # Select most representative chunks (first and last few)
-        if len(section_chunks) <= max_chunks_per_section:
-            selected_chunks = section_chunks
+        cache_path = _section_cache_path(current_pdf_name, i, detail_level)
+        if cache_path.exists():
+            try:
+                with open(cache_path, 'r', encoding='utf-8') as f:
+                    cached_summaries[i] = f.read()
+                print(f"Section {i+1} loaded from cache", file=sys.stderr)
+            except Exception:
+                sections_to_process.append((i, section))
         else:
-            # Take first 2, last 2, and middle chunks
-            first_chunks = section_chunks[:2]
-            last_chunks = section_chunks[-2:]
-            middle_idx = len(section_chunks) // 2
-            middle_chunks = section_chunks[middle_idx-1:middle_idx+1]
-            selected_chunks = first_chunks + middle_chunks + last_chunks
+            sections_to_process.append((i, section))
+    
+    # Process only up to N sections per call
+    processed_count = 0
+    
+    if sections_to_process:
+        print(f"Need to process {len(sections_to_process)} sections (will process up to {BATCH_SIZE})", file=sys.stderr)
         
-        # Combine chunk contents
-        combined_content = "\n".join([
-            chunk["metadata"].get("content", "") 
-            for chunk in selected_chunks
-        ])
-        
-        # Generate section summary using LLM
-        section_prompt = f"""Based on the following content from section "{title}", provide a concise summary 
+        # Process sections sequentially (to avoid segfault)
+        for idx, (i, section) in enumerate(sections_to_process[:BATCH_SIZE]):
+            processed_count += 1
+            title = section.get("title", f"Section {i+1}")
+            start_page = section.get("start_page", 0)
+            end_page = section.get("end_page", start_page)
+            
+            print(f"Processing section {i+1}/{len(sections)}: {title}", file=sys.stderr)
+            
+            # Get chunks for this section
+            section_chunks = [
+                chunk for chunk in chunk_index 
+                if chunk["metadata"].get("section_title") == title
+            ]
+            
+            if not section_chunks:
+                summary_text = "*No content found for this section.*"
+            else:
+                # In fast mode, use fewer chunks
+                if brief_mode:
+                    max_chunks = min(3, max_chunks_per_section)
+                else:
+                    max_chunks = max_chunks_per_section
+                
+                # Select most representative chunks
+                if len(section_chunks) <= max_chunks:
+                    selected_chunks = section_chunks
+                else:
+                    # Take first, middle, and last chunks
+                    first_idx = max_chunks // 3
+                    last_idx = max_chunks // 3
+                    middle_idx = max_chunks - first_idx - last_idx
+                    
+                    selected_chunks = (
+                        section_chunks[:first_idx] + 
+                        section_chunks[len(section_chunks)//2 - middle_idx//2 : len(section_chunks)//2 + middle_idx//2 + 1] +
+                        section_chunks[-last_idx:]
+                    )
+                
+                # Combine chunk contents (limit length in fast mode)
+                combined_content = "\n".join([
+                    chunk["metadata"].get("content", "")[:500 if brief_mode else 1000]
+                    for chunk in selected_chunks
+                ])
+                
+                # Simplified prompt for fast mode
+                if brief_mode:
+                    section_prompt = f"""Summarize this section "{title}" in 2-3 sentences:
+{combined_content[:1500]}
+
+Summary:"""
+                else:
+                    section_prompt = f"""Based on the following content from section "{title}", provide a concise summary 
 highlighting the main points, key arguments, and important details:
 
 {combined_content}
 
 Summary (2-3 paragraphs):"""
-        
-        try:
-            summary_response = local_llm.generate(section_prompt)
-            # Extract the actual summary from response
-            if "<start_of_turn>model" in summary_response:
-                section_summary = summary_response.split("<start_of_turn>model")[1].split("<end_of_turn>")[0].strip()
-            else:
-                section_summary = summary_response.strip()
+                
+                try:
+                    start_time = time.time()
+                    summary_response = summary_model.generate(section_prompt)
+                    
+                    # Extract the actual summary from response
+                    summary_text = summary_model.strip_response(summary_response)
+  
+                    elapsed = time.time() - start_time
+                    print(f"Section {i+1} summarized in {elapsed:.1f}s", file=sys.stderr)
+                    
+                except Exception as e:
+                    summary_text = f"*Error generating summary: {str(e)}*"
             
-            summary_parts.append(section_summary)
-        except Exception as e:
-            summary_parts.append(f"*Error generating summary: {str(e)}*")
-        
-        summary_parts.append("")  # Empty line between sections
+            # Save to cache
+            cache_path = _section_cache_path(current_pdf_name, i, detail_level)
+            try:
+                with open(cache_path, 'w', encoding='utf-8') as f:
+                    f.write(f"### {i+1}. {title}\n*Pages {start_page}-{end_page}*\n\n{summary_text}")
+                print(f"Section {i+1} saved to cache", file=sys.stderr)
+            except Exception as e:
+                print(f"Failed to cache section {i+1}: {e}", file=sys.stderr)
+            
+            cached_summaries[i] = f"### {i+1}. {title}\n*Pages {start_page}-{end_page}*\n\n{summary_text}"
     
-    # Add overall document summary
-    summary_parts.append("## 🎯 Overall Document Summary\n")
+    # Add all section summaries in order
+    for i in range(len(sections)):
+        if i in cached_summaries:
+            summary_parts.append(cached_summaries[i])
+            summary_parts.append("")  # Empty line between sections
     
-    # Create a high-level summary
-    overall_prompt = f"""Based on the document with the following sections:
-{', '.join([s.get('title', '') for s in sections])}
+    # Show progress information
+    total_cached = len(cached_summaries)
+    total_sections = len(sections)
+    
+    if total_cached < total_sections:
+        remaining = total_sections - total_cached
+        summary_parts.append(f"\n---\n⏳ **Progress: {total_cached}/{total_sections} sections completed**")
+        summary_parts.append(f"📝 {remaining} sections remaining. Run 'summarize_document' again to continue.\n---\n")
+    else:
+        # Add overall document summary only when all sections are complete
+        if not brief_mode and len(sections) <= 10:
+            summary_parts.append("## 🎯 Overall Document Summary\n")
+            
+            # Check if overall summary is cached
+            overall_cache_path = CACHE_DIR / f"{current_pdf_name}_overall_{detail_level}.txt"
+            if overall_cache_path.exists():
+                try:
+                    with open(overall_cache_path, 'r', encoding='utf-8') as f:
+                        overall_summary = f.read()
+                    summary_parts.append(overall_summary)
+                except Exception:
+                    pass
+            else:
+                # Create a high-level summary using section titles and brief content
+                section_titles = ', '.join([s.get('title', '') for s in sections[:10]])
+                
+                overall_prompt = f"""Based on a document with these sections: {section_titles}
 
-Provide a high-level executive summary of the entire document in 2-3 paragraphs, 
-highlighting the main theme, key findings, and overall significance."""
-    
-    try:
-        overall_response = local_llm_large.generate(overall_prompt)
-        if "<|im_start|>assistant" in overall_response:
-            overall_summary = overall_response.split("<|im_start|>assistant")[1].split("<|im_end|>")[0].strip()
-        else:
-            overall_summary = overall_response.strip()
-        summary_parts.append(overall_summary)
-    except Exception as e:
-        summary_parts.append(f"*Error generating overall summary: {str(e)}*")
+Provide a brief executive summary (2-3 paragraphs) highlighting the main theme and key findings."""
+                
+                try:
+                    print("Generating overall summary...", file=sys.stderr)
+                    start_time = time.time()
+                    overall_response = overall_model.generate(overall_prompt)
+                    
+                    if hasattr(overall_model, 'strip_response'):
+                        overall_summary = overall_model.strip_response(overall_response)
+                    else:
+                        if "<|im_start|>assistant" in overall_response:
+                            overall_summary = overall_response.split("<|im_start|>assistant")[1].split("<|im_end|>")[0].strip()
+                        else:
+                            overall_summary = overall_response.strip()
+                    
+                    # Cache overall summary
+                    try:
+                        with open(overall_cache_path, 'w', encoding='utf-8') as f:
+                            f.write(overall_summary)
+                    except Exception:
+                        pass
+                        
+                    elapsed = time.time() - start_time
+                    print(f"Overall summary generated in {elapsed:.1f}s", file=sys.stderr)
+                    
+                    summary_parts.append(overall_summary)
+                except Exception as e:
+                    summary_parts.append(f"*Error generating overall summary: {str(e)}*")
     
     return "\n".join(summary_parts)
 
+def clear_all_cache() -> Tuple[bool, str]:
+    """Clear all cache files in the cache directory."""
+    try:
+        cache_files = list(CACHE_DIR.glob("*"))
+        if not cache_files:
+            return True, "No cache files to clear."
+        
+        cleared_count = 0
+        failed_count = 0
+        total_size = 0
+        
+        for cache_file in cache_files:
+            if cache_file.is_file():
+                try:
+                    file_size = cache_file.stat().st_size
+                    cache_file.unlink()
+                    cleared_count += 1
+                    total_size += file_size
+                except Exception as e:
+                    print(f"Failed to delete {cache_file.name}: {e}", file=sys.stderr)
+                    failed_count += 1
+        
+        # Format size
+        if total_size > 1024 * 1024:
+            size_str = f"{total_size / (1024 * 1024):.1f} MB"
+        else:
+            size_str = f"{total_size / 1024:.1f} KB"
+        
+        if failed_count == 0:
+            return True, f"Successfully cleared {cleared_count} cache files ({size_str})"
+        else:
+            return True, f"Cleared {cleared_count} files ({size_str}), failed to clear {failed_count} files"
+            
+    except Exception as e:
+        return False, f"Error clearing cache: {str(e)}"
+
+def get_cache_info() -> Dict[str, Any]:
+    """Get information about the cache directory."""
+    try:
+        cache_files = list(CACHE_DIR.glob("*"))
+        
+        # Categorize cache files
+        pdf_sections = {}  # PDF name -> section count
+        pdf_indices = {}   # PDF name -> has index
+        pdf_summaries = {} # PDF name -> summary levels
+        other_files = []
+        
+        total_size = 0
+        
+        for cache_file in cache_files:
+            if cache_file.is_file():
+                file_size = cache_file.stat().st_size
+                total_size += file_size
+                
+                name = cache_file.name
+                
+                # Section cache files
+                if "_sections.json" in name:
+                    pdf_name = name.replace("_sections.json", "")
+                    pdf_sections[pdf_name] = pdf_sections.get(pdf_name, 0) + 1
+                
+                # Index cache files
+                elif "_index.pkl" in name:
+                    pdf_name = name.replace("_index.pkl", "")
+                    pdf_indices[pdf_name] = True
+                
+                # Section summary cache files
+                elif "_section_" in name and name.endswith(".txt"):
+                    parts = name.split("_section_")
+                    if len(parts) == 2:
+                        pdf_name = parts[0]
+                        # Extract detail level from filename
+                        if "_brief.txt" in parts[1]:
+                            level = "brief"
+                        elif "_detailed.txt" in parts[1]:
+                            level = "detailed"
+                        else:
+                            level = "standard"
+                        
+                        if pdf_name not in pdf_summaries:
+                            pdf_summaries[pdf_name] = {"brief": 0, "standard": 0, "detailed": 0}
+                        pdf_summaries[pdf_name][level] += 1
+                
+                # Overall summary cache files
+                elif "_overall_" in name and name.endswith(".txt"):
+                    parts = name.split("_overall_")
+                    if len(parts) == 2:
+                        pdf_name = parts[0]
+                        level = parts[1].replace(".txt", "")
+                        if pdf_name not in pdf_summaries:
+                            pdf_summaries[pdf_name] = {"brief": 0, "standard": 0, "detailed": 0}
+                        pdf_summaries[pdf_name][f"{level}_overall"] = True
+                
+                else:
+                    other_files.append(name)
+        
+        return {
+            "total_files": len(cache_files),
+            "total_size_mb": total_size / (1024 * 1024),
+            "pdf_sections": pdf_sections,
+            "pdf_indices": pdf_indices,
+            "pdf_summaries": pdf_summaries,
+            "other_files": other_files,
+            "cache_dir": str(CACHE_DIR)
+        }
+        
+    except Exception as e:
+        return {
+            "error": str(e),
+            "cache_dir": str(CACHE_DIR)
+        }
+    
 # MCP Server Setup
 server = Server("docsray-mcp")
 
@@ -548,7 +775,24 @@ async def list_tools() -> List[Tool]:
                     }
                 }
             }
+        ),
+        Tool(
+            name="clear_all_cache",
+            description="Clear all cache files (sections, indices, and summaries)",
+            inputSchema={
+                "type": "object",
+                "properties": {}
+            }
+        ),
+        Tool(
+            name="get_cache_info",
+            description="Get information about cached files",
+            inputSchema={
+                "type": "object",
+                "properties": {}
+            }
         )
+
     ]
 
 @server.call_tool()
@@ -737,26 +981,149 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             detail_level = arguments.get("detail_level", "standard")
             
             # Adjust parameters based on detail level
+            if FAST_MODE:
+                detail_level = "brief"  # Force brief mode in fast mode
+                
             if detail_level == "brief":
                 max_chunks = 3
+                brief_mode = True
+
             elif detail_level == "detailed":
                 max_chunks = 8
+                brief_mode = False
+
             else:  # standard
                 max_chunks = 5
+                brief_mode = False
+
+            # Check for cached summary first
+            cache_key = f"{current_pdf_name}_summary_{detail_level}.txt"
+            cache_path = CACHE_DIR / cache_key
+            
+            if cache_path.exists():
+                try:
+                    with open(cache_path, 'r', encoding='utf-8') as f:
+                        cached_summary = f.read()
+                    response = f"📄 **Cached {detail_level} summary for:** {current_pdf_name}\n\n"
+                    response += cached_summary
+                    return [TextContent(type="text", text=response)]
+                except Exception:
+                    pass  # If cache read fails, regenerate
             
             # Generate summary
             response = f"📄 **Generating {detail_level} summary for:** {current_pdf_name}\n"
-            response += "⏳ This may take a moment...\n\n"
+            
+            # Show estimated time based on sections
+            num_sections = len(current_sections)
+            if detail_level == "brief":
+                estimated_time = num_sections * 2  # ~2 seconds per section in fast mode
+            else:
+                estimated_time = num_sections * 5  # ~5 seconds per section in normal mode
+            
+            response += f"⏳ Estimated time: ~{estimated_time} seconds for {num_sections} sections...\n\n"
             
             try:
+                start_time = time.time()
+                
                 summary = summarize_document_by_sections(
                     current_sections, 
                     current_index,
-                    max_chunks_per_section=max_chunks
+                    max_chunks_per_section=max_chunks,
+                    brief_mode=brief_mode
                 )
+                
+                elapsed = time.time() - start_time
+                
+                # Save to cache
+                try:
+                    with open(cache_path, 'w', encoding='utf-8') as f:
+                        f.write(summary)
+                except Exception:
+                    pass  # Ignore cache write errors
+                
                 response += summary
+                response += f"\n\n⏱️ Summary generated in {elapsed:.1f} seconds"
+                
             except Exception as e:
                 response += f"❌ Error generating summary: {str(e)}"
+            
+            return [TextContent(type="text", text=response)]
+        elif name == "clear_all_cache":
+            # Get cache info before clearing
+            cache_info = get_cache_info()
+            
+            # Clear cache
+            success, message = clear_all_cache()
+            
+            response = f"🗑️ **Cache Clearing Result:**\n"
+            
+            if cache_info.get("error"):
+                response += f"⚠️ Could not get cache info: {cache_info['error']}\n"
+            else:
+                response += f"📊 Before clearing:\n"
+                response += f"   • Files: {cache_info['total_files']}\n"
+                response += f"   • Size: {cache_info['total_size_mb']:.1f} MB\n"
+                
+                if cache_info['pdf_sections'] or cache_info['pdf_summaries']:
+                    response += f"   • PDFs with cache: {len(set(list(cache_info['pdf_sections'].keys()) + list(cache_info['pdf_summaries'].keys())))}\n"
+            
+            response += f"\n{'✅' if success else '❌'} {message}\n"
+            
+            if success:
+                response += "\n💡 All cache has been cleared. PDFs will need to be reprocessed."
+            
+            return [TextContent(type="text", text=response)]
+        
+        elif name == "get_cache_info":
+            cache_info = get_cache_info()
+            
+            if cache_info.get("error"):
+                return [TextContent(type="text", text=f"❌ Error getting cache info: {cache_info['error']}")]
+            
+            response = f"📊 **Cache Information:**\n"
+            response += f"📁 Cache directory: `{cache_info['cache_dir']}`\n"
+            response += f"📄 Total files: {cache_info['total_files']}\n"
+            response += f"💾 Total size: {cache_info['total_size_mb']:.1f} MB\n\n"
+            
+            # PDFs with cached data
+            all_pdfs = set()
+            if cache_info['pdf_sections']:
+                all_pdfs.update(cache_info['pdf_sections'].keys())
+            if cache_info['pdf_indices']:
+                all_pdfs.update(cache_info['pdf_indices'].keys())
+            if cache_info['pdf_summaries']:
+                all_pdfs.update(cache_info['pdf_summaries'].keys())
+            
+            if all_pdfs:
+                response += f"📚 **Cached PDFs ({len(all_pdfs)}):**\n"
+                for pdf_name in sorted(all_pdfs):
+                    response += f"\n**{pdf_name}:**\n"
+                    
+                    # Check what's cached for this PDF
+                    has_sections = pdf_name in cache_info['pdf_sections']
+                    has_index = pdf_name in cache_info['pdf_indices']
+                    summaries = cache_info['pdf_summaries'].get(pdf_name, {})
+                    
+                    if has_sections or has_index:
+                        response += f"  • {'✅' if has_sections else '❌'} Sections data\n"
+                        response += f"  • {'✅' if has_index else '❌'} Search index\n"
+                    
+                    if summaries:
+                        for level in ["brief", "standard", "detailed"]:
+                            count = summaries.get(level, 0)
+                            has_overall = summaries.get(f"{level}_overall", False)
+                            if count > 0 or has_overall:
+                                response += f"  • {level.capitalize()} summary: {count} sections"
+                                if has_overall:
+                                    response += " + overall"
+                                response += "\n"
+            else:
+                response += "📭 No cached PDFs found.\n"
+            
+            if cache_info['other_files']:
+                response += f"\n📎 Other files: {len(cache_info['other_files'])}\n"
+            
+            response += f"\n💡 Use 'clear_all_cache' to remove all cached data."
             
             return [TextContent(type="text", text=response)]
         
@@ -775,6 +1142,7 @@ async def run_mcp_server():
     print(f"Current PDF Folder: {current_pdf_folder}", file=sys.stderr)
     print(f"Cache Directory: {CACHE_DIR}", file=sys.stderr)
     print(f"Config File: {CONFIG_FILE}", file=sys.stderr)
+    print(f"Fast Mode: {'Enabled' if FAST_MODE else 'Disabled'}", file=sys.stderr)
     
     # Show available PDFs on startup
     pdf_list = get_pdf_list()

@@ -1,13 +1,12 @@
 # src/inference/llm_model.py 
 
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from docsray import MAX_TOKENS
 from llama_cpp import Llama
 import os
 import sys
 from pathlib import Path
-
-os.environ['LLAMA_CPP_LOG_LEVEL'] = 'ERROR'
+from docsray import FAST_MODE
 
 class LlamaTokenizer:
     def __init__(self, llama_model):
@@ -41,17 +40,13 @@ class LocalLLM:
         if not os.path.exists(model_name):
             raise FileNotFoundError(f"Model file not found: {model_name}")
         
-        # Create model with less verbose output in MCP mode
-        verbose_flag = not is_mcp_mode
-        
         self.model = Llama(
                 model_path=model_name,
                 n_gpu_layers=-1,
-                n_ctx=0,
-                flash_attn=True,
+                n_ctx=MAX_TOKENS,
                 no_perf=True,
                 logits_all=False,
-                verbose=verbose_flag)
+                verbose=False)
         self.tokenizer = LlamaTokenizer(self.model)
 
     def generate(self, prompt):
@@ -62,7 +57,7 @@ class LocalLLM:
             prompt = "<|im_start|>user "+ prompt + "<|im_end|><|im_start|>assistant \n"
             stop = ['<|im_end|>']                
         answer = self.model(prompt,
-            max_tokens=0,
+            max_tokens=MAX_TOKENS,
             stop=stop,
             echo=True,
             temperature=0.7,
@@ -71,8 +66,12 @@ class LocalLLM:
             )
         result = answer['choices'][0]['text']
         return result.strip()
+    def strip_response(self, response):
+        if "gemma" in self.model.model_path.lower():
+            return response.split('<start_of_turn>model')[1].split('<end_of_turn>')[0].strip()
+        else:
+            return response.split('<|im_start|>assistant')[1].split('<|im_end|>')[0].strip()            
 
-# 기존 코드 (line 78-87) 대신:
 
 if torch.cuda.is_available():
     device = "cuda"
@@ -96,8 +95,7 @@ def get_llm_models():
             MODEL_DIR = Path.home() / ".docsray" / "models"
         
         small_model_path = str(MODEL_DIR / "gemma-3-1b-it-GGUF" / "gemma-3-1b-it-Q8_0.gguf")
-        large_model_path = str(MODEL_DIR / "trillion-7b-preview-GGUF" / "trillion-7b-preview.q8_0.gguf")
-        
+        large_model_path = str(MODEL_DIR / "gemma-3-4b-it-GGUF" / "gemma-3-4b-it-Q8_0.gguf")
         if not os.path.exists(small_model_path) or not os.path.exists(large_model_path):
             raise FileNotFoundError(
                 f"Model files not found. Please run 'docsray download-models' first.\n"
@@ -105,7 +103,11 @@ def get_llm_models():
             )
         
         local_llm = LocalLLM(model_name=small_model_path, device=device)
-        local_llm_large = LocalLLM(model_name=large_model_path, device=device)
+        if FAST_MODE:
+            print("Running in fast mode. Using smaller model for inference.")
+            local_llm_large = local_llm
+        else:
+            local_llm_large = LocalLLM(model_name=large_model_path, device=device)
     
     return local_llm, local_llm_large
 

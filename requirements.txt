@@ -2,14 +2,11 @@
 PyMuPDF
 pdfplumber
 
-# SentenceTransformers (incl. dependencies like HuggingFace Transformers)
-sentence-transformers
 
 # For chunking and embedding
 tiktoken
 
-# HuggingFace Transformers
-transformers
+# For LLMs
 llama-cpp-python
 
 # PyTorch 
@@ -35,3 +32,4 @@ pytesseract
 scikit-learn
 gradio
 opencv-python
+psutil

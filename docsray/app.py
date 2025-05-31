@@ -3,12 +3,10 @@
 import uvicorn
 import json
 import os
-import sys
 import argparse
 from pathlib import Path
 from typing import Optional, Dict, Any
 from fastapi import FastAPI, Body, HTTPException
-from fastapi.responses import JSONResponse
 
 from docsray.chatbot import PDFChatBot
 from docsray.scripts import pdf_extractor, chunker, build_index, section_rep_builder

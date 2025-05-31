@@ -62,7 +62,7 @@ class PDFChatBot:
         return prompt.strip()
 
         
-    def answer(self, query: str, beta: float = 0.5, max_iterations = 2, top_sections: int = 3, top_chunks: int = 5, fine_only=False):
+    def answer(self, query: str, beta: float = 0.5, max_iterations = 2, top_sections: int = 3, top_chunks: int = 10, fine_only=False):
         """
         End‑to‑end answer generation pipeline.
 
@@ -111,7 +111,7 @@ class PDFChatBot:
             # Fine Search (chunk level)
             best_chunks = fine_search_chunks(query_emb, chunk_index, 
                                              relevant_secs, 
-                                             top_k=top_chunks * 2 * (max_iterations - iter + 1), 
+                                             top_k=top_chunks * (max_iterations - iter + 1), 
                                              fine_only=fine_only)
             # Build a single string that contains the content of every retrieved chunk
             combined_answer = "\n\n".join(
@@ -126,7 +126,7 @@ class PDFChatBot:
             )
             raw_improved_query = local_llm.generate(query_improvement_prompt)
             # clean up
-            improved_query = raw_improved_query[len(query_improvement_prompt):].split('<start_of_turn>model')[1].split('<end_of_turn>')[0].strip()
+            improved_query = local_llm.strip_response(raw_improved_query)
             augmented_query = query + ':' + improved_query
 
         query_emb = embedding_model.get_embedding(augmented_query, is_query=True) 
@@ -149,8 +149,7 @@ class PDFChatBot:
         print(f"LLM generation took {end_time - start_time:.2f} seconds")
         answer = answer_text.split("=== Document Context ===")[1].split("=== User Question ===")
         reference_output = answer[0].strip()
-        #answer_output = answer[1].split("<start_of_turn>model")[1].split("<end_of_turn>")[0].strip()
-        answer_output = answer[1].split("<|im_start|>assistant")[1].split("<|im_end|>")[0].strip()        
+        answer_output = local_llm_large.strip_response(answer[1])
         return answer_output, reference_output
 
 if __name__ == "__main__":

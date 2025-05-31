@@ -37,9 +37,9 @@ def download_models():
             "url": "https://huggingface.co/unsloth/gemma-3-1b-it-GGUF/resolve/main/gemma-3-1b-it-Q8_0.gguf"
         },
         {
-            "dir": MODEL_DIR / "trillion-7b-preview-GGUF",
-            "file": "trillion-7b-preview.q8_0.gguf",
-            "url": "https://huggingface.co/trillionlabs/Trillion-7B-preview-GGUF/resolve/main/trillion-7b-preview.q8_0.gguf"
+            "dir": MODEL_DIR / "gemma-3-4b-it-GGUF",
+            "file": "gemma-3-4b-it-Q8_0.gguf",
+            "url": "https://huggingface.co/unsloth/gemma-3-1b-it-GGUF/resolve/main/gemma-3-4b-it-Q8_0.gguf"
         }
     ]
     
@@ -100,8 +100,8 @@ def check_models():
     models = [
         ("bge-m3-gguf/bge-m3-Q8_0.gguf", "BGE-M3 Embedding Model"),
         ("multilingual-e5-large-gguf/multilingual-e5-large-Q8_0.gguf", "E5 Embedding Model"),
-        ("gemma-3-1b-it-GGUF/gemma-3-1b-it-Q8_0.gguf", "Gemma 3 LLM (Small)"),
-        ("trillion-7b-preview-GGUF/trillion-7b-preview.q8_0.gguf", "Trillion 7B LLM (Large)")
+        ("gemma-3-1b-it-GGUF/gemma-3-1b-it-Q8_0.gguf", "Gemma 3 1B LLM"),
+        ("gemma-3-4b-it-GGUF/gemma-3-4b-it-Q8_0.gguf", "Gemma 3 4B LLM")
     ]
     
     print("📋 Model Status Check:")

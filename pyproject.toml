@@ -1,17 +1,19 @@
 [build-system]
-requires = ["setuptools", "wheel"]
+requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "docsray"
-version = "0.3.0"
+version = "0.3.1"
 description = "PDF Question-Answering System with MCP Integration"
 authors = [{name = "Taehoon Kim", email = "taehoonkim@sogang.ac.kr"}]
 readme = "README.md"
 requires-python = ">=3.8"
+license = {text = "MIT"}
 
 dependencies = [
     "PyMuPDF",
+    "pdfplumber", 
     "sentence-transformers",
     "tiktoken",
     "transformers", 
@@ -21,11 +23,26 @@ dependencies = [
     "mcp",
     "uvicorn",
     "numpy",
+    "pandas",
+    "pillow",
+    "pytesseract", 
+    "scikit-learn",
     "gradio",
+    "opencv-python",
+    "protobuf"
 ]
+
+[project.urls]
+Homepage = "https://github.com/MIMICLab/DocsRay"
+Repository = "https://github.com/MIMICLab/DocsRay"
+Documentation = "https://docsray.com"
 
 [project.scripts]
 docsray = "docsray.cli:main"
 
 [tool.setuptools.packages.find]
+where = ["."]
 include = ["docsray*"]
+
+[tool.setuptools.package-data]
+docsray = ["data/*"]

@@ -15,7 +15,7 @@ import pytesseract
 from PIL import Image
 import pandas as pd
 import numpy as np
-import cv2
+
 from sklearn.cluster import KMeans
 
 # LLM for outline generation
@@ -27,7 +27,6 @@ def build_sections_from_layout(pages_text: List[str],
                                init_chunk: int = 5,
                                min_pages: int = 3,
                                max_pages: int = 15,
-                               fast_mode: bool = False,
                                preview_chars: int = 1000) -> List[Dict[str, Any]]:
     """
     Build pseudo‑TOC sections for a PDF lacking an explicit table of
@@ -70,13 +69,9 @@ def build_sections_from_layout(pages_text: List[str],
             f"[Page B]\n{pages_text[a_idx+1][:400]}\n\n"
         )
         try:
-            if fast_mode:
-                # Use the smaller model for faster response
-                resp = local_llm.generate(prompt).strip()
-                resp = resp.split('<start_of_turn>model')[1].split('<end_of_turn>')[0].strip()
-            else:
-                resp = local_llm_large.generate(prompt).strip()
-                resp = resp.split('<|im_start|>assistant')[1].split('<|im_end|>')[0].strip()
+            resp = local_llm.generate(prompt).strip()
+            resp = local_llm.strip_response(resp)
+
 
             if "0" in resp:
                 same_topic = True 
@@ -121,8 +116,9 @@ def build_sections_from_layout(pages_text: List[str],
         sample_text = " ".join(pages_text[start:end])[:preview_chars]
         title_prompt = prompt_template.format(sample=sample_text)
         try:
-            title_resp = local_llm.generate(title_prompt)
-            title_line = title_resp.split('<start_of_turn>model')[1].split('<end_of_turn>')[0].strip()
+            title_line = local_llm.generate(title_prompt)
+            title_line = local_llm.strip_response(title_line).strip()
+
         except Exception:
             title_line = f"Miscellaneous Section {start + 1}-{end}"
 
@@ -196,7 +192,6 @@ def rebuild_text_from_columns(df: pd.DataFrame, line_tol: int = 8) -> str:
 
 def extract_pdf_content(pdf_path: str,
                        ocr_lang: str = "kor+eng",
-                       fast_mode: bool = False,
                        ocr_dpi: int = 350) -> Dict[str, Any]:
     """Extract text from a PDF with optional OCR and column reordering."""
     doc = fitz.open(pdf_path)
@@ -228,7 +223,7 @@ def extract_pdf_content(pdf_path: str,
             )
         pages_text.append(page_text)
 
-    sections = build_sections_from_layout(pages_text, fast_mode=fast_mode)
+    sections = build_sections_from_layout(pages_text)
     
     return {
         "file_path": pdf_path,
