@@ -14,7 +14,6 @@ from PIL import Image
 import pandas as pd
 import numpy as np
 from sklearn.cluster import KMeans
-import base64
 
 # Import FAST_MODE to determine if we can use image recognition
 from docsray import FAST_MODE, MAX_TOKENS, FULL_FEATURE_MODE
@@ -102,8 +101,7 @@ def ocr_with_llm(image: Image.Image, page_num: int) -> str:
     local_llm, local_llm_large = get_llm_models()
     
     # OCR-specific prompt
-    prompt = f"""
-Extract and transcribe ALL text from this image. Include:
+    prompt = """Extract and transcribe ALL text from this image. Include:
 - All visible text, maintaining the original layout as much as possible
 - Headers, paragraphs, lists, captions
 - Any text in tables, charts, or diagrams
@@ -425,6 +423,7 @@ def extract_pdf_content(pdf_path: str,
         if analyze_visuals and (i % visual_analysis_interval == 0):
             print(f"  Analyzing visual content on page {i+1}...", file=sys.stderr)
             visual_content = analyze_visual_content(page, i)
+            
             if visual_content:
                 page_text += visual_content
         
