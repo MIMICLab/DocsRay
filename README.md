@@ -7,7 +7,7 @@
 A powerful PDF Question-Answering System that uses advanced embedding models and LLMs with Coarse-to-Fine search (RAG) approach. Features seamless MCP (Model Context Protocol) integration with Claude Desktop and comprehensive directory management capabilities.
 
 ## Try It Online
-- [Demo on DocsRay Website](https://docsray.com/) 
+- [Demo on Intel Xeon CPU](https://docsray.com/) 
 
 ## 🚀 Quick Start
 
