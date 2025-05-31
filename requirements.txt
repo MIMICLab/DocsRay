@@ -28,7 +28,6 @@ uvicorn
 numpy
 pandas
 pillow
-pytesseract
 scikit-learn
 gradio
 opencv-python

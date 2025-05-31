@@ -53,6 +53,7 @@ if has_cuda:
 
 MAX_TOKENS = 32768  # Default value for high memory systems
 FAST_MODE = False  # Default to normal mode
+FULL_FEATURE_MODE = False  # Default to normal mode
 
 if available_gb < 2:
     MAX_TOKENS = 4096  # Very low memory systems
@@ -64,6 +65,9 @@ if available_gb < 4:
 
 elif available_gb < 8:
     MAX_TOKENS = 16384  # Low memory systems
+elif available_gb > 32:
+    MAX_TOKENS = 0
+    FULL_FEATURE_MODE = True  # Enable full feature mode for high memory systems
 
 print(f"MAX_TOKENS set to {MAX_TOKENS} (Available GB: {available_gb:.2f})")
 

@@ -6,7 +6,7 @@ from llama_cpp import Llama
 import os
 import sys
 from pathlib import Path
-from docsray import FAST_MODE
+from docsray import FAST_MODE, FULL_FEATURE_MODE
 
 class LlamaTokenizer:
     def __init__(self, llama_model):
@@ -101,8 +101,12 @@ def get_llm_models():
                 f"Model files not found. Please run 'docsray download-models' first.\n"
                 f"Expected locations:\n  {small_model_path}\n  {large_model_path}"
             )
-        
-        local_llm = LocalLLM(model_name=small_model_path, device=device)
+        if FULL_FEATURE_MODE:
+            print("Running in full feature mode. Using larger model for inference.")
+            local_llm = LocalLLM(model_name=large_model_path, device=device)
+        else:
+            local_llm = LocalLLM(model_name=small_model_path, device=device)
+            
         if FAST_MODE:
             print("Running in fast mode. Using smaller model for inference.")
             local_llm_large = local_llm

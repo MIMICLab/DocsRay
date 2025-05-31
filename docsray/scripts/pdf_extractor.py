@@ -8,26 +8,183 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.append(str(ROOT))
 
 import fitz  # PyMuPDF
-from typing import Dict, Any, List
-
+from typing import Dict, Any, List, Tuple, Optional
 import io
-import pytesseract
 from PIL import Image
 import pandas as pd
 import numpy as np
-
 from sklearn.cluster import KMeans
+import base64
 
-# LLM for outline generation
+# Import FAST_MODE to determine if we can use image recognition
+from docsray import FAST_MODE, MAX_TOKENS, FULL_FEATURE_MODE
 
+# LLM for outline generation and image analysis
 from docsray.inference.llm_model import get_llm_models
 
+def extract_images_from_page(page, min_width: int = 100, min_height: int = 100) -> List[Tuple[Image.Image, fitz.Rect]]:
+    """
+    Extract images from a PDF page that meet minimum size requirements.
+    Returns list of (PIL Image, position rectangle) tuples.
+    """
+    images = []
+    image_list = page.get_images()
+    
+    for img_index, img in enumerate(image_list):
+        # Get image xref
+        xref = img[0]
+        
+        # Extract image
+        pix = fitz.Pixmap(page.parent, xref)
+        
+        # Convert to PIL Image
+        if pix.n - pix.alpha < 4:  # GRAY or RGB
+            img_data = pix.tobytes("png")
+        else:  # CMYK
+            pix = fitz.Pixmap(fitz.csRGB, pix)
+            img_data = pix.tobytes("png")
+        
+        pil_img = Image.open(io.BytesIO(img_data))
+        
+        # Check size
+        if pil_img.width >= min_width and pil_img.height >= min_height:
+            # Get image position on page
+            img_rects = page.get_image_rects(xref)
+            if img_rects:
+                images.append((pil_img, img_rects[0]))
+        
+        pix = None  # Free memory
+    
+    return images
+
+
+def analyze_image_with_llm(image: Image.Image, page_num: int, img_idx: int) -> str:
+    """
+    Use multimodal LLM to analyze and describe an image.
+    Returns empty string if in FAST_MODE.
+    """
+    if FAST_MODE:
+        return ""
+    
+    local_llm, local_llm_large = get_llm_models()
+    
+    # Prepare multimodal prompt
+    prompt = f"""Analyze this image from page {page_num + 1} of a PDF document. 
+
+Please describe:
+1. What type of visual content this is (chart, graph, diagram, photo, table, etc.)
+2. The main information or data it contains
+3. Any text, labels, or legends visible in the image
+4. Key insights or patterns shown
+
+Provide a clear, concise description that would help someone understand the content without seeing the image.
+
+Description:"""
+
+    try:
+        # Use the large model for better image understanding
+        response = local_llm_large.generate(prompt, image=image)
+        description = local_llm_large.strip_response(response)
+        
+        return f"[Figure {img_idx + 1} on page {page_num + 1}]: {description}"
+    except Exception as e:
+        print(f"Error analyzing image with LLM: {e}", file=sys.stderr)
+        return f"[Figure {img_idx + 1} on page {page_num + 1}]: Unable to analyze image"
+
+def ocr_with_llm(image: Image.Image, page_num: int) -> str:
+    """
+    Use multimodal LLM for OCR instead of pytesseract.
+    Returns empty string if in FAST_MODE.
+    """
+    if FAST_MODE:
+        return ""
+    
+    local_llm, local_llm_large = get_llm_models()
+    
+    # OCR-specific prompt
+    prompt = f"""
+Extract and transcribe ALL text from this image. Include:
+- All visible text, maintaining the original layout as much as possible
+- Headers, paragraphs, lists, captions
+- Any text in tables, charts, or diagrams
+- Text in different languages if present
+
+Output only the extracted text, no descriptions or explanations.
+
+Extracted text:"""
+
+    try:
+        response = local_llm_large.generate(prompt, image=image)
+        extracted_text = local_llm_large.strip_response(response)
+        return extracted_text.strip()
+    except Exception as e:
+        print(f"Error performing OCR with LLM: {e}", file=sys.stderr)
+        return ""
+
+def analyze_visual_content(page, page_num: int) -> str:
+    """
+    Analyze visual content (images, charts, tables) on a page using multimodal LLM.
+    Returns empty string if in FAST_MODE.
+    """
+    if FAST_MODE:
+        return ""
+    
+    visual_descriptions = []
+    
+    # Extract images
+    images = extract_images_from_page(page)
+    
+    if images:
+        print(f"  Found {len(images)} images on page {page_num + 1}", file=sys.stderr)
+        
+        for idx, (img, rect) in enumerate(images):
+            # Use LLM to analyze each image
+            description = analyze_image_with_llm(img, page_num, idx)
+            if description:
+                visual_descriptions.append(description)
+    
+    # Also check for vector graphics
+    drawings = page.get_drawings()
+    if drawings:
+        # Count different types of drawing elements
+        lines = sum(1 for d in drawings if d["type"] == "l")
+        curves = sum(1 for d in drawings if d["type"] == "c")
+        rects = sum(1 for d in drawings if d["type"] == "r")
+        
+        if lines > 10 or curves > 5 or rects > 5:
+            # For complex vector graphics, render the page area as image and analyze
+            try:
+                # Get the bounding box of all drawings
+                all_rects = [fitz.Rect(d["rect"]) for d in drawings]
+                if all_rects:
+                    # Union of all drawing rectangles
+                    bbox = all_rects[0]
+                    for r in all_rects[1:]:
+                        bbox = bbox | r  # Union operation
+                    
+                    # Render the area as image
+                    mat = fitz.Matrix(2, 2)  # 2x zoom for better quality
+                    pix = page.get_pixmap(matrix=mat, clip=bbox)
+                    img_data = pix.tobytes("png")
+                    vector_img = Image.open(io.BytesIO(img_data))
+                    
+                    # Analyze with LLM
+                    description = analyze_image_with_llm(vector_img, page_num, len(images))
+                    if description:
+                        visual_descriptions.append(f"[Vector Graphics]: {description}")
+            except Exception as e:
+                print(f"Error analyzing vector graphics: {e}", file=sys.stderr)
+    
+    # Combine all visual descriptions
+    if visual_descriptions:
+        return "\n\n" + "\n".join(visual_descriptions)
+    else:
+        return ""
 
 def build_sections_from_layout(pages_text: List[str],
                                init_chunk: int = 5,
                                min_pages: int = 3,
-                               max_pages: int = 15,
-                               preview_chars: int = 1000) -> List[Dict[str, Any]]:
+                               max_pages: int = 15) -> List[Dict[str, Any]]:
     """
     Build pseudo‑TOC sections for a PDF lacking an explicit table of
     contents.  Pipeline:
@@ -65,13 +222,12 @@ def build_sections_from_layout(pages_text: List[str],
             "If both excerpts discuss the same topic, reply with '0'. "
             "If the second excerpt introduces a new topic, reply with '1'. "
             "Reply with a single character only.\n\n"
-            f"[Page A]\n{pages_text[a_idx][:400]}\n\n"
-            f"[Page B]\n{pages_text[a_idx+1][:400]}\n\n"
+            f"[Page A]\n{pages_text[a_idx][: (MAX_TOKENS - 100)//2]}\n\n"
+            f"[Page B]\n{pages_text[a_idx+1][:(MAX_TOKENS - 100)//2]}\n\n"
         )
         try:
             resp = local_llm.generate(prompt).strip()
             resp = local_llm.strip_response(resp)
-
 
             if "0" in resp:
                 same_topic = True 
@@ -105,7 +261,7 @@ def build_sections_from_layout(pages_text: List[str],
     # ------------------------------------------------------------------
     # 3. Title generation for each segment
     # ------------------------------------------------------------------
-        prompt_template = (
+    prompt_template = (
         "Here is a passage from the document.\n"
         f"Please propose ONE concise title that captures its main topic.\n\n"
         "{sample}\n\n"
@@ -113,7 +269,7 @@ def build_sections_from_layout(pages_text: List[str],
     )
     sections: List[Dict[str, Any]] = []
     for start, end in segments:
-        sample_text = " ".join(pages_text[start:end])[:preview_chars]
+        sample_text = " ".join(pages_text[start:end])[: MAX_TOKENS - 100]  # leave space for LLM response
         title_prompt = prompt_template.format(sample=sample_text)
         try:
             title_line = local_llm.generate(title_prompt)
@@ -132,26 +288,43 @@ def build_sections_from_layout(pages_text: List[str],
     return sections
 
 # ────────────────────────────────────────────────
-# OCR and multi‑column handling helpers
+# LLM-based OCR for page content
 # ────────────────────────────────────────────────
-def ocr_page_words(page, dpi: int = 350, lang: str = "kor+eng") -> pd.DataFrame:
-    """Render a page to high‑DPI PNG and return a DataFrame of word boxes."""
-
-    zoom = dpi / 72
-    pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom), alpha=False)
-    img = Image.open(io.BytesIO(pix.tobytes("png")))
+def ocr_page_with_llm(page, dpi: int = 350) -> str:
+    """
+    Render page to image and use LLM for OCR.
+    Returns empty string if in FAST_MODE.
+    """
+    if FAST_MODE:
+        return ""
     
-    df = pytesseract.image_to_data(
-        img,
-        lang=lang,
-        config="--oem 3 --psm 3 -c preserve_interword_spaces=1",
-        output_type=pytesseract.Output.DATAFRAME
-    )
-    df = df[(df.conf != -1) & df.text.notnull()].copy()
-    df.rename(columns={"left": "x0", "top": "y0"}, inplace=True)
-    df["x1"] = df.x0 + df.width
-    df["y1"] = df.y0 + df.height
-    return df[["x0", "y0", "x1", "y1", "text"]]
+    try:
+        # Render page to high-quality image
+        zoom = dpi / 72
+        pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom), alpha=False)
+        img = Image.open(io.BytesIO(pix.tobytes("png")))
+        
+        # Use LLM for OCR
+        text = ocr_with_llm(img, page.number)
+        return text
+    except Exception as e:
+        print(f"Error in LLM OCR for page {page.number + 1}: {e}", file=sys.stderr)
+        return ""
+
+def extract_text_blocks_for_layout(page) -> pd.DataFrame:
+    """
+    Extract text blocks with positions for layout analysis.
+    Used when we have text but need to detect multi-column layout.
+    """
+    words = page.get_text("words")
+    if not words:
+        return pd.DataFrame(columns=["x0", "y0", "x1", "y1", "text"])
+    
+    df = pd.DataFrame(
+        words,
+        columns=["x0", "y0", "x1", "y1", "text", "_b", "_l", "_w"]
+    )[["x0", "y0", "x1", "y1", "text"]]
+    return df
 
 def is_multicol(df: pd.DataFrame, page_width: float, gap_ratio_thr: float = 0.15) -> bool:
     """Return True if the page likely has multiple text columns."""
@@ -191,44 +364,89 @@ def rebuild_text_from_columns(df: pd.DataFrame, line_tol: int = 8) -> str:
     return "\n".join(lines)
 
 def extract_pdf_content(pdf_path: str,
-                       ocr_lang: str = "kor+eng",
-                       ocr_dpi: int = 350) -> Dict[str, Any]:
-    """Extract text from a PDF with optional OCR and column reordering."""
+                       analyze_visuals: bool = True,
+                       visual_analysis_interval: int = 1) -> Dict[str, Any]:
+    """
+    Extract text from a PDF with optional visual content analysis using LLM.
+    
+    Parameters:
+    -----------
+    pdf_path : str
+        Path to the PDF file
+    analyze_visuals : bool
+        Whether to analyze visual content (automatically disabled in FAST_MODE)
+    visual_analysis_interval : int
+        Analyze visuals every N pages (ignored in FAST_MODE)
+    """
+    # Disable visual analysis in FAST_MODE
+    if FAST_MODE:
+        analyze_visuals = False
+        print("FAST_MODE enabled: Visual analysis disabled", file=sys.stderr)
+    
     doc = fitz.open(pdf_path)
     total_pages = len(doc)
     pages_text: List[str] = []
+
+    print(f"Extracting content from {total_pages} pages...", file=sys.stderr)
+    if analyze_visuals:
+        print(f"Visual analysis enabled (every {visual_analysis_interval} pages)", file=sys.stderr)
 
     for i in range(total_pages):
         page = doc[i]
         raw_text = page.get_text("text").strip()
 
-        # Build a DataFrame of word boxes
+        # Try to get text with layout information
         if raw_text:
-            words = page.get_text("words")
-            words_df = pd.DataFrame(
-                words,
-                columns=["x0", "y0", "x1", "y1", "text", "_b", "_l", "_w"]
-            )[["x0", "y0", "x1", "y1", "text"]]
+            # Extract word positions for layout analysis
+            words_df = extract_text_blocks_for_layout(page)
+            
+            # Check if multi-column layout
+            if words_df.empty:
+                page_text = raw_text
+            elif is_multicol(words_df, page.rect.width):
+                words_df = assign_columns_kmeans(words_df, max_cols=3)
+                page_text = rebuild_text_from_columns(words_df)
+            else:
+                # Single column - use position-based ordering
+                page_text = " ".join(
+                    w.text for _, w in
+                    words_df.sort_values(["y0", "x0"]).iterrows()
+                )
         else:
-            words_df = ocr_page_words(page, dpi=ocr_dpi, lang=ocr_lang)
-
-        # Determine layout and rebuild text accordingly
-        if is_multicol(words_df, page.rect.width):
-            words_df = assign_columns_kmeans(words_df, max_cols=3)
-            page_text = rebuild_text_from_columns(words_df)
-        else:
-            page_text = " ".join(
-                w.text for _, w in
-                words_df.sort_values(["y0", "x0"]).iterrows()
-            )
+            # No text found - use LLM OCR if not in FAST_MODE
+            if not FAST_MODE:
+                print(f"  Page {i+1}: No text found, performing LLM OCR...", file=sys.stderr)
+                page_text = ocr_page_with_llm(page)
+            else:
+                print(f"  Page {i+1}: No text found (OCR disabled in FAST_MODE)", file=sys.stderr)
+                page_text = ""
+        
+        # Analyze visual content if enabled
+        if analyze_visuals and (i % visual_analysis_interval == 0):
+            print(f"  Analyzing visual content on page {i+1}...", file=sys.stderr)
+            visual_content = analyze_visual_content(page, i)
+            if visual_content:
+                page_text += visual_content
+        
         pages_text.append(page_text)
+        
+        # Progress indicator
+        if (i + 1) % 10 == 0:
+            print(f"  Processed {i + 1}/{total_pages} pages...", file=sys.stderr)
 
+    print("Building document structure...", file=sys.stderr)
     sections = build_sections_from_layout(pages_text)
     
     return {
         "file_path": pdf_path,
         "pages_text": pages_text,
-        "sections": sections
+        "sections": sections,
+        "metadata": {
+            "total_pages": total_pages,
+            "visual_analysis": analyze_visuals,
+            "visual_analysis_interval": visual_analysis_interval if analyze_visuals else None,
+            "fast_mode": FAST_MODE
+        }
     }
 
 def save_extracted_content(content: Dict[str, Any], output_path: str):
@@ -267,17 +485,44 @@ if __name__ == "__main__":
 
     pdf_path = os.path.join(pdf_folder, selected_file)
     print(f"Processing file: {selected_file}")
-    extracted_data = extract_pdf_content(pdf_path)
+    
+    # Check if in FAST_MODE
+    if FAST_MODE:
+        print("\n⚠️  FAST_MODE is enabled - Visual analysis and LLM OCR are disabled")
+        analyze_visuals = False
+        visual_interval = 1
+    else:
+        # Ask user about visual analysis options
+        analyze_visuals = input("Analyze visual content (images, charts)? (y/N): ").lower() == 'y'
+        
+        visual_interval = 1
+        if analyze_visuals:
+            interval_input = input("Analyze visuals every N pages (default 1): ").strip()
+            if interval_input.isdigit():
+                visual_interval = int(interval_input)
+    
+    extracted_data = extract_pdf_content(
+        pdf_path, 
+        analyze_visuals=analyze_visuals,
+        visual_analysis_interval=visual_interval
+    )
 
     base_name = os.path.splitext(selected_file)[0]
     output_json = os.path.join(output_folder, f"{base_name}.json")
     save_extracted_content(extracted_data, output_json)
-    print(f"Processed {selected_file}: Found {len(extracted_data['sections'])} sections.")
+    
+    print(f"\nProcessing complete!")
+    print(f"- Document: {selected_file}")
+    print(f"- Sections found: {len(extracted_data['sections'])}")
+    print(f"- Total pages: {extracted_data['metadata']['total_pages']}")
+    print(f"- Fast mode: {extracted_data['metadata']['fast_mode']}")
+    if analyze_visuals:
+        print(f"- Visual analysis: Every {visual_interval} pages")
 
     # Also save merged sections as sections.json for convenience
     sections_output = os.path.join(output_folder, "sections.json")
     with open(sections_output, 'w', encoding='utf-8') as f:
         json.dump(extracted_data["sections"], f, ensure_ascii=False, indent=2)
-    print(f"Sections saved to {sections_output}")
+    print(f"\nSections saved to {sections_output}")
 
-    print("PDF Extraction Complete.")
+    print("\nPDF Extraction Complete.")
