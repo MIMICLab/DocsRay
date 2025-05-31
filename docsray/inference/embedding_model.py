@@ -8,6 +8,8 @@ import os
 import sys
 from pathlib import Path
 
+os.environ['LLAMA_CPP_LOG_LEVEL'] = 'ERROR'
+
 EPS = 1e-8              
 
 def _l2_normalize(arr):

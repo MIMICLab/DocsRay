@@ -1,4 +1,4 @@
-# src/inference/llm_model.py - 환경변수 기반 수정 버전
+# src/inference/llm_model.py 
 
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -6,6 +6,8 @@ from llama_cpp import Llama
 import os
 import sys
 from pathlib import Path
+
+os.environ['LLAMA_CPP_LOG_LEVEL'] = 'ERROR'
 
 class LlamaTokenizer:
     def __init__(self, llama_model):

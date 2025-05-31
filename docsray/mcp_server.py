@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-# mcp_server.py - Enhanced version with directory management
+# mcp_server.py - Enhanced version with document summarization
 
-"""Enhanced MCP Server for DocsRay PDF Question-Answering System with Directory Management"""
+"""Enhanced MCP Server for DocsRay PDF Question-Answering System with Directory Management and Document Summarization"""
 
 import asyncio
 import json
@@ -16,7 +16,6 @@ SCRIPT_DIR = Path(__file__).parent.absolute()
 base_dir = SCRIPT_DIR / "data"
 
 # Check models before importing DocsRay modules
-
 def ensure_models_exist():
     """Check if model files exist"""
     try:
@@ -71,6 +70,7 @@ from mcp.types import Tool, TextContent
 # DocsRay imports
 from docsray.chatbot import PDFChatBot, DEFAULT_SYSTEM_PROMPT
 from docsray.scripts import pdf_extractor, chunker, build_index, section_rep_builder
+from docsray.inference.llm_model import get_llm_models
 
 # Configuration
 DATA_DIR = base_dir / "mcp_data"
@@ -89,8 +89,21 @@ current_index: Optional[List] = None
 current_prompt: str = DEFAULT_SYSTEM_PROMPT
 current_pdf_name: Optional[str] = None
 current_pdf_folder: Path = DEFAULT_PDF_FOLDER  # Current working directory
+current_pages_text: Optional[List[str]] = None  # Store raw page text for summarization
 
-# Cache Management
+# Enhanced System Prompt for Summarization
+SUMMARIZATION_PROMPT = """You are a professional document analyst. Your task is to create a comprehensive summary of a PDF document based on its sections.
+
+Guidelines:
+• Provide a structured summary that follows the document's table of contents
+• For each section, include key points, main arguments, and important details
+• Maintain the hierarchical structure of the document
+• Use clear, concise language while preserving technical accuracy
+• Include relevant quotes or specific data points when they are crucial
+• Highlight connections between different sections when relevant
+"""
+
+# Cache Management functions (keeping existing ones)
 def _cache_paths(pdf_basename: str) -> Tuple[Path, Path]:
     """Return cache file paths for a PDF."""
     sec_path = CACHE_DIR / f"{pdf_basename}_sections.json"
@@ -161,17 +174,6 @@ def setup_initial_directory() -> Path:
     else:
         print("📁 Your saved PDF directory is no longer available.", file=sys.stderr)
     
-    print("Please choose your preferred PDF directory:", file=sys.stderr)
-    print(f"1. Use default directory: {DEFAULT_PDF_FOLDER}", file=sys.stderr)
-    print("2. Use current working directory", file=sys.stderr)
-    print("3. Use your Documents folder", file=sys.stderr)
-    print("4. Use your Desktop folder", file=sys.stderr)
-    print("5. Enter custom path", file=sys.stderr)
-    print("-" * 40, file=sys.stderr)
-    
-    # Since this is an MCP server running in background, we'll use smart defaults
-    # and provide a way for users to change it later via MCP tools
-    
     # Try some common locations in order of preference
     candidates = [
         Path.home() / "Documents" / "PDFs",
@@ -220,7 +222,7 @@ def setup_initial_directory() -> Path:
 # Initialize current directory
 current_pdf_folder = setup_initial_directory()
 
-# Cache Management
+# Directory Management functions
 def get_current_directory() -> str:
     """Get current PDF directory path."""
     return str(current_pdf_folder.absolute())
@@ -300,17 +302,15 @@ def get_directory_info(folder_path: Optional[str] = None) -> Dict[str, Any]:
     
     return info
 
-# PDF Processing
-def process_pdf(pdf_path: str, timeout: int = EXTRACT_TIMEOUT) -> Tuple[List, List]:
-    """Process PDF and build search index."""
+# Enhanced PDF Processing to store raw text
+def process_pdf(pdf_path: str, timeout: int = EXTRACT_TIMEOUT) -> Tuple[List, List, List[str]]:
+    """Process PDF and build search index, also return raw pages text."""
     pdf_basename = Path(pdf_path).stem
     
     # Check cache first
     sections, chunk_index = _load_cache(pdf_basename)
-    if sections is not None and chunk_index is not None:
-        print(f"Loading from cache: {pdf_basename}", file=sys.stderr)
-        return sections, chunk_index
     
+    # We need to extract anyway to get pages_text for summarization
     print(f"Processing PDF: {pdf_path}", file=sys.stderr)
     
     def _do_extract():
@@ -323,12 +323,16 @@ def process_pdf(pdf_path: str, timeout: int = EXTRACT_TIMEOUT) -> Tuple[List, Li
     except concurrent.futures.TimeoutError:
         raise RuntimeError("PDF extraction timed out.")
     
-    chunks = chunker.process_extracted_file(extracted)
-    chunk_index = build_index.build_chunk_index(chunks)
-    sections = section_rep_builder.build_section_reps(extracted["sections"], chunk_index)
+    pages_text = extracted.get("pages_text", [])
     
-    _save_cache(pdf_basename, sections, chunk_index)
-    return sections, chunk_index
+    if sections is None or chunk_index is None:
+        chunks = chunker.process_extracted_file(extracted)
+        chunk_index = build_index.build_chunk_index(chunks)
+        sections = section_rep_builder.build_section_reps(extracted["sections"], chunk_index)
+        
+        _save_cache(pdf_basename, sections, chunk_index)
+    
+    return sections, chunk_index, pages_text
 
 def get_pdf_list(folder_path: Optional[str] = None) -> List[str]:
     """Get list of PDF files in the specified folder."""
@@ -346,8 +350,115 @@ def get_pdf_list(folder_path: Optional[str] = None) -> List[str]:
     
     return sorted(pdf_files)
 
+# Document Summarization Function
+def summarize_document_by_sections(sections: List, chunk_index: List, max_chunks_per_section: int = 5) -> str:
+    """
+    Create a comprehensive summary of the document organized by sections.
+    
+    Args:
+        sections: List of section dictionaries
+        chunk_index: List of chunk dictionaries with embeddings and metadata
+        max_chunks_per_section: Maximum number of chunks to use per section for summary
+    
+    Returns:
+        Formatted summary string
+    """
+    local_llm, local_llm_large = get_llm_models()
+    
+    summary_parts = []
+    summary_parts.append(f"# 📄 Document Summary: {current_pdf_name}\n")
+    summary_parts.append("## 📑 Table of Contents\n")
+    
+    # Create ToC
+    for i, section in enumerate(sections):
+        title = section.get("title", f"Section {i+1}")
+        summary_parts.append(f"{i+1}. {title}")
+    
+    summary_parts.append("\n## 📊 Section Summaries\n")
+    
+    # Summarize each section
+    for i, section in enumerate(sections):
+        title = section.get("title", f"Section {i+1}")
+        start_page = section.get("start_page", 0)
+        end_page = section.get("end_page", start_page)
+        
+        summary_parts.append(f"### {i+1}. {title}")
+        summary_parts.append(f"*Pages {start_page}-{end_page}*\n")
+        
+        # Get chunks for this section
+        section_chunks = [
+            chunk for chunk in chunk_index 
+            if chunk["metadata"].get("section_title") == title
+        ]
+        
+        if not section_chunks:
+            summary_parts.append("*No content found for this section.*\n")
+            continue
+        
+        # Select most representative chunks (first and last few)
+        if len(section_chunks) <= max_chunks_per_section:
+            selected_chunks = section_chunks
+        else:
+            # Take first 2, last 2, and middle chunks
+            first_chunks = section_chunks[:2]
+            last_chunks = section_chunks[-2:]
+            middle_idx = len(section_chunks) // 2
+            middle_chunks = section_chunks[middle_idx-1:middle_idx+1]
+            selected_chunks = first_chunks + middle_chunks + last_chunks
+        
+        # Combine chunk contents
+        combined_content = "\n".join([
+            chunk["metadata"].get("content", "") 
+            for chunk in selected_chunks
+        ])
+        
+        # Generate section summary using LLM
+        section_prompt = f"""Based on the following content from section "{title}", provide a concise summary 
+highlighting the main points, key arguments, and important details:
+
+{combined_content}
+
+Summary (2-3 paragraphs):"""
+        
+        try:
+            summary_response = local_llm.generate(section_prompt)
+            # Extract the actual summary from response
+            if "<start_of_turn>model" in summary_response:
+                section_summary = summary_response.split("<start_of_turn>model")[1].split("<end_of_turn>")[0].strip()
+            else:
+                section_summary = summary_response.strip()
+            
+            summary_parts.append(section_summary)
+        except Exception as e:
+            summary_parts.append(f"*Error generating summary: {str(e)}*")
+        
+        summary_parts.append("")  # Empty line between sections
+    
+    # Add overall document summary
+    summary_parts.append("## 🎯 Overall Document Summary\n")
+    
+    # Create a high-level summary
+    overall_prompt = f"""Based on the document with the following sections:
+{', '.join([s.get('title', '') for s in sections])}
+
+Provide a high-level executive summary of the entire document in 2-3 paragraphs, 
+highlighting the main theme, key findings, and overall significance."""
+    
+    try:
+        overall_response = local_llm_large.generate(overall_prompt)
+        if "<|im_start|>assistant" in overall_response:
+            overall_summary = overall_response.split("<|im_start|>assistant")[1].split("<|im_end|>")[0].strip()
+        else:
+            overall_summary = overall_response.strip()
+        summary_parts.append(overall_summary)
+    except Exception as e:
+        summary_parts.append(f"*Error generating overall summary: {str(e)}*")
+    
+    return "\n".join(summary_parts)
+
 # MCP Server Setup
 server = Server("docsray-mcp")
+
 @server.list_tools()
 async def list_tools() -> List[Tool]:
     """List available tools."""
@@ -422,13 +533,28 @@ async def list_tools() -> List[Tool]:
                 },
                 "required": ["question"]
             }
+        ),
+        Tool(
+            name="summarize_document",
+            description="Generate a comprehensive summary of the loaded PDF organized by sections",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "detail_level": {
+                        "type": "string", 
+                        "description": "Level of detail for summary: 'brief', 'standard', or 'detailed'",
+                        "enum": ["brief", "standard", "detailed"],
+                        "default": "standard"
+                    }
+                }
+            }
         )
     ]
 
 @server.call_tool()
 async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
     """Execute a tool and return results."""
-    global current_sections, current_index, current_pdf_name
+    global current_sections, current_index, current_pdf_name, current_pages_text
     
     try:
         if name == "get_current_directory":
@@ -533,22 +659,27 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             
             # Process the PDF
             try:
-                sections, chunk_index = process_pdf(str(pdf_path))
+                sections, chunk_index, pages_text = process_pdf(str(pdf_path))
                 current_sections = sections
                 current_index = chunk_index
                 current_pdf_name = filename
+                current_pages_text = pages_text
                 
                 # Get file info
                 file_size = pdf_path.stat().st_size / (1024 * 1024)  # MB
                 num_sections = len(sections)
                 num_chunks = len(chunk_index)
+                num_pages = len(pages_text)
                 
                 response = f"✅ Successfully loaded: {filename}\n"
                 response += f"📂 From: {pdf_path.parent}\n"
                 response += f"📊 File size: {file_size:.1f} MB\n"
+                response += f"📄 Pages: {num_pages}\n"
                 response += f"📑 Sections: {num_sections}\n"
                 response += f"🔍 Chunks: {num_chunks}\n\n"
-                response += "You can now ask questions about this PDF."
+                response += "You can now:\n"
+                response += "• Ask questions about this PDF using 'ask_question'\n"
+                response += "• Generate a comprehensive summary using 'summarize_document'"
                 
                 return [TextContent(type="text", text=response)]
             except Exception as e:
@@ -589,13 +720,43 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             
             # Create chatbot and get answer
             chatbot = PDFChatBot(current_sections, current_index, system_prompt=current_prompt)
-            answer_output, reference_output = chatbot.answer(question, max_iterations =1, fine_only=fine_only)
+            answer_output, reference_output = chatbot.answer(question, max_iterations=1, fine_only=fine_only)
             
             # Format response
             response = f"📄 **Current PDF:** {current_pdf_name}\n"
             response += f"❓ **Question:** {question}\n\n"
             response += f"💡 **Answer:**\n{answer_output}\n\n"
             response += f"📚 **References:**\n{reference_output}"
+            
+            return [TextContent(type="text", text=response)]
+        
+        elif name == "summarize_document":
+            if current_sections is None or current_index is None:
+                return [TextContent(type="text", text="❌ Please load a PDF first using 'load_pdf'")]
+            
+            detail_level = arguments.get("detail_level", "standard")
+            
+            # Adjust parameters based on detail level
+            if detail_level == "brief":
+                max_chunks = 3
+            elif detail_level == "detailed":
+                max_chunks = 8
+            else:  # standard
+                max_chunks = 5
+            
+            # Generate summary
+            response = f"📄 **Generating {detail_level} summary for:** {current_pdf_name}\n"
+            response += "⏳ This may take a moment...\n\n"
+            
+            try:
+                summary = summarize_document_by_sections(
+                    current_sections, 
+                    current_index,
+                    max_chunks_per_section=max_chunks
+                )
+                response += summary
+            except Exception as e:
+                response += f"❌ Error generating summary: {str(e)}"
             
             return [TextContent(type="text", text=response)]
         
@@ -607,10 +768,9 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
         error_details = traceback.format_exc()
         return [TextContent(type="text", text=f"❌ Error: {str(e)}\n\nDetails:\n{error_details}")]
 
-
 async def run_mcp_server():
     """Run the MCP server (async version)."""
-    print(f"Starting DocsRay MCP Server (Enhanced with Directory Management)...", file=sys.stderr)
+    print(f"Starting DocsRay MCP Server (Enhanced with Directory Management and Summarization)...", file=sys.stderr)
     print(f"Default PDF Folder: {DEFAULT_PDF_FOLDER}", file=sys.stderr)
     print(f"Current PDF Folder: {current_pdf_folder}", file=sys.stderr)
     print(f"Cache Directory: {CACHE_DIR}", file=sys.stderr)
@@ -645,4 +805,4 @@ def main():
         traceback.print_exc()
 
 if __name__ == "__main__":
-    main()  
+    main()
