@@ -20,7 +20,7 @@ def show_hotfix_message():
     print("\nThen you can start using DocsRay!")
     print("="*70 + "\n")
 
-def main():
+def hotfix_check():
     """Main post-install function"""
     # Check if llama-cpp-python needs update
     try:

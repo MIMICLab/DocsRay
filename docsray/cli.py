@@ -7,6 +7,7 @@ import sys
 import os
 from pathlib import Path
 from docsray.config import FAST_MODE
+from docsray.post_install import hotfix_check
 def main():
     parser = argparse.ArgumentParser(
         description="DocsRay - PDF Question-Answering System",
@@ -74,6 +75,7 @@ Examples:
     ask_parser.add_argument("--pdf", required=True, help="PDF file name")
     
     args = parser.parse_args()
+    hotfix_check()  # Run post-install hotfix check
     
     if args.command == "download-models":
         from docsray.download_models import download_models, check_models

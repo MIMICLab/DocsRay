@@ -7,6 +7,7 @@ import urllib.request
 from pathlib import Path
 from docsray.config import MODEL_DIR
 
+
 def show_progress(block_num, block_size, total_size):
     """Display download progress"""
     if total_size > 0:
