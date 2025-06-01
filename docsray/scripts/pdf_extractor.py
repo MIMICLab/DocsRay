@@ -38,10 +38,6 @@ def extract_content(file_path: str,
     -----------
     file_path : str
         Path to the document file (PDF or other supported format)
-    analyze_visuals : bool
-        Whether to analyze visual content (automatically disabled in FAST_MODE)
-    visual_analysis_interval : int
-        Analyze visuals every N pages (ignored in FAST_MODE)
     auto_convert : bool
         Whether to automatically convert non-PDF files to PDF
     """
@@ -135,11 +131,8 @@ def extract_images_from_page(page, min_width: int = 100, min_height: int = 100) 
 def analyze_image_with_llm(image: Image.Image, page_num: int, img_idx: int) -> str:
     """
     Use multimodal LLM to analyze and describe an image.
-    Returns empty string if in FAST_MODE.
     """
-    if FAST_MODE:
-        return ""
-    
+
     local_llm, local_llm_large = get_llm_models()
     
     # Prepare multimodal prompt
@@ -160,11 +153,8 @@ Write naturally as one flowing paragraph, not as a numbered list.
 def ocr_with_llm(image: Image.Image, page_num: int) -> str:
     """
     Use multimodal LLM for OCR instead of pytesseract.
-    Returns empty string if in FAST_MODE.
     """
-    if FAST_MODE:
-        return ""
-    
+
     local_llm, local_llm_large = get_llm_models()
     
     # OCR-specific prompt
@@ -188,11 +178,8 @@ Output only the extracted text, no descriptions or explanations.
 def analyze_visual_content(page, page_num: int) -> str:
     """
     Analyze visual content (images, charts, tables) on a page using multimodal LLM.
-    Returns empty string if in FAST_MODE.
     """
-    if FAST_MODE:
-        return ""
-    
+
     visual_descriptions = []
     
     # Extract images
@@ -353,12 +340,9 @@ def build_sections_from_layout(pages_text: List[str],
 def ocr_page_with_llm(page, dpi: int = 350) -> str:
     """
     Render page to image and use LLM for OCR.
-    Returns empty string if in FAST_MODE.
     Uses pytesseract if not in FULL_FEATURE_MODE.
     """
-    if FAST_MODE:
-        return ""
-    
+
     try:
         # Render page to high-quality image
         zoom = dpi / 72
@@ -438,16 +422,9 @@ def extract_pdf_content(pdf_path: str,
     -----------
     pdf_path : str
         Path to the PDF file
-    analyze_visuals : bool
-        Whether to analyze visual content (automatically disabled in FAST_MODE)
-    visual_analysis_interval : int
-        Analyze visuals every N pages (ignored in FAST_MODE)
     """
-    # Disable visual analysis in FAST_MODE
-    if FAST_MODE:
-        analyze_visuals = False
-        print("FAST_MODE enabled: Visual analysis disabled", file=sys.stderr)
-    
+
+
     doc = fitz.open(pdf_path)
     total_pages = len(doc)
     pages_text: List[str] = []
@@ -478,16 +455,8 @@ def extract_pdf_content(pdf_path: str,
                     words_df.sort_values(["y0", "x0"]).iterrows()
                 )
         else:
-            # No text found - use OCR if not in FAST_MODE
-            if not FAST_MODE:
-                if FULL_FEATURE_MODE:
-                    print(f"  Page {i+1}: No text found, performing LLM OCR...", file=sys.stderr)
-                else:
-                    print(f"  Page {i+1}: No text found, performing pytesseract OCR...", file=sys.stderr)
-                page_text = ocr_page_with_llm(page)
-            else:
-                print(f"  Page {i+1}: No text found (OCR disabled in FAST_MODE)", file=sys.stderr)
-                page_text = ""
+            print(f"  Page {i+1}: No text found, performing pytesseract OCR...", file=sys.stderr)
+            page_text = ocr_page_with_llm(page)
     
         # Analyze visual content if enabled
         if analyze_visuals and (i % visual_analysis_interval == 0):
@@ -555,20 +524,14 @@ if __name__ == "__main__":
     pdf_path = os.path.join(pdf_folder, selected_file)
     print(f"Processing file: {selected_file}")
     
-    # Check if in FAST_MODE
-    if FAST_MODE:
-        print("\n⚠️  FAST_MODE is enabled - Visual analysis and LLM OCR are disabled")
-        analyze_visuals = False
-        visual_interval = 1
-    else:
-        # Ask user about visual analysis options
-        analyze_visuals = input("Analyze visual content (images, charts)? (y/N): ").lower() == 'y'
-        
-        visual_interval = 1
-        if analyze_visuals:
-            interval_input = input("Analyze visuals every N pages (default 1): ").strip()
-            if interval_input.isdigit():
-                visual_interval = int(interval_input)
+    # Ask user about visual analysis options
+    analyze_visuals = input("Analyze visual content (images, charts)? (y/N): ").lower() == 'y'
+    
+    visual_interval = 1
+    if analyze_visuals:
+        interval_input = input("Analyze visuals every N pages (default 1): ").strip()
+        if interval_input.isdigit():
+            visual_interval = int(interval_input)
     
     extracted_data = extract_pdf_content(
         pdf_path, 

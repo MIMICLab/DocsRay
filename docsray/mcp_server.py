@@ -774,16 +774,6 @@ async def list_tools() -> List[Tool]:
             }
         ),
         Tool(
-            name="list_pdfs",
-            description="[Deprecated - use list_documents] List all supported documents in the current or specified folder",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "folder_path": {"type": "string", "description": "Folder path to scan (optional, uses current if not specified)"}
-                }
-            }
-        ),
-        Tool(
             name="load_document",
             description="Load and process any supported document file with optional visual analysis",
             inputSchema={
@@ -796,18 +786,6 @@ async def list_tools() -> List[Tool]:
                         "description": "Whether to analyze visual content (default: true, disabled in FAST_MODE)",
                         "default": True
                     }
-                },
-                "required": ["filename"]
-            }
-        ),
-        Tool(
-            name="load_pdf",
-            description="[Deprecated - use load_document] Load and process a document file from the current or specified folder",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "filename": {"type": "string", "description": "Document filename to load"},
-                    "folder_path": {"type": "string", "description": "Folder path (optional, uses current if not specified)"}
                 },
                 "required": ["filename"]
             }
@@ -933,7 +911,7 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             
             return [TextContent(type="text", text=response)]
         
-        elif name == "list_documents" or name == "list_pdfs":
+        elif name == "list_documents":
             folder_path = arguments.get("folder_path")
             doc_list = list_documents(folder_path)
             
@@ -966,7 +944,7 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             
             return [TextContent(type="text", text=response)]
        
-        elif name == "load_document" or name == "load_pdf":
+        elif name == "load_document":
             filename = arguments["filename"]
             folder_path = arguments.get("folder_path")
             analyze_visuals = arguments.get("analyze_visuals", True)
@@ -1068,7 +1046,7 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
         
         elif name == "ask_question":
             if current_sections is None or current_index is None:
-                return [TextContent(type="text", text="❌ Please load a PDF first using 'load_pdf'")]
+                return [TextContent(type="text", text="❌ Please load a PDF first using 'load_document'")]
             
             question = arguments["question"]
             use_coarse = arguments.get("use_coarse_search", True)
@@ -1088,7 +1066,7 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
         
         elif name == "summarize_document":
             if current_sections is None or current_index is None:
-                return [TextContent(type="text", text="❌ Please load a PDF first using 'load_pdf'")]
+                return [TextContent(type="text", text="❌ Please load a PDF first using 'load_document'")]
             
             detail_level = arguments.get("detail_level", "standard")
             
