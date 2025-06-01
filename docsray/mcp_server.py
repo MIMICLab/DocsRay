@@ -12,7 +12,6 @@ import sys
 import time
 from typing import Any, Dict, List, Optional, Tuple
 from pathlib import Path
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from docsray.scripts.file_converter import FileConverter
 
@@ -21,7 +20,6 @@ base_dir = SCRIPT_DIR / "data"
 
 import platform
 from datetime import datetime
-import threading
 
 # Check models before importing DocsRay modules
 def ensure_models_exist():
@@ -35,18 +33,37 @@ def ensure_models_exist():
         {
             "dir": MODEL_DIR / "bge-m3-gguf",
             "file": "bge-m3-Q8_0.gguf",
+            "url": "https://huggingface.co/lm-kit/bge-m3-gguf/resolve/main/bge-m3-Q8_0.gguf"
         },
         {
             "dir": MODEL_DIR / "multilingual-e5-large-gguf",
             "file": "multilingual-e5-large-Q8_0.gguf",
+            "url": "https://huggingface.co/KeyurRamoliya/multilingual-e5-large-GGUF/resolve/main/multilingual-e5-large-q8_0.gguf"
+        },
+        {
+            "dir": MODEL_DIR / "gemma-3-1b-it-GGUF",
+            "file": "gemma-3-1b-it-Q4_K_M.gguf",
+            "url": "https://huggingface.co/ggml-org/gemma-3-1b-it-GGUF/resolve/main/gemma-3-1b-it-Q4_K_M.gguf"
         },
         {
             "dir": MODEL_DIR / "gemma-3-1b-it-GGUF",
             "file": "gemma-3-1b-it-Q8_0.gguf",
+            "url": "https://huggingface.co/ggml-org/gemma-3-1b-it-GGUF/resolve/main/gemma-3-1b-it-Q8_0.gguf"
         },
         {
             "dir": MODEL_DIR / "gemma-3-4b-it-GGUF",
             "file": "gemma-3-4b-it-Q8_0.gguf",
+            "url": "https://huggingface.co/ggml-org/gemma-3-4b-it-GGUF/resolve/main/gemma-3-4b-it-Q8_0.gguf"
+        },
+        {
+            "dir": MODEL_DIR / "gemma-3-4b-it-GGUF",
+            "file": "gemma-3-4b-it-Q4_K_M.gguf",
+            "url": "https://huggingface.co/ggml-org/gemma-3-4b-it-GGUF/resolve/main/gemma-3-4b-it-Q4_K_M.gguf"
+        },
+        {
+            "dir": MODEL_DIR / "gemma-3-4b-it-GGUF",
+            "file": "mmproj-gemma-3-4b-it-f16.gguf",
+            "url": "https://huggingface.co/ggml-org/gemma-3-4b-it-GGUF/resolve/main/mmproj-model-f16.gguf"
         }
     ]
     
@@ -88,7 +105,6 @@ DATA_DIR = base_dir / "mcp_data"
 CACHE_DIR = DATA_DIR / "cache"
 CONFIG_FILE = DATA_DIR / "config.json"
 DEFAULT_PDF_FOLDER = base_dir / "original"  # Default folder to scan for PDFs
-EXTRACT_TIMEOUT = 1800  # 30 minutes
 
 # Create directories
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
