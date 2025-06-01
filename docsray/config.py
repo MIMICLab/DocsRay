@@ -64,7 +64,6 @@ else:
             MAX_TOKENS = 16384
         elif available_gb < 16:
             FAST_MODE = True
-            MAX_TOKENS = 16384
             MAX_TOKENS = 32768
         elif available_gb < 32:
             MAX_TOKENS = 32768
@@ -77,7 +76,6 @@ else:
             MAX_TOKENS = 16384
         elif available_gb < 16:
             FAST_MODE = True
-            MAX_TOKENS = 16384
             MAX_TOKENS = 32768
         elif available_gb < 32:
             MAX_TOKENS = 32768
