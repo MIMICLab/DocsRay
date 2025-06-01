@@ -9,6 +9,7 @@ tiktoken
 # For LLMs
 #llama-cpp-python
 git+https://github.com/kossum/llama-cpp-python.git
+
 # PyTorch 
 torch
 
@@ -24,7 +25,7 @@ mcp
 # Uvicorn for ASGI server
 uvicorn
 
-# numpy for vector operations
+# Additional libraries
 numpy
 pandas
 pillow
@@ -32,3 +33,4 @@ scikit-learn
 gradio
 opencv-python
 psutil
+pytesseract

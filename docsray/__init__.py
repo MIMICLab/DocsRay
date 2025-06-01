@@ -58,13 +58,11 @@ MAX_TOKENS = 32768  # Default value for high memory systems
 FAST_MODE = False  # Default to normal mode
 FULL_FEATURE_MODE = False  # Default to normal mode
 
-# GPU가 없으면 무조건 FAST_MODE 활성화
 if not has_gpu:
     FAST_MODE = True
     MAX_TOKENS = 8192
     print(f"No GPU detected - FAST_MODE enabled (Available RAM: {available_gb:.2f} GB)")
 else:
-    # GPU가 있는 경우 메모리 기반 설정
     if available_gb < 2:
         MAX_TOKENS = 4096
         FAST_MODE = True
@@ -78,6 +76,7 @@ else:
         FULL_FEATURE_MODE = True
     
     print(f"MAX_TOKENS set to {MAX_TOKENS} (Available {'VRAM' if has_cuda else 'Memory'}: {available_gb:.2f} GB)")
+
 # Create directories if they don't exist
 for dir_path in [DOCSRAY_HOME, DATA_DIR, MODEL_DIR, CACHE_DIR]:
     dir_path.mkdir(parents=True, exist_ok=True)

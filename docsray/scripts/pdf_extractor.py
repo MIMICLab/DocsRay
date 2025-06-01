@@ -14,6 +14,7 @@ from PIL import Image
 import pandas as pd
 import numpy as np
 from sklearn.cluster import KMeans
+import pytesseract
 
 # Import FAST_MODE to determine if we can use image recognition
 from docsray import FAST_MODE, MAX_TOKENS, FULL_FEATURE_MODE
@@ -276,13 +277,11 @@ def build_sections_from_layout(pages_text: List[str],
 
     return sections
 
-# ────────────────────────────────────────────────
-# LLM-based OCR for page content
-# ────────────────────────────────────────────────
 def ocr_page_with_llm(page, dpi: int = 350) -> str:
     """
     Render page to image and use LLM for OCR.
     Returns empty string if in FAST_MODE.
+    Uses pytesseract if not in FULL_FEATURE_MODE.
     """
     if FAST_MODE:
         return ""
@@ -293,13 +292,18 @@ def ocr_page_with_llm(page, dpi: int = 350) -> str:
         pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom), alpha=False)
         img = Image.open(io.BytesIO(pix.tobytes("png")))
         
-        # Use LLM for OCR
-        text = ocr_with_llm(img, page.number)
-        return text
+        # FULL_FEATURE_MODE일 때만 LLM OCR 사용
+        if FULL_FEATURE_MODE:
+            text = ocr_with_llm(img, page.number)
+        else:
+            # 일반 모드에서는 pytesseract 사용
+            text = pytesseract.image_to_string(img)
+            
+        return text.strip()
     except Exception as e:
-        print(f"Error in LLM OCR for page {page.number + 1}: {e}", file=sys.stderr)
+        print(f"Error in OCR for page {page.number + 1}: {e}", file=sys.stderr)
         return ""
-
+    
 def extract_text_blocks_for_layout(page) -> pd.DataFrame:
     """
     Extract text blocks with positions for layout analysis.
@@ -402,14 +406,17 @@ def extract_pdf_content(pdf_path: str,
                     words_df.sort_values(["y0", "x0"]).iterrows()
                 )
         else:
-            # No text found - use LLM OCR if not in FAST_MODE
+            # No text found - use OCR if not in FAST_MODE
             if not FAST_MODE:
-                print(f"  Page {i+1}: No text found, performing LLM OCR...", file=sys.stderr)
+                if FULL_FEATURE_MODE:
+                    print(f"  Page {i+1}: No text found, performing LLM OCR...", file=sys.stderr)
+                else:
+                    print(f"  Page {i+1}: No text found, performing pytesseract OCR...", file=sys.stderr)
                 page_text = ocr_page_with_llm(page)
             else:
                 print(f"  Page {i+1}: No text found (OCR disabled in FAST_MODE)", file=sys.stderr)
                 page_text = ""
-        
+    
         # Analyze visual content if enabled
         if analyze_visuals and (i % visual_analysis_interval == 0):
             print(f"  Analyzing visual content on page {i+1}...", file=sys.stderr)
