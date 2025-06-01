@@ -5,7 +5,7 @@ import os
 import sys
 import urllib.request
 from pathlib import Path
-from docsray import MODEL_DIR
+from docsray.config import MODEL_DIR
 
 def show_progress(block_num, block_size, total_size):
     """Display download progress"""
