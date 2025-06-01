@@ -2,7 +2,6 @@
 PyMuPDF
 pdfplumber
 
-
 # For chunking and embedding
 tiktoken
 
@@ -34,3 +33,27 @@ gradio
 opencv-python
 psutil
 pytesseract
+
+# ===== NEW: File Conversion Dependencies =====
+
+# Office document conversion
+pypandoc>=1.11  # General document conversion
+python-docx>=0.8.11  # For reading DOCX files
+docx2pdf>=0.1.8  # Direct DOCX to PDF conversion (Windows/Mac)
+openpyxl>=3.0.10  # For reading Excel files
+python-pptx>=0.6.21  # For reading PowerPoint files
+
+# HTML/Web to PDF
+pdfkit>=1.0.0  # HTML to PDF conversion (requires wkhtmltopdf)
+weasyprint>=57.0  # Alternative HTML to PDF converter
+
+# Markdown support
+markdown>=3.4.1  # Markdown to HTML conversion
+
+# Image handling (already included via pillow)
+# pillow>=9.0.0
+
+# Optional but recommended system dependencies (install separately):
+# - LibreOffice (for reliable Office document conversion)
+# - wkhtmltopdf (for pdfkit)
+# - Pandoc (for pypandoc)

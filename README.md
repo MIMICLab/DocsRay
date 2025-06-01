@@ -4,10 +4,10 @@
 [![smithery badge](https://smithery.ai/badge/@MIMICLab/docsray)](https://smithery.ai/server/@MIMICLab/docsray)
 
 
-A powerful PDF Question-Answering System that uses advanced embedding models and multimodal LLMs with Coarse-to-Fine search (RAG) approach. Features seamless MCP (Model Context Protocol) integration with Claude Desktop, comprehensive directory management capabilities, and visual content analysis.
+A powerful PDF Question-Answering System that uses advanced embedding models and multimodal LLMs with Coarse-to-Fine search (RAG) approach. Features seamless MCP (Model Context Protocol) integration with Claude Desktop, comprehensive directory management capabilities, visual content analysis, and intelligent hybrid OCR system.
 
 ## Try It Online
-- [Demo on Intel Xeon CPU](https://docsray.com/) 
+- [Demo on H100 GPU](https://docsray.com/) 
 
 ## 🚀 Quick Start
 
@@ -29,27 +29,110 @@ docsray web  # Launch Web UI
 
 - **Advanced RAG System**: Coarse-to-Fine search for accurate document retrieval
 - **Multimodal AI**: Visual content analysis using Gemma-3-4B's image recognition capabilities
+- **Hybrid OCR System**: Intelligent selection between AI-powered OCR and traditional Pytesseract
+- **Adaptive Performance**: Automatically optimizes based on available system resources
 - **Multi-Model Support**: Uses BGE-M3, E5-Large, Gemma-3-1B, and Gemma-3-4B models
 - **MCP Integration**: Seamless integration with Claude Desktop
 - **Multiple Interfaces**: Web UI, API server, CLI, and MCP server
 - **Directory Management**: Advanced PDF directory handling and caching
-- **AI-Powered OCR**: LLM-based text extraction from scanned PDFs and images
 - **Multi-Language**: Supports multiple languages including Korean and English
-- **FAST_MODE**: Memory-efficient mode for resource-constrained environments
+- **Smart Resource Management**: FAST_MODE, Standard, and FULL_FEATURE_MODE based on system specs
+- **Universal Document Support**: Automatically converts 30+ file formats to PDF for processing
+- **Smart File Conversion**: Handles Office documents, images, HTML, Markdown, and more
 
-## 🎯 What's New in v0.3.x
+## 🎯 What's New in v0.4.x
+### Universal Document Support
+DocsRay now automatically converts various document formats to PDF for processing:
 
-### Visual Content Analysis
-DocsRay now leverages multimodal AI to understand and describe visual content in PDFs:
-- **Automatic Image Analysis**: Charts, graphs, diagrams, and figures are analyzed and described
-- **AI-Powered OCR**: Replace traditional OCR with LLM-based text extraction
-- **Vector Graphics Recognition**: Detects and analyzes PDF-native drawings and diagrams
-- **Contextual Understanding**: Visual elements are described in relation to surrounding content
+#### Supported File Formats
 
-### Performance Optimization
-- **FAST_MODE**: Automatically activated on low-memory systems (<4GB RAM)
-- **Adaptive Processing**: Adjusts features based on available resources
-- **Efficient Caching**: Smart caching system for processed documents
+**Office Documents**
+- Microsoft Word (.docx, .doc)
+- Microsoft Excel (.xlsx, .xls)
+- Microsoft PowerPoint (.pptx, .ppt)
+- OpenDocument formats (.odt, .ods, .odp)
+
+**Text Formats**
+- Plain Text (.txt)
+- Markdown (.md)
+- Rich Text Format (.rtf)
+- reStructuredText (.rst)
+
+**Web Formats**
+- HTML (.html, .htm)
+- XML (.xml)
+
+**Image Formats**
+- JPEG (.jpg, .jpeg)
+- PNG (.png)
+- GIF (.gif)
+- BMP (.bmp)
+- TIFF (.tiff, .tif)
+- WebP (.webp)
+
+**E-book Formats**
+- EPUB (.epub)
+- MOBI (.mobi)
+
+### Automatic Conversion
+Simply load any supported file type, and DocsRay will:
+1. Automatically detect the file format
+2. Convert it to PDF in the background
+3. Process it with all the same features as native PDFs
+4. Clean up temporary files automatically
+
+```python
+# Works with any supported format!
+docsray process /path/to/document.docx
+docsray process /path/to/spreadsheet.xlsx
+docsray process /path/to/image.png
+```
+
+### Hybrid OCR System
+DocsRay now features an intelligent hybrid OCR system that automatically selects the optimal OCR method based on your system resources:
+
+- **FULL_FEATURE_MODE (RAM > 32GB)**: AI-powered OCR using Gemma-3-4B model
+  - Accurately recognizes complex layouts and multilingual text
+  - Understands context when extracting text from tables, charts, and diagrams
+  - Significantly improves text quality from scanned PDFs
+
+- **Standard Mode (RAM 8-32GB)**: Traditional Pytesseract-based OCR
+  - Stable and fast text extraction
+  - Multi-language support (including Korean)
+  
+- **FAST_MODE (RAM < 8GB)**: OCR disabled
+  - Memory efficiency prioritized
+  - Processes only PDFs with embedded text
+
+### Adaptive Performance Optimization
+Automatically detects system resources and optimizes performance:
+
+```python
+# Automatic resource detection and mode configuration
+if available_ram > 32GB:
+    FULL_FEATURE_MODE = True  # All features enabled
+elif available_ram < 4GB:
+    FAST_MODE = True  # Lightweight mode
+else:
+    # Standard mode (balanced performance)
+```
+
+### Enhanced MCP Commands
+- **Cache Management**: `clear_all_cache`, `get_cache_info`
+- **Improved Summarization**: Batch processing with section-by-section caching
+- **Detail Levels**: Adjustable summary detail (brief/standard/detailed)
+
+## 📊 Performance Optimization Guide
+
+### Recommended Settings by Memory
+
+| System Memory | Mode | OCR | Visual Analysis | Max Tokens |
+|--------------|------|-----|-----------------|------------|
+| < 4GB | FAST_MODE | ❌ | ❌ | 4,096 |
+| 4-8GB | FAST_MODE | ✅ (Pytesseract) | Limited | 8K |
+| 8-16GB | Standard | ✅ (Pytesseract) | ✅ | 16K |
+| 16-32GB | Standard | ✅ (Pytesseract) | ✅ | 32K |
+| > 32GB | FULL_FEATURE | ✅ (AI OCR) | ✅  | 128K |
 
 ## 📁 Project Structure
 
@@ -111,6 +194,26 @@ CMAKE_ARGS=-DLLAMA_METAL=on FORCE_CMAKE=1 pip install llama-cpp-python --force-r
 # For CUDA (NVIDIA)
 CMAKE_ARGS=-DGGML_CUDA=on FORCE_CMAKE=1 pip install llama-cpp-python --force-reinstall --upgrade --no-cache-dir
 ```
+
+### File Conversion Dependencies (Optional)
+
+For best file conversion results, install system dependencies:
+
+```bash
+# Ubuntu/Debian
+sudo apt-get install libreoffice pandoc wkhtmltopdf
+
+# macOS
+brew install libreoffice pandoc wkhtmltopdf
+
+# Windows
+# Download and install:
+# - LibreOffice: https://www.libreoffice.org/download/
+# - Pandoc: https://pandoc.org/installing.html
+# - wkhtmltopdf: https://wkhtmltopdf.org/downloads.html
+```
+
+Python packages for conversion are included in the base installation, but system tools provide better results for complex documents.
 
 ## 🎯 Usage
 
@@ -179,11 +282,11 @@ curl http://localhost:8000/info
 from docsray import PDFChatBot
 from docsray.scripts import pdf_extractor, chunker, build_index, section_rep_builder
 
-# Process PDF with visual analysis
-extracted = pdf_extractor.extract_pdf_content(
-    "document.pdf",
-    analyze_visuals=True,  # Enable visual content analysis
-    visual_analysis_interval=1  # Analyze every page
+# Process any document type - auto-conversion handled internally
+extracted = pdf_extractor.extract_content(
+    "report.docx",  # Can be DOCX, XLSX, PNG, HTML, etc.
+    analyze_visuals=True,
+    visual_analysis_interval=1
 )
 
 # Create chunks and build index
@@ -218,16 +321,19 @@ answer, references = chatbot.answer("What are the key trends shown in the graphs
 - `Set my PDF directory to /path/to/documents` - Change working directory
 - `Show me information about /path/to/pdfs` - Get directory details
 
-#### PDF Operations
-- `List all PDFs in my current directory` - List available PDFs
-- `Load the PDF named "paper.pdf"` - Load and process a PDF
-- `Summarize this document` - Generate comprehensive summary
-- `What are the main findings?` - Ask questions about loaded PDF
+#### Document Operations (Updated)
+- `List all documents in my current directory` - List all supported files (not just PDFs)
+- `Load the document named "report.docx"` - Load any supported file type
+- `What file types are supported?` - Show list of supported formats
 
 #### Visual Content Queries
 - `What charts or figures are in this document?` - List visual elements
 - `Describe the diagram on page 10` - Get specific visual descriptions
 - `What data is shown in the graphs?` - Analyze data visualizations
+
+#### Cache Management (New)
+- `Clear all cache` - Remove all cached files
+- `Show cache info` - Display cache statistics and details
 
 ## ⚙️ Configuration
 
@@ -237,6 +343,9 @@ answer, references = chatbot.answer("What are the key trends shown in the graphs
 # Custom data directory (default: ~/.docsray)
 export DOCSRAY_HOME=/path/to/custom/directory
 
+# Force specific mode
+export DOCSRAY_FAST_MODE=1  # Force FAST_MODE
+
 # GPU configuration
 export DOCSRAY_USE_GPU=1
 export DOCSRAY_GPU_LAYERS=-1  # Use all layers on GPU
@@ -245,21 +354,15 @@ export DOCSRAY_GPU_LAYERS=-1  # Use all layers on GPU
 export DOCSRAY_MODEL_DIR=/path/to/models
 ```
 
-### FAST_MODE (Automatic Memory Management)
+### Programmatic Mode Detection
 
-DocsRay automatically detects available memory and enables FAST_MODE when needed:
+```python
+from docsray import FAST_MODE, FULL_FEATURE_MODE, MAX_TOKENS
 
-| Available RAM | Mode | Features |
-|--------------|------|----------|
-| < 4GB | FAST_MODE | Text extraction only, no visual analysis |
-| 4-8GB | Limited | Basic visual analysis on selected pages |
-| > 8GB | Full | Complete visual analysis with multimodal AI |
-
-FAST_MODE characteristics:
-- Uses smaller models (Gemma-3-1B only)
-- Disables image recognition and AI OCR
-- Reduces maximum token context
-- Maintains core Q&A functionality
+print(f"Fast Mode: {FAST_MODE}")
+print(f"Full Feature Mode: {FULL_FEATURE_MODE}")
+print(f"Max Tokens: {MAX_TOKENS}")
+```
 
 ### Data Storage
 
@@ -274,12 +377,29 @@ DocsRay uses the following models (automatically downloaded):
 
 | Model | Size | Purpose |
 |-------|------|---------|
-| BGE-M3 | 1.7GB | Multilingual embedding model |
-| E5-Large | 1.2GB | Multilingual embedding model |
+| bge-m3 | 1.7GB | Multilingual embedding model |
+| multilingual-e5-Large | 1.2GB | Multilingual embedding model |
 | Gemma-3-1B | 1.1GB | Query enhancement and light tasks |
 | Gemma-3-4B | 4.1GB | Main answer generation & visual analysis |
 
 **Total storage requirement**: ~8GB
+
+## 💡 Usage Recommendations by Scenario
+
+### 1. Bulk PDF Processing (Server Environment)
+- Recommended: FULL_FEATURE_MODE (ensure sufficient RAM)
+- GPU acceleration essential
+- Adjust visual_analysis_interval for batch processing
+
+### 2. Personal Laptop Environment
+- Recommended: Standard mode
+- Switch to FAST_MODE when needed
+- Analyze visuals only on important pages
+
+### 3. Resource-Constrained Environment
+- Use FAST_MODE
+- Process text-based PDFs only
+- Leverage caching aggressively
 
 ## 🎨 Visual Content Analysis Examples
 
@@ -323,25 +443,25 @@ docsray download-models --check
 
 If you encounter out-of-memory errors:
 
-1. **Check FAST_MODE status**:
+1. **Check current mode**:
    ```python
    from docsray import FAST_MODE, MAX_TOKENS
    print(f"FAST_MODE: {FAST_MODE}")
    print(f"MAX_TOKENS: {MAX_TOKENS}")
    ```
 
-2. **Reduce visual analysis frequency**:
+2. **Force FAST_MODE**:
+   ```bash
+   export DOCSRAY_FAST_MODE=1
+   ```
+
+3. **Reduce visual analysis frequency**:
    ```python
    extracted = pdf_extractor.extract_pdf_content(
        pdf_path,
        analyze_visuals=True,
        visual_analysis_interval=5  # Analyze every 5th page
    )
-   ```
-
-3. **Use FAST_MODE explicitly**:
-   ```bash
-   export DOCSRAY_FAST_MODE=1
    ```
 
 ### GPU Support Issues
@@ -373,6 +493,38 @@ CMAKE_ARGS="-DLLAMA_METAL=on" pip install llama-cpp-python --no-cache-dir
    ```bash
    docsray mcp
    ```
+
+### OCR Language Errors
+
+```bash
+# Install Korean tesseract data
+sudo apt-get install tesseract-ocr-kor
+```
+
+### File Conversion Issues
+
+#### Office Documents Not Converting
+```bash
+# Install LibreOffice for best results
+sudo apt-get install libreoffice  # Ubuntu/Debian
+brew install libreoffice  # macOS
+```
+
+#### HTML/Web Files Not Converting
+```bash
+# Install wkhtmltopdf
+sudo apt-get install wkhtmltopdf  # Ubuntu/Debian
+brew install wkhtmltopdf  # macOS
+
+# Or use weasyprint (Python-only alternative)
+pip install weasyprint
+```
+
+#### Missing Converter Warning
+If you see "No suitable converter found":
+1. Check system dependencies are installed
+2. Verify Python packages: `pip install docsray[conversion]`
+3. Try alternative converters (LibreOffice > docx2pdf > pandoc)
 
 ## 📚 Advanced Usage
 
@@ -419,6 +571,35 @@ When answering questions:
 
 chatbot = PDFChatBot(sections, chunk_index, system_prompt=visual_prompt)
 ```
+### Batch Document Processing (Mixed Formats)
+
+```bash
+#!/bin/bash
+# Process all supported documents in a directory
+for file in *.{pdf,docx,xlsx,pptx,txt,md,html,png,jpg}; do
+    if [[ -f "$file" ]]; then
+        echo "Processing $file..."
+        docsray process "$file"
+    fi
+done
+```
+
+### Programmatic Format Detection
+
+```python
+from docsray.scripts.file_converter import FileConverter
+
+converter = FileConverter()
+
+# Check if file is supported
+if converter.is_supported("presentation.pptx"):
+    print("File is supported!")
+    
+# Get all supported formats
+formats = converter.get_supported_formats()
+for ext, description in formats.items():
+    print(f"{ext}: {description}")
+```
 
 ## 🛠️ Development
 
@@ -461,6 +642,6 @@ This project is licensed under the MIT License. See [LICENSE](LICENSE) file for 
 
 ## 🤝 Support
 
-- **Documentation**: [https://docsray.com](https://docsray.com)
+- **Web Demo**: [https://docsray.com](https://docsray.com)
 - **Issues**: [GitHub Issues](https://github.com/MIMICLab/DocsRay/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/MIMICLab/DocsRay/discussions)

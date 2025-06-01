@@ -14,6 +14,8 @@ from typing import Any, Dict, List, Optional, Tuple
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+from docsray.scripts.file_converter import FileConverter
+
 SCRIPT_DIR = Path(__file__).parent.absolute()
 base_dir = SCRIPT_DIR / "data"
 
@@ -261,51 +263,92 @@ def set_current_directory(folder_path: str) -> Tuple[bool, str]:
         return False, f"Error setting directory: {str(e)}"
 
 def get_directory_info(folder_path: Optional[str] = None) -> Dict[str, Any]:
-    """Get detailed information about the directory."""
+    """Get detailed information about the directory including all supported files."""
     if folder_path:
         target_dir = Path(folder_path).expanduser().resolve()
     else:
         target_dir = current_pdf_folder
+    
+    converter = FileConverter()
     
     info = {
         "path": str(target_dir),
         "exists": target_dir.exists(),
         "is_directory": target_dir.is_dir() if target_dir.exists() else False,
         "pdf_count": 0,
-        "pdf_files": [],
+        "other_document_count": 0,
+        "supported_files": [],
         "total_size_mb": 0.0,
         "error": None
     }
     
     try:
         if info["exists"] and info["is_directory"]:
-            pdf_files = list(target_dir.glob("*.pdf"))
-            info["pdf_count"] = len(pdf_files)
+            # Get all supported files
+            all_files = []
+            pdf_count = 0
+            other_count = 0
             
-            total_size = 0
-            pdf_list = []
+            for file_path in sorted(target_dir.iterdir()):
+                if file_path.is_file() and converter.is_supported(str(file_path)):
+                    try:
+                        file_size = file_path.stat().st_size
+                        file_type = converter.SUPPORTED_FORMATS.get(
+                            file_path.suffix.lower(), 
+                            "PDF" if file_path.suffix.lower() == '.pdf' else "Unknown"
+                        )
+                        
+                        all_files.append({
+                            "name": file_path.name,
+                            "size_mb": file_size / (1024 * 1024),
+                            "type": file_type,
+                            "is_pdf": file_path.suffix.lower() == '.pdf'
+                        })
+                        
+                        if file_path.suffix.lower() == '.pdf':
+                            pdf_count += 1
+                        else:
+                            other_count += 1
+                            
+                    except Exception:
+                        pass
             
-            for pdf_file in sorted(pdf_files):
-                try:
-                    file_size = pdf_file.stat().st_size
-                    total_size += file_size
-                    pdf_list.append({
-                        "name": pdf_file.name,
-                        "size_mb": file_size / (1024 * 1024)
-                    })
-                except Exception:
-                    pdf_list.append({
-                        "name": pdf_file.name,
-                        "size_mb": 0.0
-                    })
-            
-            info["pdf_files"] = pdf_list
-            info["total_size_mb"] = total_size / (1024 * 1024)
+            info["pdf_count"] = pdf_count
+            info["other_document_count"] = other_count
+            info["supported_files"] = all_files
+            info["total_size_mb"] = sum(f["size_mb"] for f in all_files)
             
     except Exception as e:
         info["error"] = str(e)
     
     return info
+
+def list_documents(folder_path: Optional[str] = None) -> List[Dict[str, str]]:
+    """Get list of all supported documents in the specified folder."""
+    if folder_path:
+        doc_dir = Path(folder_path)
+    else:
+        doc_dir = current_pdf_folder
+    
+    if not doc_dir.exists():
+        return []
+    
+    converter = FileConverter()
+    documents = []
+    
+    for file_path in doc_dir.iterdir():
+        if file_path.is_file() and converter.is_supported(str(file_path)):
+            file_type = converter.SUPPORTED_FORMATS.get(
+                file_path.suffix.lower(),
+                "PDF" if file_path.suffix.lower() == '.pdf' else "Unknown"
+            )
+            documents.append({
+                "name": file_path.name,
+                "type": file_type,
+                "extension": file_path.suffix.lower()
+            })
+    
+    return sorted(documents, key=lambda x: x["name"])
 
 # Enhanced PDF Processing to store raw text
 def process_pdf(pdf_path: str, timeout: int = EXTRACT_TIMEOUT) -> Tuple[List, List, List[str]]:
@@ -720,8 +763,8 @@ async def list_tools() -> List[Tool]:
             }
         ),
         Tool(
-            name="list_pdfs",
-            description="List all PDF files in the current or specified folder",
+            name="list_documents",
+            description="List all supported documents (PDFs, Word, Excel, PowerPoint, images, etc.) in the current or specified folder",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -730,12 +773,34 @@ async def list_tools() -> List[Tool]:
             }
         ),
         Tool(
-            name="load_pdf",
-            description="Load and process a PDF file from the current or specified folder",
+            name="list_pdfs",
+            description="[Deprecated - use list_documents] List all supported documents in the current or specified folder",
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "filename": {"type": "string", "description": "PDF filename to load"},
+                    "folder_path": {"type": "string", "description": "Folder path to scan (optional, uses current if not specified)"}
+                }
+            }
+        ),
+        Tool(
+            name="load_document",
+            description="Load and process any supported document file (PDF, Word, Excel, PowerPoint, images, etc.) from the current or specified folder",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "filename": {"type": "string", "description": "Document filename to load"},
+                    "folder_path": {"type": "string", "description": "Folder path (optional, uses current if not specified)"}
+                },
+                "required": ["filename"]
+            }
+        ),
+                Tool(
+            name="load_pdf",
+            description="[Deprecated - use load_document] Load and process a document file from the current or specified folder",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "filename": {"type": "string", "description": "Document filename to load"},
                     "folder_path": {"type": "string", "description": "Folder path (optional, uses current if not specified)"}
                 },
                 "required": ["filename"]
@@ -862,73 +927,118 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             
             return [TextContent(type="text", text=response)]
         
-        elif name == "list_pdfs":
+        elif name == "list_documents" or name == "list_pdfs":
             folder_path = arguments.get("folder_path")
-            pdf_list = get_pdf_list(folder_path)
+            doc_list = list_documents(folder_path)
             
             if folder_path:
                 folder_name = folder_path
             else:
                 folder_name = f"current directory ({current_pdf_folder})"
             
-            if not pdf_list:
-                return [TextContent(type="text", text=f"❌ No PDF files found in {folder_name}")]
+            if not doc_list:
+                return [TextContent(type="text", text=f"❌ No supported documents found in {folder_name}")]
+            
+            # Group by type
+            by_type = {}
+            for doc in doc_list:
+                doc_type = doc["type"]
+                if doc_type not in by_type:
+                    by_type[doc_type] = []
+                by_type[doc_type].append(doc["name"])
             
             # Format the list
-            response = f"📁 Found {len(pdf_list)} PDF files in {folder_name}:\n\n"
-            for i, pdf_name in enumerate(pdf_list, 1):
-                response += f"{i}. {pdf_name}\n"
+            response = f"📁 Found {len(doc_list)} supported documents in {folder_name}:\n\n"
             
-            response += f"\n💡 Use 'load_pdf' with the filename to process any of these PDFs."
+            for doc_type, files in sorted(by_type.items()):
+                response += f"**{doc_type}** ({len(files)} files):\n"
+                for i, filename in enumerate(files, 1):
+                    response += f"  {i}. {filename}\n"
+                response += "\n"
+            
+            response += f"💡 Use 'load_document' with the filename to process any of these files."
             
             return [TextContent(type="text", text=response)]
-        
-        elif name == "load_pdf":
+       
+        elif name == "load_document" or name == "load_pdf":
             filename = arguments["filename"]
             folder_path = arguments.get("folder_path")
             
-            # Ensure filename ends with .pdf
-            if not filename.endswith('.pdf'):
-                filename += '.pdf'
-            
             # Determine full path
             if folder_path:
-                pdf_path = Path(folder_path) / filename
+                file_path = Path(folder_path) / filename
             else:
-                pdf_path = current_pdf_folder / filename
+                file_path = current_pdf_folder / filename
             
             # Check if file exists
-            if not pdf_path.exists():
-                return [TextContent(type="text", text=f"❌ PDF file not found: {pdf_path}")]
+            if not file_path.exists():
+                # Try with common extensions if no extension provided
+                if '.' not in filename:
+                    converter = FileConverter()
+                    for ext in converter.SUPPORTED_FORMATS.keys():
+                        test_path = file_path.parent / f"{filename}{ext}"
+                        if test_path.exists():
+                            file_path = test_path
+                            break
+                
+                if not file_path.exists():
+                    return [TextContent(type="text", text=f"❌ Document file not found: {file_path}")]
             
-            # Process the PDF
+            # Process the document (auto-conversion handled by extract_content)
             try:
-                sections, chunk_index, pages_text = process_pdf(str(pdf_path))
+                from docsray.scripts import pdf_extractor
+                # Import the new extract_content function
+                if hasattr(pdf_extractor, 'extract_content'):
+                    extracted = pdf_extractor.extract_content(str(file_path))
+                else:
+                    # Fallback to original if not updated yet
+                    sections, chunk_index, pages_text = process_pdf(str(file_path))
+                    current_sections = sections
+                    current_index = chunk_index
+                    current_pdf_name = file_path.name
+                    current_pages_text = pages_text
+                    
+                    response = f"✅ Successfully loaded: {file_path.name}\n"
+                    # ... rest of response ...
+                    return [TextContent(type="text", text=response)]
+                
+                # Process extracted content
+                chunks = chunker.process_extracted_file(extracted)
+                chunk_index = build_index.build_chunk_index(chunks)
+                sections = section_rep_builder.build_section_reps(extracted["sections"], chunk_index)
+                
                 current_sections = sections
                 current_index = chunk_index
-                current_pdf_name = filename
-                current_pages_text = pages_text
+                current_pdf_name = file_path.name
+                current_pages_text = extracted.get("pages_text", [])
                 
                 # Get file info
-                file_size = pdf_path.stat().st_size / (1024 * 1024)  # MB
+                file_size = file_path.stat().st_size / (1024 * 1024)  # MB
                 num_sections = len(sections)
                 num_chunks = len(chunk_index)
-                num_pages = len(pages_text)
+                num_pages = len(current_pages_text)
                 
-                response = f"✅ Successfully loaded: {filename}\n"
-                response += f"📂 From: {pdf_path.parent}\n"
+                response = f"✅ Successfully loaded: {file_path.name}\n"
+                response += f"📂 From: {file_path.parent}\n"
+                
+                # Add conversion info if applicable
+                if extracted["metadata"].get("was_converted", False):
+                    original_format = extracted["metadata"].get("original_format", "unknown")
+                    response += f"🔄 Converted from: {original_format.upper()} to PDF\n"
+                
                 response += f"📊 File size: {file_size:.1f} MB\n"
                 response += f"📄 Pages: {num_pages}\n"
                 response += f"📑 Sections: {num_sections}\n"
                 response += f"🔍 Chunks: {num_chunks}\n\n"
                 response += "You can now:\n"
-                response += "• Ask questions about this PDF using 'ask_question'\n"
+                response += "• Ask questions about this document using 'ask_question'\n"
                 response += "• Generate a comprehensive summary using 'summarize_document'"
                 
                 return [TextContent(type="text", text=response)]
+                
             except Exception as e:
-                return [TextContent(type="text", text=f"❌ Error processing PDF: {str(e)}")]
-        
+                return [TextContent(type="text", text=f"❌ Error processing document: {str(e)}")]
+             
         elif name == "reset_initial_setup":
             # Reset config and run initial setup again
             try:

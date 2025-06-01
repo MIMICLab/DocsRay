@@ -22,6 +22,87 @@ from docsray import FAST_MODE, MAX_TOKENS, FULL_FEATURE_MODE
 # LLM for outline generation and image analysis
 from docsray.inference.llm_model import get_llm_models
 
+from docsray.scripts.file_converter import FileConverter
+from pathlib import Path
+
+def extract_content(file_path: str,
+                   analyze_visuals: bool = True,
+                   visual_analysis_interval: int = 1,
+                   auto_convert: bool = True) -> Dict[str, Any]:
+    """
+    Extract text from a document file with optional visual content analysis using LLM.
+    Automatically converts non-PDF files to PDF if auto_convert is True.
+    
+    Parameters:
+    -----------
+    file_path : str
+        Path to the document file (PDF or other supported format)
+    analyze_visuals : bool
+        Whether to analyze visual content (automatically disabled in FAST_MODE)
+    visual_analysis_interval : int
+        Analyze visuals every N pages (ignored in FAST_MODE)
+    auto_convert : bool
+        Whether to automatically convert non-PDF files to PDF
+    """
+    input_path = Path(file_path)
+    
+    # Check if file exists
+    if not input_path.exists():
+        raise FileNotFoundError(f"File not found: {file_path}")
+    
+    # Determine if conversion is needed
+    is_pdf = input_path.suffix.lower() == '.pdf'
+    
+    if not is_pdf and auto_convert:
+        print(f"📄 File is not PDF. Attempting to convert {input_path.suffix} to PDF...", file=sys.stderr)
+        
+        # Create converter
+        converter = FileConverter()
+        
+        # Check if format is supported
+        if not converter.is_supported(file_path):
+            raise ValueError(f"Unsupported file format: {input_path.suffix}")
+        
+        # Convert to PDF
+        success, result = converter.convert_to_pdf(file_path)
+        
+        if not success:
+            raise RuntimeError(f"Failed to convert file: {result}")
+        
+        print(f"✅ Conversion successful: {result}", file=sys.stderr)
+        pdf_path = result
+        
+        # Flag to clean up temporary file later
+        temp_pdf = True
+    else:
+        pdf_path = file_path
+        temp_pdf = False
+    
+    try:
+        # Call original extract_pdf_content function
+        result = extract_pdf_content(pdf_path, analyze_visuals, visual_analysis_interval)
+        
+        # Update metadata to reflect original file
+        result["metadata"]["original_file"] = str(input_path)
+        result["metadata"]["was_converted"] = not is_pdf
+        if not is_pdf:
+            result["metadata"]["original_format"] = input_path.suffix.lower()
+        
+        return result
+        
+    finally:
+        # Clean up temporary PDF if created
+        if temp_pdf and os.path.exists(pdf_path):
+            try:
+                os.unlink(pdf_path)
+                print(f"🗑️  Cleaned up temporary PDF", file=sys.stderr)
+            except Exception as e:
+                print(f"⚠️  Failed to clean up temporary PDF: {e}", file=sys.stderr)
+
+
+# Alias for backward compatibility
+extract_document_content = extract_content
+
 def extract_images_from_page(page, min_width: int = 100, min_height: int = 100) -> List[Tuple[Image.Image, fitz.Rect]]:
     """
     Extract images from a PDF page that meet minimum size requirements.

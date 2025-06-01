@@ -1,417 +1,367 @@
-# web_demo.py
+# web_demo.py - Simplified version without login
 
 import os
 import shutil
-from typing import Tuple
+from typing import Tuple, List, Optional, Dict
+import tempfile
+from pathlib import Path
 import json
-import threading
-import concurrent.futures
-import pickle
+import uuid
 
 import gradio as gr
 
 from docsray.chatbot import PDFChatBot, DEFAULT_SYSTEM_PROMPT
 from docsray.scripts import pdf_extractor, chunker, build_index, section_rep_builder
+from docsray.scripts.file_converter import FileConverter
 
-# ---------------------------------------------------------------------
-# Persistent user database (credentials + uploads + prompts)
-# ---------------------------------------------------------------------
-os.makedirs("data", exist_ok=True)
-USER_DB_PATH = os.path.join("data", "user_db.json")
+# Create a temporary directory for this session
+TEMP_DIR = Path(tempfile.gettempdir()) / "docsray_web"
+TEMP_DIR.mkdir(exist_ok=True)
 
-# Re‑entrant lock to guard all reads/writes to the shared user DB in multi‑threaded Gradio
-_DB_LOCK = threading.RLock()
+# Session timeout (24 hours)
+SESSION_TIMEOUT = 86400
 
+def create_session_dir() -> Path:
+    """Create a unique session directory"""
+    session_id = str(uuid.uuid4())
+    session_dir = TEMP_DIR / session_id
+    session_dir.mkdir(exist_ok=True)
+    return session_dir
 
-def _load_user_db():
-    if os.path.exists(USER_DB_PATH):
-        with open(USER_DB_PATH, "r", encoding="utf-8") as f:
-            return json.load(f)
-    # default structure
-    return {"users": {}}
-
-
-def _save_user_db(db: dict):
-    """Persist the in‑memory DB atomically."""
-    with _DB_LOCK:
-        with open(USER_DB_PATH, "w", encoding="utf-8") as f:
-            json.dump(db, f, indent=2)
-
-# Max time (seconds) allowed for pdf_extractor.extract_pdf_content
-EXTRACT_TIMEOUT = 600  # 2 minutes
-
-# In‑memory view of the persistent database
-_USER_DB = _load_user_db()
-USERS = {u: info["password"] for u, info in _USER_DB["users"].items()}
-
-
-def authenticate(username: str, password: str) -> bool:
-    """Check if the provided credentials are valid."""
-    return USERS.get(username) == password
-
-
-def ensure_user_dir(username: str) -> str:
-    """Create and return the directory for a specific user."""
-    user_dir = os.path.join("data", "user_uploads", username)
-    os.makedirs(user_dir, exist_ok=True)
-    return user_dir
-
-
-def login(username: str, password: str):
-    if authenticate(username, password):
-        return True, username, "Login successful."
-    if username not in USERS:
-        # Automically create new user
-        with _DB_LOCK:
-            USERS[username] = password
-            _USER_DB["users"][username] = {
-                "password": password,
-                "uploads": [],
-                "prompts": [],
-            }
-            _save_user_db(_USER_DB)
-        return True, username, "New user created and logged in."
-    return False, "", "Invalid credentials."
-
-
-def login_and_prepare(username: str, password: str):
+def process_document(file_path: str, session_dir: Path) -> Tuple[list, list, str]:
     """
-    Wrapper for the login flow that also controls component visibility
-    and restores the last system prompt after a successful login.
-    Returns:
-        - logged‑in state (bool)
-        - username (str)
-        - login message (str)
-        - update for the main interaction area (gr.update)
-        - update for the prompt textbox (gr.update)
-        - update for the existing‑PDF dropdown (gr.update)
+    Process a document file and return sections, chunk index, and status message.
+    Supports all file formats through auto-conversion.
     """
-    success, uid, msg = login(username, password)
-
-    # Toggle the main area
-    main_area_update = gr.update(visible=success)
-
-    # Restore the user's last prompt if available
-    prompt_val = DEFAULT_SYSTEM_PROMPT
-    if success:
-        prompts = _USER_DB["users"].get(uid, {}).get("prompts", [])
-        if prompts:
-            prompt_val = prompts[-1]
-    prompt_update = gr.update(value=prompt_val)
-
-    # Populate dropdown with user's previous uploads
-    uploads = _USER_DB["users"].get(uid, {}).get("uploads", []) if success else []
-    dropdown_update = gr.update(choices=[os.path.basename(u) for u in uploads],
-                                value=(os.path.basename(uploads[0]) if uploads else None))
-
-    return success, uid, msg, main_area_update, prompt_update, dropdown_update
-
-
-
-# ---------------------------------------------------------------------
-# Extraction cache helpers (per‑user, per‑PDF)
-# ---------------------------------------------------------------------
-def _cache_paths(user_dir: str, pdf_basename: str):
-    """Return tuple (sections_path, index_path) inside the user directory."""
-    sec_path = os.path.join(user_dir, f"{pdf_basename}_sections.json")
-    idx_path = os.path.join(user_dir, f"{pdf_basename}_index.pkl")
-    return sec_path, idx_path
-
-def _save_cache(user_dir: str, pdf_basename: str,
-                sections: list, chunk_index: list):
-    sec_path, idx_path = _cache_paths(user_dir, pdf_basename)
-    with open(sec_path, "w", encoding="utf-8") as f:
-        json.dump(sections, f, ensure_ascii=False, indent=2)
-    with open(idx_path, "wb") as f:
-        pickle.dump(chunk_index, f)
-
-def _load_cache(user_dir: str, pdf_basename: str):
-    sec_path, idx_path = _cache_paths(user_dir, pdf_basename)
-    if os.path.exists(sec_path) and os.path.exists(idx_path):
-        try:
-            with open(sec_path, "r", encoding="utf-8") as f:
-                sections = json.load(f)
-            with open(idx_path, "rb") as f:
-                chunk_index = pickle.load(f)
-            return sections, chunk_index
-        except Exception:
-            # corrupted cache – ignore
-            pass
-    return None, None
-
-
-def process_pdf(pdf_path: str, user_dir: str, timeout: int = EXTRACT_TIMEOUT) -> Tuple[list, list]:
-    """
-    Run the extraction/index pipeline with a timeout guard.
-    Results are cached to disk inside user_dir for later reuse.
-    """
-    pdf_basename = os.path.splitext(os.path.basename(pdf_path))[0]
-
-    # Run extractor with timeout
-    def _do_extract():
-        return pdf_extractor.extract_pdf_content(pdf_path)
-
     try:
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
-            future = ex.submit(_do_extract)
-            extracted = future.result(timeout=timeout)
-    except concurrent.futures.TimeoutError:
-        raise RuntimeError("PDF extraction timed out (over 5 minutes).")
+        print(f"📄 Processing document: {file_path}")
+        
+        # Extract content (auto-converts if needed)
+        extracted = pdf_extractor.extract_content(file_path)
+        
+        # Create chunks
+        print("✂️  Creating chunks...")
+        chunks = chunker.process_extracted_file(extracted)
+        
+        # Build search index
+        print("🔍 Building search index...")
+        chunk_index = build_index.build_chunk_index(chunks)
+        
+        # Build section representations
+        print("📊 Building section representations...")
+        sections = section_rep_builder.build_section_reps(extracted["sections"], chunk_index)
+        
+        # Save to session cache
+        cache_data = {
+            "sections": sections,
+            "chunk_index": chunk_index,
+            "filename": Path(file_path).name,
+            "metadata": extracted.get("metadata", {})
+        }
+        
+        cache_file = session_dir / f"{Path(file_path).stem}_cache.json"
+        with open(cache_file, "w", encoding="utf-8") as f:
+            json.dump(cache_data, f, ensure_ascii=False)
+        
+        # Create status message
+        was_converted = extracted.get("metadata", {}).get("was_converted", False)
+        original_format = extracted.get("metadata", {}).get("original_format", "")
+        
+        msg = f"✅ Successfully processed: {Path(file_path).name}\n"
+        if was_converted:
+            msg += f"🔄 Converted from {original_format.upper()} to PDF\n"
+        msg += f"📑 Sections: {len(sections)}\n"
+        msg += f"🔍 Chunks: {len(chunks)}"
+        
+        return sections, chunk_index, msg
+        
+    except Exception as e:
+        return None, None, f"❌ Error processing document: {str(e)}"
 
-    chunks = chunker.process_extracted_file(extracted)
-    chunk_index = build_index.build_chunk_index(chunks)
-    sections = section_rep_builder.build_section_reps(extracted["sections"], chunk_index)
-
-    # Save to cache
-    _save_cache(user_dir, pdf_basename, sections, chunk_index)
-    return sections, chunk_index
-
-
-def load_pdf(pdf_file, system_prompt, username):
-    if not username:
-        return None, None, "Please log in first."
-    if pdf_file is None:
-        return None, None, "Please upload a PDF."
-    user_dir = ensure_user_dir(username)
-    dest_path = os.path.join(user_dir, os.path.basename(pdf_file.name))
-    shutil.copy(pdf_file.name, dest_path)
-    try:
-        sections, chunk_index = process_pdf(dest_path, user_dir)
-        msg = f"Processed {os.path.basename(dest_path)}"
-    except RuntimeError as e:
-        return None, None, str(e)
-    # Record upload & system prompt for this user and persist
-    with _DB_LOCK:
-        user_record = _USER_DB["users"].setdefault(
-            username,
-            {"password": USERS[username], "uploads": [], "prompts": []},
-        )
-        if dest_path not in user_record["uploads"]:
-            user_record["uploads"].append(dest_path)
-        if system_prompt and system_prompt not in user_record["prompts"]:
-            user_record["prompts"].append(system_prompt)
-        _save_user_db(_USER_DB)
-    return sections, chunk_index, msg
-
-
-# Helper to load an existing PDF by name for the user
-def load_existing_pdf(selected_name, username):
-    if not username:
-        return None, None, "Please log in first."
-    if not selected_name:
-        return None, None, "No previous PDF selected."
-    user_dir = ensure_user_dir(username)
-    pdf_path = os.path.join(user_dir, selected_name)
-    if not os.path.exists(pdf_path):
-        return None, None, "File not found."
-
-    # Attempt to load cached sections/index
-    pdf_basename = os.path.splitext(selected_name)[0]
-    sections, chunk_index = _load_cache(user_dir, pdf_basename)
-    if sections is None or chunk_index is None:
-        try:
-            sections, chunk_index = process_pdf(pdf_path, user_dir)
-            msg = f"Processed {selected_name}"
-        except RuntimeError as e:
-            return None, None, str(e)
+def load_document(file, session_state: Dict) -> Tuple[Dict, str, gr.Update]:
+    """Load and process uploaded document"""
+    if file is None:
+        return session_state, "Please upload a document", gr.update()
+    
+    # Initialize session if needed
+    if "session_dir" not in session_state:
+        session_state["session_dir"] = str(create_session_dir())
+        session_state["documents"] = {}
+    
+    session_dir = Path(session_state["session_dir"])
+    
+    # Copy file to session directory
+    file_name = Path(file.name).name
+    dest_path = session_dir / file_name
+    shutil.copy(file.name, dest_path)
+    
+    # Process document
+    sections, chunk_index, msg = process_document(str(dest_path), session_dir)
+    
+    if sections is not None:
+        # Store in session
+        doc_id = Path(file_name).stem
+        session_state["documents"][doc_id] = {
+            "filename": file_name,
+            "sections": sections,
+            "chunk_index": chunk_index,
+            "path": str(dest_path)
+        }
+        session_state["current_doc"] = doc_id
+        
+        # Update dropdown
+        choices = [doc["filename"] for doc in session_state["documents"].values()]
+        dropdown_update = gr.update(choices=choices, value=file_name, visible=True)
     else:
-        msg = f"Loaded cached data for {selected_name}"
-    return sections, chunk_index, msg
+        dropdown_update = gr.update()
+    
+    return session_state, msg, dropdown_update
 
+def switch_document(selected_file: str, session_state: Dict) -> Tuple[Dict, str]:
+    """Switch to a different loaded document"""
+    if not selected_file or "documents" not in session_state:
+        return session_state, "No document selected"
+    
+    # Find document by filename
+    for doc_id, doc_info in session_state["documents"].items():
+        if doc_info["filename"] == selected_file:
+            session_state["current_doc"] = doc_id
+            return session_state, f"Switched to: {selected_file}"
+    
+    return session_state, "Document not found"
 
-def load_all_cached_pdfs(username):
-    """
-    Load sections + chunk index for every PDF the user has previously uploaded.
-    Sections are concatenated in upload order; chunk indexes are merged.
-    """
-    if not username:
-        return None, None, "Please log in first."
-    user_dir = ensure_user_dir(username)
-    uploads = _USER_DB["users"].get(username, {}).get("uploads", [])
-    if not uploads:
-        return None, None, "No cached PDFs were found."
-
-    all_sections = []
-    all_chunks = []
-    for pdf_path in uploads:
-        pdf_basename = os.path.splitext(os.path.basename(pdf_path))[0]
-        sections, chunk_index = _load_cache(user_dir, pdf_basename)
-        if sections is None or chunk_index is None:
-            # Skip files that were never processed / cache missing
-            continue
-        # Tag each section with its source PDF name
-        tagged_sections = []
-        for sec in sections:
-            sec_copy = sec.copy()
-            sec_copy["file_name"] = pdf_basename  # add filename field
-            tagged_sections.append(sec_copy)
-        all_sections.extend(tagged_sections)
-        all_chunks.extend(chunk_index)
-
-    if not all_sections:
-        return None, None, "No cached data found. Process PDFs first."
-
-    msg = f"Loaded cached data for {len(all_sections)} sections across {len(uploads)} PDFs"
-    return all_sections, all_chunks, msg
-
-
-def delete_cached_pdf(selected_name, username):
-    """
-    Delete a previously uploaded PDF and its cached data for the user.
-    Returns updated dropdown choices and a status message.
-    """
-    if not username:
-        return None, None, gr.update(), "Please log in first."
-    if not selected_name:
-        return None, None, gr.update(), "No PDF selected."
-    user_dir = ensure_user_dir(username)
-    pdf_path = os.path.join(user_dir, selected_name)
-    if not os.path.exists(pdf_path):
-        return None, None, gr.update(), "File not found."
-
-    # Remove pdf file
-    try:
-        os.remove(pdf_path)
-    except OSError as e:
-        return None, None, gr.update(), f"Delete failed: {e}"
-
-    # Remove cached section/index files
-    pdf_basename = os.path.splitext(selected_name)[0]
-    sec_path, idx_path = _cache_paths(user_dir, pdf_basename)
-    for p in (sec_path, idx_path):
-        if os.path.exists(p):
-            try:
-                os.remove(p)
-            except OSError:
-                pass  # ignore
-
-    # Update user DB
-    with _DB_LOCK:
-        uploads = _USER_DB["users"].get(username, {}).get("uploads", [])
-        if pdf_path in uploads:
-            uploads.remove(pdf_path)
-        _save_user_db(_USER_DB)
-
-    # Build new dropdown choices
-    choices = [os.path.basename(u) for u in uploads]
-    dropdown_update = gr.update(choices=choices, value=(choices[0] if choices else None))
-    msg = f"Deleted {selected_name}" if choices is not None else "All PDFs deleted."
-    return None, None, dropdown_update, msg
-
-
-def ask_question(question, sections, chunk_index, system_prompt, username, use_index):
-    fine_only = not use_index 
-    if not username:
-        return "Please log in first."
-    if sections is None or chunk_index is None:
-        return "Please upload and process a PDF first."
+def ask_question(question: str, session_state: Dict, system_prompt: str, use_coarse: bool) -> Tuple[str, str]:
+    """Process a question about the current document"""
+    if not question.strip():
+        return "Please enter a question", ""
+    
+    if "current_doc" not in session_state or not session_state.get("documents"):
+        return "Please upload a document first", ""
+    
+    # Get current document
+    current_doc = session_state["documents"][session_state["current_doc"]]
+    sections = current_doc["sections"]
+    chunk_index = current_doc["chunk_index"]
+    
+    # Create chatbot and get answer
     prompt = system_prompt or DEFAULT_SYSTEM_PROMPT
-    bot = PDFChatBot(sections, chunk_index, system_prompt=prompt)
-    answer_output, reference_output = bot.answer(question, fine_only=fine_only)
+    chatbot = PDFChatBot(sections, chunk_index, system_prompt=prompt)
+    
+    answer_output, reference_output = chatbot.answer(
+        question, 
+        fine_only=not use_coarse
+    )
     
     return answer_output, reference_output
+
+def clear_session(session_state: Dict) -> Tuple[Dict, str, gr.Update, gr.Update, gr.Update]:
+    """Clear all documents and reset session"""
+    # Clean up session directory
+    if "session_dir" in session_state:
+        session_dir = Path(session_state["session_dir"])
+        if session_dir.exists():
+            shutil.rmtree(session_dir, ignore_errors=True)
     
-
-with gr.Blocks() as demo:
-    gr.Markdown("## DocsRay Web Demo")
-
-    # Login components
-    with gr.Column():
-        with gr.Row():
-            login_user = gr.Textbox(label="Username")
-            login_pass = gr.Textbox(label="Password", type="password")
-            login_btn = gr.Button("Login", variant="primary")
-        login_status = gr.Textbox(label="Login Status", interactive=False)
-
-    # Main interaction area – hidden until login is successful
-    with gr.Column(visible=False) as main_area:
-        # First row ‑‑ two side‑by‑side upload panels
-        with gr.Row():
-            # Left column – previously uploaded files
-            with gr.Column(scale=1):  
-                gr.Markdown("### Previously Uploaded PDFs")
-                gr.Markdown("- The PDF will be loaded from the cache.")
-                gr.Markdown("- **Load Selected** will load the selected PDF.")
-                gr.Markdown("- **Load All Cached** will load all PDFs in the cache.")
-                gr.Markdown("- **Delete Selected** will permanently remove the selected PDF and its cache.")
-
-                existing_dropdown = gr.Dropdown(label="Select a PDF", choices=[])
-                load_existing_btn = gr.Button("Load Selected", variant="primary")
-                load_all_btn = gr.Button("Load All Cached", variant="secondary")
-                delete_btn = gr.Button("Delete Selected", variant="stop")
-
-            # Right column – new upload
-            with gr.Column(scale=1): 
-                gr.Markdown("### Upload New PDF")
-                gr.Markdown("- Upload a new PDF file. Timeout for processing is **10 minutes**.")
-                gr.Markdown("- **Load PDF** will process the uploaded PDF.")
-                gr.Markdown("- The PDF will be cached for future use under same Username/Password.")
-
-                pdf_input = gr.File(label="PDF File", file_types=[".pdf"])
-                load_btn = gr.Button("Load PDF", variant="primary")
-
-        # Second row ‑‑ status spans the full width
-        status = gr.Textbox(label="PDF Status", interactive=False)
-        gr.Markdown("### System Prompt")
-        gr.Markdown("- Customize the system prompt for the PDF.")
-        gr.Markdown("- The system prompt will be used to guide the response.")
-        gr.Markdown("- The system prompt will be saved for future use under same Username/Password.")
-        prompt_input = gr.Textbox(label="System Prompt", lines=10, value=DEFAULT_SYSTEM_PROMPT)
-
-        with gr.Row():
-            with gr.Column():
-                gr.Markdown("### Ask a Question")
-                gr.Markdown("- Ask a question based on the uploaded PDF.")
-                gr.Markdown("- Check **Coarse-to-Fine Search** to enable Table of Contents based search.")
-                question_input = gr.Textbox(label="Question")
-                use_index = gr.Checkbox(label="Coarse-to-Fine Search", value=True)
-                ask_btn = gr.Button("Ask", variant="primary")
-        gr.Markdown("### Answer")
-        answer_output = gr.Textbox(label="Answer", interactive=False, lines=10)
-        gr.Markdown("### References")
-        reference_output = gr.Textbox(label="References", interactive=False, lines=10)
-    logged_in_state = gr.State(False)
-    username_state = gr.State("")
-    sections_state = gr.State()
-    index_state = gr.State()
-
-    login_btn.click(
-        login_and_prepare,
-        inputs=[login_user, login_pass],
-        outputs=[logged_in_state, username_state, login_status, main_area, prompt_input, existing_dropdown],
+    # Reset state
+    new_state = {}
+    
+    return (
+        new_state,
+        "Session cleared",
+        gr.update(value="", visible=False),  # dropdown
+        gr.update(value=""),  # answer
+        gr.update(value="")   # references
     )
-    load_btn.click(load_pdf, inputs=[pdf_input, prompt_input, username_state], outputs=[sections_state, index_state, status])
-    load_existing_btn.click(
-        load_existing_pdf,
-        inputs=[existing_dropdown, username_state],
-        outputs=[sections_state, index_state, status]
+
+def get_supported_formats() -> str:
+    """Get list of supported file formats"""
+    converter = FileConverter()
+    formats = converter.get_supported_formats()
+    
+    # Group by category
+    categories = {
+        "Office Documents": ['.docx', '.doc', '.xlsx', '.xls', '.pptx', '.ppt', '.odt', '.ods', '.odp'],
+        "Text Files": ['.txt', '.md', '.rst', '.rtf'],
+        "Web Files": ['.html', '.htm', '.xml'],
+        "Images": ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.tif', '.webp'],
+        "E-books": ['.epub', '.mobi'],
+        "PDF": ['.pdf']
+    }
+    
+    info = "📄 **Supported File Formats:**\n\n"
+    for category, extensions in categories.items():
+        supported_exts = [ext for ext in extensions if ext in formats or ext == '.pdf']
+        if supported_exts:
+            info += f"**{category}:** {', '.join(supported_exts)}\n"
+    
+    return info
+
+# Create Gradio interface
+with gr.Blocks(title="DocsRay - Universal Document Q&A") as demo:
+    # Header
+    gr.Markdown(
+        """
+        # 🚀 DocsRay - Universal Document Q&A System
+        
+        Upload any document (PDF, Word, Excel, PowerPoint, Images, etc.) and ask questions about it!
+        """
     )
-    load_all_btn.click(
-        load_all_cached_pdfs,
-        inputs=[username_state],
-        outputs=[sections_state, index_state, status]
+    
+    # Session state
+    session_state = gr.State({})
+    
+    # Main layout
+    with gr.Row():
+        # Left column - Document management
+        with gr.Column(scale=1):
+            gr.Markdown("### 📁 Document Management")
+            
+            # File upload
+            file_input = gr.File(
+                label="Upload Document",
+                file_types=[".pdf", ".docx", ".doc", ".xlsx", ".xls", ".pptx", ".ppt", 
+                           ".txt", ".md", ".html", ".png", ".jpg", ".jpeg"],
+                type="filepath"
+            )
+            upload_btn = gr.Button("📤 Process Document", variant="primary")
+            
+            # Document selector (hidden initially)
+            doc_dropdown = gr.Dropdown(
+                label="Loaded Documents",
+                choices=[],
+                visible=False,
+                interactive=True
+            )
+            
+            # Status
+            status = gr.Textbox(label="Status", lines=4, interactive=False)
+            
+            # Clear button
+            clear_btn = gr.Button("🗑️ Clear All Documents", variant="stop")
+            
+            # Supported formats
+            with gr.Accordion("Supported Formats", open=False):
+                gr.Markdown(get_supported_formats())
+        
+        # Right column - Q&A interface
+        with gr.Column(scale=2):
+            gr.Markdown("### 💬 Ask Questions")
+            
+            # System prompt
+            with gr.Accordion("System Prompt", open=False):
+                prompt_input = gr.Textbox(
+                    label="Customize the system prompt",
+                    lines=5,
+                    value=DEFAULT_SYSTEM_PROMPT
+                )
+            
+            # Question input
+            question_input = gr.Textbox(
+                label="Your Question",
+                placeholder="What would you like to know about the document?",
+                lines=2
+            )
+            
+            # Search options
+            with gr.Row():
+                use_coarse = gr.Checkbox(
+                    label="Use Coarse-to-Fine Search",
+                    value=True,
+                    info="Enable section-based search for better accuracy"
+                )
+                ask_btn = gr.Button("🔍 Ask Question", variant="primary")
+            
+            # Results
+            answer_output = gr.Textbox(
+                label="Answer",
+                lines=10,
+                interactive=False
+            )
+            
+            reference_output = gr.Textbox(
+                label="References",
+                lines=6,
+                interactive=False
+            )
+    
+    # Examples
+    gr.Examples(
+        examples=[
+            ["What is the main topic of this document?"],
+            ["Summarize the key findings"],
+            ["What data or statistics are mentioned?"],
+            ["What are the conclusions or recommendations?"],
+            ["Explain the methodology used"],
+        ],
+        inputs=question_input
     )
-    delete_btn.click(
-        delete_cached_pdf,
-        inputs=[existing_dropdown, username_state],
-        outputs=[sections_state, index_state, existing_dropdown, status]
+    
+    # Event handlers
+    upload_btn.click(
+        load_document,
+        inputs=[file_input, session_state],
+        outputs=[session_state, status, doc_dropdown]
     )
-    question_input.submit(ask_question, inputs=[question_input, sections_state, index_state, prompt_input, username_state, use_index], outputs=[answer_output, reference_output])
-    ask_btn.click(ask_question, inputs=[question_input, sections_state, index_state, prompt_input, username_state, use_index], outputs=[answer_output, reference_output])
+    
+    doc_dropdown.change(
+        switch_document,
+        inputs=[doc_dropdown, session_state],
+        outputs=[session_state, status]
+    )
+    
+    ask_btn.click(
+        ask_question,
+        inputs=[question_input, session_state, prompt_input, use_coarse],
+        outputs=[answer_output, reference_output]
+    )
+    
+    question_input.submit(
+        ask_question,
+        inputs=[question_input, session_state, prompt_input, use_coarse],
+        outputs=[answer_output, reference_output]
+    )
+    
+    clear_btn.click(
+        clear_session,
+        inputs=[session_state],
+        outputs=[session_state, status, doc_dropdown, answer_output, reference_output]
+    )
+
+def cleanup_old_sessions():
+    """Clean up old session directories (called periodically)"""
+    import time
+    current_time = time.time()
+    
+    for session_dir in TEMP_DIR.iterdir():
+        if session_dir.is_dir():
+            # Check if directory is older than SESSION_TIMEOUT
+            dir_age = current_time - session_dir.stat().st_mtime
+            if dir_age > SESSION_TIMEOUT:
+                shutil.rmtree(session_dir, ignore_errors=True)
 
 def main():
     """Entry point for docsray-web command"""
     import argparse
     
-    parser = argparse.ArgumentParser(description="Launch DocsRay Gradio demo")
-    parser.add_argument("--share", action="store_true", help="Expose a public Gradio link")
+    parser = argparse.ArgumentParser(description="Launch DocsRay web interface")
+    parser.add_argument("--share", action="store_true", help="Create public link")
     parser.add_argument("--port", type=int, default=44665, help="Port number")
+    parser.add_argument("--host", type=str, default="0.0.0.0", help="Host address")
+    
     args = parser.parse_args()
     
+    # Clean up old sessions before starting
+    cleanup_old_sessions()
+    
+    print(f"🚀 Starting DocsRay Web Interface")
+    print(f"📍 Local URL: http://localhost:{args.port}")
+    
     demo.launch(
-        server_name="0.0.0.0",
+        server_name=args.host,
         server_port=args.port,
         share=args.share,
+        favicon_path=None
     )
+
 if __name__ == "__main__":
     main()
