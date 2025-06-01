@@ -6,7 +6,7 @@ import argparse
 import sys
 import os
 from pathlib import Path
-
+from docsray.config import FAST_MODE
 def main():
     parser = argparse.ArgumentParser(
         description="DocsRay - PDF Question-Answering System",
@@ -65,7 +65,9 @@ Examples:
     # Process PDF command
     process_parser = subparsers.add_parser("process", help="Process a PDF file")
     process_parser.add_argument("pdf_path", help="Path to PDF file")
-    
+    process_parser.add_argument("--no-visuals", action="store_true", 
+                            help="Disable visual content analysis")
+
     # Ask question command
     ask_parser = subparsers.add_parser("ask", help="Ask a question about a PDF")
     ask_parser.add_argument("question", help="Question to ask")
@@ -87,7 +89,6 @@ Examples:
     
     elif args.command == "web":
         from docsray.web_demo import main as web_main
-        # web_main 함수에 인자 전달
         sys.argv = ["docsray-web"]
         if args.share:
             sys.argv.append("--share")
@@ -97,7 +98,6 @@ Examples:
     
     elif args.command == "api":
         from docsray.app import main as api_main
-        # api_main 함수에 인자 전달
         sys.argv = ["docsray-api", "--host", args.host, "--port", str(args.port)]
         if args.pdf:
             sys.argv.extend(["--pdf", args.pdf])
@@ -123,6 +123,9 @@ def configure_claude_desktop():
     """Configure Claude Desktop for MCP integration"""
     import json
     import platform
+    import sys
+    import os
+    from pathlib import Path
     
     # Determine config path based on OS
     system = platform.system()
@@ -134,10 +137,66 @@ def configure_claude_desktop():
         print("❌ Unsupported OS for Claude Desktop")
         return
     
-    # Get DocsRay installation path
-    import docsray
-    docsray_path = Path(docsray.__file__).parent
+    # Get DocsRay installation path - 안전한 방법으로
+    try:
+        import docsray
+        
+        # 방법 1: __file__ 속성 확인
+        if hasattr(docsray, '__file__') and docsray.__file__ is not None:
+            docsray_path = Path(docsray.__file__).parent
+        else:
+            # 방법 2: 모듈의 __path__ 사용
+            if hasattr(docsray, '__path__'):
+                docsray_path = Path(docsray.__path__[0])
+            else:
+                raise AttributeError("Cannot find docsray module path")
+                
+    except (AttributeError, ImportError, IndexError) as e:
+        print(f"⚠️  Warning: Could not find docsray module path: {e}")
+        
+        # 방법 3: sys.modules에서 찾기
+        if 'docsray' in sys.modules:
+            module = sys.modules['docsray']
+            if hasattr(module, '__file__') and module.__file__:
+                docsray_path = Path(module.__file__).parent
+            else:
+                # 방법 4: 현재 스크립트 위치 기준
+                current_file = Path(__file__).resolve()
+                docsray_path = current_file.parent
+        else:
+            # 방법 5: 현재 작업 디렉토리 기준
+            cwd = Path.cwd()
+            if (cwd / "docsray").exists():
+                docsray_path = cwd / "docsray"
+            else:
+                docsray_path = cwd
+    
+    # MCP server 경로 확인
     mcp_server_path = docsray_path / "mcp_server.py"
+    
+    # MCP server 파일이 존재하는지 확인
+    if not mcp_server_path.exists():
+        print(f"❌ MCP server not found at: {mcp_server_path}")
+        
+        # 다른 가능한 위치들 확인
+        possible_locations = [
+            docsray_path.parent / "docsray" / "mcp_server.py",
+            Path(__file__).parent / "mcp_server.py",
+            Path.cwd() / "docsray" / "mcp_server.py",
+            Path.cwd() / "mcp_server.py",
+        ]
+        
+        for location in possible_locations:
+            if location.exists():
+                mcp_server_path = location
+                docsray_path = location.parent
+                print(f"✅ Found MCP server at: {mcp_server_path}")
+                break
+        else:
+            print("❌ Could not locate mcp_server.py")
+            print("💡 Please ensure DocsRay is properly installed")
+            print("   Try: pip install -e . (in the DocsRay directory)")
+            return
     
     # Create config
     config = {
@@ -146,34 +205,51 @@ def configure_claude_desktop():
                 "command": sys.executable,  # Current Python interpreter
                 "args": [str(mcp_server_path)],
                 "cwd": str(docsray_path.parent),
-                "timeout": 1800000,  #  30 minutes
+                "timeout": 1800000,  # 30 minutes
             }
         }
     }
     
     # Ensure directory exists
-    config_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+    except Exception as e:
+        print(f"❌ Failed to create config directory: {e}")
+        return
     
-    # Check if config already exists
+    # Check if config already exists and merge
     if config_path.exists():
-        with open(config_path, "r") as f:
-            existing = json.load(f)
-        
-        if "mcpServers" in existing:
-            existing["mcpServers"]["docsray"] = config["mcpServers"]["docsray"]
-            config = existing
+        try:
+            with open(config_path, "r") as f:
+                existing = json.load(f)
+            
+            if "mcpServers" in existing:
+                existing["mcpServers"]["docsray"] = config["mcpServers"]["docsray"]
+                config = existing
+        except json.JSONDecodeError:
+            print("⚠️  Warning: Existing config file is invalid, overwriting...")
+        except Exception as e:
+            print(f"⚠️  Warning: Could not read existing config: {e}")
     
     # Write config
-    with open(config_path, "w") as f:
-        json.dump(config, f, indent=2)
-    
-    print(f"✅ Claude Desktop configured successfully!")
-    print(f"📁 Config location: {config_path}")
-    print(f"🐍 Python: {sys.executable}")
-    print(f"📄 MCP Server: {mcp_server_path}")
-    print("\n⚠️  Please restart Claude Desktop for changes to take effect.")
-
-def process_pdf_cli(pdf_path: str):
+    try:
+        with open(config_path, "w") as f:
+            json.dump(config, f, indent=2)
+        
+        print(f"✅ Claude Desktop configured successfully!")
+        print(f"📁 Config location: {config_path}")
+        print(f"🐍 Python: {sys.executable}")
+        print(f"📄 MCP Server: {mcp_server_path}")
+        print(f"📂 Working directory: {docsray_path.parent}")
+        print("\n⚠️  Please restart Claude Desktop for changes to take effect.")
+        
+    except Exception as e:
+        print(f"❌ Failed to write config file: {e}")
+        print(f"📁 Attempted path: {config_path}")
+        print("\n💡 You can manually create the config file with:")
+        print(json.dumps(config, indent=2))
+        
+def process_pdf_cli(pdf_path: str, no_visuals: bool = False):
     """Process a PDF file from command line"""
     from docsray.scripts import pdf_extractor, chunker, build_index, section_rep_builder
     
@@ -183,10 +259,23 @@ def process_pdf_cli(pdf_path: str):
     
     print(f"📄 Processing: {pdf_path}")
     
+    # Visual analysis 
+    analyze_visuals = not no_visuals and not FAST_MODE
+    
+    if FAST_MODE:
+        print("⚡ FAST_MODE: Visual analysis disabled")
+    elif no_visuals:
+        print("👁️ Visual analysis disabled by user")
+    else:
+        print("👁️ Visual analysis enabled")
+    
     # Extract
     print("📖 Extracting content...")
-    extracted = pdf_extractor.extract_pdf_content(pdf_path)
-    
+    extracted = pdf_extractor.extract_content(
+        pdf_path,
+        analyze_visuals=analyze_visuals
+    )
+
     # Chunk
     print("✂️  Creating chunks...")
     chunks = chunker.process_extracted_file(extracted)

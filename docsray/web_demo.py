@@ -10,12 +10,12 @@ import uuid
 import pickle
 import time
 import pathlib
-ROOT = pathlib.Path(__file__).resolve().parents[1]
 import gradio as gr
 
 from docsray.chatbot import PDFChatBot, DEFAULT_SYSTEM_PROMPT
 from docsray.scripts import pdf_extractor, chunker, build_index, section_rep_builder
 from docsray.scripts.file_converter import FileConverter
+from docsray.config import FAST_MODE
 
 # Create a temporary directory for this session
 TEMP_DIR = Path(tempfile.gettempdir()) / "docsray_web"
@@ -31,45 +31,60 @@ def create_session_dir() -> Path:
     session_dir.mkdir(exist_ok=True)
     return session_dir
 
-def process_document(file_path: str, session_dir: Path, progress_callback=None) -> Tuple[list, list, str]:
+def process_document(file_path: str, session_dir: Path, analyze_visuals: bool = True, progress_callback=None) -> Tuple[list, list, str]:
     """
     Process a document file and return sections, chunk index, and status message.
     Supports all file formats through auto-conversion.
+    
+    Args:
+        file_path: Path to the document file
+        session_dir: Session directory for caching
+        analyze_visuals: Whether to analyze visual content (default: True)
+        progress_callback: Optional progress callback function
     """
     try:
         start_time = time.time()
         file_name = Path(file_path).name
         
+        # FAST_MODE에서는 visual analysis 강제 비활성화
+        if FAST_MODE:
+            analyze_visuals = False
+        
         # Progress: Starting
-        if progress_callback:
+        if progress_callback is not None:
             progress_callback(0.1, f"📄 Starting to process: {file_name}")
         
-        # Extract content (auto-converts if needed)
-        if progress_callback:
-            progress_callback(0.2, f"📖 Extracting content from {file_name}...")
+        # Extract content with visual analysis option
+        if progress_callback is not None:
+            status_msg = f"📖 Extracting content from {file_name}..."
+            if analyze_visuals:
+                status_msg += " (with visual analysis)"
+            progress_callback(0.2, status_msg)
         
-        extracted = pdf_extractor.extract_content(file_path)
-        
+        extracted = pdf_extractor.extract_content(
+            file_path,
+            analyze_visuals=analyze_visuals  
+        )
         # Create chunks
-        if progress_callback:
+        if progress_callback is not None:
             progress_callback(0.4, "✂️ Creating text chunks...")
         
         chunks = chunker.process_extracted_file(extracted)
         
         # Build search index
-        if progress_callback:
+        if progress_callback is not None:
             progress_callback(0.6, "🔍 Building search index...")
         
         chunk_index = build_index.build_chunk_index(chunks)
         
         # Build section representations
-        if progress_callback:
+        if progress_callback is not None:
             progress_callback(0.8, "📊 Building section representations...")
         
         sections = section_rep_builder.build_section_reps(extracted["sections"], chunk_index)
         
         # Save to session cache
-        if progress_callback:
+        if progress_callback is not None:
             progress_callback(0.9, "💾 Saving to cache...")
         
         cache_data = {
@@ -98,18 +113,22 @@ def process_document(file_path: str, session_dir: Path, progress_callback=None) 
         msg += f"🔍 Chunks: {len(chunks)}\n"
         msg += f"⏱️ Processing time: {elapsed_time:.1f} seconds"
         
-        if progress_callback:
+        if progress_callback is not None:
             progress_callback(1.0, "✅ Processing complete!")
         
         return sections, chunk_index, msg
         
     except Exception as e:
         error_msg = f"❌ Error processing document: {str(e)}"
-        if progress_callback:
-            progress_callback(0.0, error_msg)
-        return None, None, error_msg
+        if progress_callback is not None:
+            try:
+                progress_callback(0.0, error_msg)
+            except:
+                pass
 
-def load_document(file, session_state: Dict, progress=gr.Progress()) -> Tuple[Dict, str, gr.Update]:
+        return None, None, error_msg
+    
+def load_document(file, analyze_visuals: bool, session_state: Dict, progress=gr.Progress()) -> Tuple[Dict, str, gr.update]:
     """Load and process uploaded document with progress tracking"""
     if file is None:
         return session_state, "Please upload a document", gr.update()
@@ -128,10 +147,11 @@ def load_document(file, session_state: Dict, progress=gr.Progress()) -> Tuple[Di
     progress(0.05, f"📁 Copying {file_name} to session...")
     shutil.copy(file.name, dest_path)
     
-    # Process document with progress callback
+    # Process document with visual analysis option
     sections, chunk_index, msg = process_document(
         str(dest_path), 
         session_dir,
+        analyze_visuals=analyze_visuals,
         progress_callback=progress
     )
     
@@ -195,13 +215,15 @@ def ask_question(question: str, session_state: Dict, system_prompt: str, use_coa
         sections = current_doc["sections"]
         chunk_index = current_doc["chunk_index"]
         
-        progress(0.2, "🤔 Thinking about your question...")
+        if progress is not None:
+            progress(0.2, "🤔 Thinking about your question...")
         
         # Create chatbot and get answer
         prompt = system_prompt or DEFAULT_SYSTEM_PROMPT
         chatbot = PDFChatBot(sections, chunk_index, system_prompt=prompt)
         
-        progress(0.5, "🔍 Searching relevant sections...")
+        if progress is not None:
+            progress(0.5, "🔍 Searching relevant sections...")
         
         # Get answer
         answer_output, reference_output = chatbot.answer(
@@ -209,14 +231,15 @@ def ask_question(question: str, session_state: Dict, system_prompt: str, use_coa
             fine_only=not use_coarse
         )
         
-        progress(1.0, "✅ Answer ready!")
+        if progress is not None:
+            progress(1.0, "✅ Answer ready!")
         
         return answer_output, reference_output
         
     except Exception as e:
         return f"❌ Error: {str(e)}", ""
 
-def clear_session(session_state: Dict) -> Tuple[Dict, str, gr.Update, gr.Update, gr.Update]:
+def clear_session(session_state: Dict) -> Tuple[Dict, str, gr.update, gr.update, gr.update]:
     """Clear all documents and reset session"""
     # Clean up session directory
     if "session_dir" in session_state:
@@ -255,6 +278,7 @@ def get_supported_formats() -> str:
         supported_exts = [ext for ext in extensions if ext in formats or ext == '.pdf']
         if supported_exts:
             info += f"**{category}:** {', '.join(supported_exts)}\n"
+
     
     return info
 
@@ -292,11 +316,32 @@ with gr.Blocks(
             
             # File upload
             file_input = gr.File(
-                label="Upload Document",
-                file_types=[".pdf", ".docx", ".doc", ".xlsx", ".xls", ".pptx", ".ppt", 
-                           ".txt", ".md", ".html", ".png", ".jpg", ".jpeg"],
-                type="filepath"
-            )
+                    label="Upload Document",
+                    file_types=[
+                        ".pdf", 
+                        ".docx", ".doc", 
+                        ".xlsx", ".xls", 
+                        ".pptx", ".ppt",
+                        ".txt", ".md", ".rtf", ".rst",
+                        ".html", ".htm", ".xml",
+                        ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tiff", ".tif", ".webp",
+                        ".epub", ".mobi",
+                    ],
+                    type="filepath",
+                  )
+            
+            # Visual analysis toggle
+            with gr.Row():
+                analyze_visuals_checkbox = gr.Checkbox(
+                    label="👁️ Analyze Visual Content",
+                    value=True,
+                    info="Extract and analyze images, charts, and figures (slower but more comprehensive)",
+                    visible=not FAST_MODE  # Hide in FAST_MODE
+                )
+            
+            if FAST_MODE:
+                gr.Markdown("⚡ **FAST_MODE Active**: Visual analysis is disabled for performance")
+            
             upload_btn = gr.Button("📤 Process Document", variant="primary", size="lg")
             
             # Document selector (hidden initially)
@@ -352,16 +397,14 @@ with gr.Blocks(
                     answer_output = gr.Textbox(
                         label="",
                         lines=12,
-                        interactive=False,
-                        show_copy_button=True
+                        interactive=False
                     )
                 
                 with gr.TabItem("📚 References"):
                     reference_output = gr.Textbox(
                         label="",
                         lines=10,
-                        interactive=False,
-                        show_copy_button=True
+                        interactive=False
                     )
             
             # System prompt in accordion
@@ -390,17 +433,17 @@ with gr.Blocks(
             label="Example Questions"
         )
     
-    # Event handlers
+    # Update event handlers
     upload_btn.click(
         load_document,
-        inputs=[file_input, session_state],
+        inputs=[file_input, analyze_visuals_checkbox, session_state],
         outputs=[session_state, status, doc_dropdown],
         show_progress=True
     ).then(
         lambda: gr.update(value=None),
         outputs=[file_input]
     )
-    
+
     doc_dropdown.change(
         switch_document,
         inputs=[doc_dropdown, session_state],

@@ -1,10 +1,8 @@
 # src/chatbot.py
 import sys
 import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import json
 import asyncio
-
 from docsray.search.section_coarse_search import coarse_search_sections
 from docsray.search.fine_search import fine_search_chunks
 from docsray.inference.embedding_model import get_embedding_model

@@ -7,7 +7,7 @@ from llama_cpp.llama_chat_format import Gemma3ChatHandler
 import os
 import sys
 from pathlib import Path
-from docsray import FAST_MODE, FULL_FEATURE_MODE, MAX_TOKENS
+from docsray.config import FAST_MODE, FULL_FEATURE_MODE, MAX_TOKENS
 import base64
 import io
 from PIL import Image

@@ -45,15 +45,19 @@ python-pptx>=0.6.21  # For reading PowerPoint files
 
 # HTML/Web to PDF
 pdfkit>=1.0.0  # HTML to PDF conversion (requires wkhtmltopdf)
-weasyprint>=57.0  # Alternative HTML to PDF converter
+
 
 # Markdown support
 markdown>=3.4.1  # Markdown to HTML conversion
 
-# Image handling (already included via pillow)
-# pillow>=9.0.0
+# HWP support
+pyhwp  # Basic HWP support
+olefile # Required by pyhwp
+
 
 # Optional but recommended system dependencies (install separately):
 # - LibreOffice (for reliable Office document conversion)
 # - wkhtmltopdf (for pdfkit)
 # - Pandoc (for pypandoc)
+# - weasyprint  # Alternative HTML to PDF converter
+# - hwp5  # Alternative HWP library (optional)

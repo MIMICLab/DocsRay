@@ -48,6 +48,17 @@ try:
 except ImportError:
     HAS_MARKDOWN = False
 
+try:
+    import pyhwp
+    HAS_PYHWP = True
+except ImportError:
+    HAS_PYHWP = False
+
+try:
+    import hwp5
+    HAS_HWP5 = True
+except ImportError:
+    HAS_HWP5 = False
 
 class FileConverter:
     """Convert various file formats to PDF"""
@@ -58,12 +69,16 @@ class FileConverter:
         '.doc': 'Microsoft Word (Legacy)',
         '.xlsx': 'Microsoft Excel',
         '.xls': 'Microsoft Excel (Legacy)',
+        '.pdf': 'PDF Document',
         '.pptx': 'Microsoft PowerPoint',
         '.ppt': 'Microsoft PowerPoint (Legacy)',
         '.odt': 'OpenDocument Text',
         '.ods': 'OpenDocument Spreadsheet',
         '.odp': 'OpenDocument Presentation',
-        
+        #'.hwp': 'Hangul Word Processor',
+        #'.hwpx': 'Hangul Word Processor (OOXML)',
+
+
         # Text formats
         '.txt': 'Plain Text',
         '.md': 'Markdown',
@@ -142,7 +157,20 @@ class FileConverter:
             return self._convert_excel_to_pdf(input_file, output_path)
         elif file_ext in ['.pptx', '.ppt']:
             return self._convert_ppt_to_pdf(input_file, output_path)
-        
+        #elif file_ext in ['.hwp', '.hwpx']:
+        #    if HAS_HWP5:
+        #        return self._convert_hwp_to_pdf_with_hwp5(input_file, output_path)
+        #    else:
+        #        return self._convert_hwp_to_pdf(input_file, output_path)
+        elif file_ext in ['.odt', '.ods', '.odp']:
+            if HAS_PANDOC:
+                return self._convert_with_pandoc(input_file, output_path)
+            else:
+                return False, "OpenDocument formats require pandoc for conversion."
+        elif file_ext in ['.pdf']:
+            # If already PDF, just return the path
+            return True, str(input_file)   
+               
         # Text formats
         elif file_ext == '.txt':
             return self._convert_text_to_pdf(input_file, output_path)
@@ -237,7 +265,93 @@ class FileConverter:
                 print(f"LibreOffice conversion failed: {e}", file=sys.stderr)
         
         return False, "PowerPoint conversion requires LibreOffice. Please install it first."
+    def _convert_hwp_to_pdf(self, input_file: Path, output_file: Path) -> Tuple[bool, str]:
+        """Convert HWP to PDF"""
+        
+        if HAS_PYHWP:
+            try:
+                hwp = pyhwp.HWP(str(input_file))
+                
+                text_content = ""
+                for section in hwp.sections:
+                    text_content += section.get_text() + "\n\n"
+                
+                html_content = f"""
+                <html>
+                <head>
+                    <meta charset="utf-8">
+                    <style>
+                        body {{
+                            font-family: 'Malgun Gothic', 'Nanum Gothic', sans-serif;
+                            margin: 40px;
+                            line-height: 1.6;
+                        }}
+                        p {{ margin-bottom: 10px; }}
+                    </style>
+                </head>
+                <body>
+                    <h1>{input_file.name}</h1>
+                    {"".join(f"<p>{para}</p>" for para in text_content.split('\n') if para.strip())}
+                </body>
+                </html>
+                """
+                
+     
+                if HAS_MARKDOWN:
+                    html_doc = weasyprint.HTML(string=html_content)
+                    html_doc.write_pdf(str(output_file))
+                    return True, str(output_file)
+                    
+            except Exception as e:
+                print(f"pyhwp conversion failed: {e}", file=sys.stderr)
+        
+        if self._check_hancom():
+            try:
+                cmd = ['hwp', '--convert-to', 'pdf', '--outdir', str(output_file.parent), str(input_file)]
+                result = subprocess.run(cmd, capture_output=True, text=True)
+                if result.returncode == 0:
+                    return True, str(output_file)
+            except Exception as e:
+                print(f"Hancom Office conversion failed: {e}", file=sys.stderr)
+        
+        return False, "HWP conversion requires pyhwp or Hancom Office"
+
+    def _check_hancom(self) -> bool:
+        """Check if Hancom Office is available"""
+        try:
+            result = subprocess.run(['hwp', '--version'], capture_output=True)
+            return result.returncode == 0
+        except FileNotFoundError:
+            return False
     
+    def _convert_hwp_to_pdf_with_hwp5(self, input_file: Path, output_file: Path) -> Tuple[bool, str]:
+        """Convert HWP to PDF using hwp5"""
+        if not HAS_HWP5:
+            return False, "hwp5 not installed"
+        
+        try:
+            odf_path = output_file.with_suffix('.odt')
+            
+            cmd = ['hwp5odt', str(input_file), str(odf_path)]
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            
+            if result.returncode == 0:
+                if self._check_libreoffice():
+                    cmd = [
+                        'libreoffice', '--headless', '--convert-to', 'pdf',
+                        '--outdir', str(output_file.parent), str(odf_path)
+                    ]
+                    result = subprocess.run(cmd, capture_output=True, text=True)
+                    
+                    odf_path.unlink(missing_ok=True)
+                    
+                    if result.returncode == 0:
+                        return True, str(output_file)
+            
+        except Exception as e:
+            print(f"hwp5 conversion failed: {e}", file=sys.stderr)
+        
+        return False, "HWP conversion failed"
     def _convert_text_to_pdf(self, input_file: Path, output_file: Path) -> Tuple[bool, str]:
         """Convert plain text to PDF"""
         try:

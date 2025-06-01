@@ -16,8 +16,9 @@ import numpy as np
 from sklearn.cluster import KMeans
 import pytesseract
 
+
 # Import FAST_MODE to determine if we can use image recognition
-from docsray import FAST_MODE, MAX_TOKENS, FULL_FEATURE_MODE
+from docsray.config import FAST_MODE, MAX_TOKENS, FULL_FEATURE_MODE
 
 # LLM for outline generation and image analysis
 from docsray.inference.llm_model import get_llm_models
@@ -343,8 +344,8 @@ def build_sections_from_layout(pages_text: List[str],
         sample_text = " ".join(pages_text[start:end])[: MAX_TOKENS - 100]  # leave space for LLM response
         title_prompt = prompt_template.format(sample=sample_text)
         try:
-            title_line = local_llm.generate(title_prompt)
-            title_line = local_llm.strip_response(title_line).strip()
+            title_line = local_llm_large.generate(title_prompt)
+            title_line = local_llm_large.strip_response(title_line).strip()
 
         except Exception:
             title_line = f"Miscellaneous Section {start + 1}-{end}"

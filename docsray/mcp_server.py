@@ -67,7 +67,7 @@ ensure_models_exist()
 os.environ['DOCSRAY_MCP_MODE'] = '1'
 
 
-from docsray import FAST_MODE
+from docsray.config import FAST_MODE
 
 # MCP imports
 from mcp.server import Server
@@ -784,17 +784,22 @@ async def list_tools() -> List[Tool]:
         ),
         Tool(
             name="load_document",
-            description="Load and process any supported document file (PDF, Word, Excel, PowerPoint, images, etc.) from the current or specified folder",
+            description="Load and process any supported document file with optional visual analysis",
             inputSchema={
                 "type": "object",
                 "properties": {
                     "filename": {"type": "string", "description": "Document filename to load"},
-                    "folder_path": {"type": "string", "description": "Folder path (optional, uses current if not specified)"}
+                    "folder_path": {"type": "string", "description": "Folder path (optional, uses current if not specified)"},
+                    "analyze_visuals": {
+                        "type": "boolean", 
+                        "description": "Whether to analyze visual content (default: true, disabled in FAST_MODE)",
+                        "default": True
+                    }
                 },
                 "required": ["filename"]
             }
         ),
-                Tool(
+        Tool(
             name="load_pdf",
             description="[Deprecated - use load_document] Load and process a document file from the current or specified folder",
             inputSchema={
@@ -963,7 +968,10 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
         elif name == "load_document" or name == "load_pdf":
             filename = arguments["filename"]
             folder_path = arguments.get("folder_path")
+            analyze_visuals = arguments.get("analyze_visuals", True)
             
+            if FAST_MODE:
+                analyze_visuals = False
             # Determine full path
             if folder_path:
                 file_path = Path(folder_path) / filename
@@ -985,23 +993,15 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
                     return [TextContent(type="text", text=f"❌ Document file not found: {file_path}")]
             
             # Process the document (auto-conversion handled by extract_content)
+            # Process the document with visual analysis option
             try:
                 from docsray.scripts import pdf_extractor
-                # Import the new extract_content function
-                if hasattr(pdf_extractor, 'extract_content'):
-                    extracted = pdf_extractor.extract_content(str(file_path))
-                else:
-                    # Fallback to original if not updated yet
-                    sections, chunk_index, pages_text = process_pdf(str(file_path))
-                    current_sections = sections
-                    current_index = chunk_index
-                    current_pdf_name = file_path.name
-                    current_pages_text = pages_text
-                    
-                    response = f"✅ Successfully loaded: {file_path.name}\n"
-                    # ... rest of response ...
-                    return [TextContent(type="text", text=response)]
                 
+                # extract_content 호출 시 analyze_visuals 전달
+                extracted = pdf_extractor.extract_content(
+                    str(file_path),
+                    analyze_visuals=analyze_visuals
+                )
                 # Process extracted content
                 chunks = chunker.process_extracted_file(extracted)
                 chunk_index = build_index.build_chunk_index(chunks)
@@ -1021,10 +1021,14 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
                 response = f"✅ Successfully loaded: {file_path.name}\n"
                 response += f"📂 From: {file_path.parent}\n"
                 
-                # Add conversion info if applicable
                 if extracted["metadata"].get("was_converted", False):
                     original_format = extracted["metadata"].get("original_format", "unknown")
                     response += f"🔄 Converted from: {original_format.upper()} to PDF\n"
+                
+                if FAST_MODE:
+                    response += f"⚡ Visual analysis: Disabled (FAST_MODE)\n"
+                else:
+                    response += f"👁️ Visual analysis: {'Enabled' if analyze_visuals else 'Disabled'}\n"
                 
                 response += f"📊 File size: {file_size:.1f} MB\n"
                 response += f"📄 Pages: {num_pages}\n"
@@ -1035,7 +1039,7 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
                 response += "• Generate a comprehensive summary using 'summarize_document'"
                 
                 return [TextContent(type="text", text=response)]
-                
+
             except Exception as e:
                 return [TextContent(type="text", text=f"❌ Error processing document: {str(e)}")]
              

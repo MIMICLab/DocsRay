@@ -7,8 +7,6 @@ import sys
 from pathlib import Path
 from contextlib import redirect_stderr
 
-os.environ['LLAMA_CPP_LOG_LEVEL'] = 'ERROR'
-
 EPS = 1e-8              
 
 def _l2_normalize(arr):
