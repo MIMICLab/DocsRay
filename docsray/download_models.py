@@ -115,13 +115,13 @@ def check_models():
     """Check the status of currently downloaded models"""
     
     models = [
-        ("bge-m3-gguf/bge-m3-Q8_0.gguf", "BGE-M3 Embedding Model"),
-        ("multilingual-e5-large-gguf/multilingual-e5-large-Q8_0.gguf", "E5 Embedding Model"),
-        ("gemma-3-1b-it-GGUF/gemma-3-1b-it-Q8_0.gguf", "Gemma 3 1B LLM"),
-        ("gemma-3-1b-it-GGUF/gemma-3-1b-it-Q4_K_M.gguf", "Gemma 3 1B LLM"),
-        ("gemma-3-4b-it-GGUF/gemma-3-4b-it-Q8_0.gguf", "Gemma 3 4B LLM"),
-        ("gemma-3-4b-it-GGUF/gemma-3-4b-it-Q4_K_M.gguf", "Gemma 3 4B LLM"),
-        ("gemma-3-4b-it-GGUF/mmproj-gemma-3-4b-it-f16.gguf", "Gemma 3 4B F16 Vision Encoder")
+        ("bge-m3-gguf/bge-m3-Q8_0.gguf", "BGE-M3 Embedding Model (Q8_0)"),
+        ("multilingual-e5-large-gguf/multilingual-e5-large-Q8_0.gguf", "E5 Embedding Model (Q8_0)"),
+        ("gemma-3-1b-it-GGUF/gemma-3-1b-it-Q8_0.gguf", "Gemma 3 1B LLM (Q8_0)"),
+        ("gemma-3-1b-it-GGUF/gemma-3-1b-it-Q4_K_M.gguf", "Gemma 3 1B LLM (Q4_K_M)"),
+        ("gemma-3-4b-it-GGUF/gemma-3-4b-it-Q8_0.gguf", "Gemma 3 4B LLM (Q8_0)"),
+        ("gemma-3-4b-it-GGUF/gemma-3-4b-it-Q4_K_M.gguf", "Gemma 3 4B LLM (Q4_K_M)"),
+        ("gemma-3-4b-it-GGUF/mmproj-gemma-3-4b-it-f16.gguf", "Gemma 3 SigLIP Vision Encoder (F16)")
     ]
     
     print("📋 Model Status Check:")
