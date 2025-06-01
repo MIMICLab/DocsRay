@@ -99,7 +99,7 @@ current_pdf_folder: Path = DEFAULT_PDF_FOLDER  # Current working directory
 current_pages_text: Optional[List[str]] = None  # Store raw page text for summarization
 
 # Visual analysis global setting
-visual_analysis_enabled: bool = not DISABLE_VISUAL_ANALYSIS and not FAST_MODE
+visual_analysis_enabled: bool = not DISABLE_VISUAL_ANALYSIS 
 
 # Enhanced System Prompt for Summarization
 SUMMARIZATION_PROMPT = """You are a professional document analyst. Your task is to create a comprehensive summary of a PDF document based on its sections.
@@ -244,9 +244,7 @@ def set_visual_analysis(enabled: bool) -> Tuple[bool, str]:
     """Enable or disable visual analysis globally."""
     global visual_analysis_enabled
     
-    if FAST_MODE and enabled:
-        return False, "❌ Visual analysis cannot be enabled in FAST_MODE"
-    
+
     if DISABLE_VISUAL_ANALYSIS and enabled:
         return False, "❌ Visual analysis is disabled by environment variable DOCSRAY_DISABLE_VISUALS"
     
@@ -266,7 +264,7 @@ def get_visual_analysis_status() -> Dict[str, Any]:
         "enabled": visual_analysis_enabled,
         "fast_mode": FAST_MODE,
         "env_disabled": DISABLE_VISUAL_ANALYSIS,
-        "can_enable": not FAST_MODE and not DISABLE_VISUAL_ANALYSIS
+        "can_enable": not DISABLE_VISUAL_ANALYSIS
     }
 
 # Directory Management functions (keeping existing ones)
@@ -461,18 +459,15 @@ def summarize_document_by_sections(sections: List, chunk_index: List,
     local_llm, local_llm_large = get_llm_models()
     
     # Use smaller model for everything in fast mode
-    if brief_mode or FAST_MODE:
+    if brief_mode:
         summary_model = local_llm
         overall_model = local_llm
     else:
         summary_model = local_llm
         overall_model = local_llm_large
     
-    # Determine detail level for cache
-    if FAST_MODE:
-        detail_level = "brief"
-        BATCH_SIZE = 20       
-    elif max_chunks_per_section <= 3:
+    # Determine detail level for cache      
+    if max_chunks_per_section <= 3:
         detail_level = "brief"
         BATCH_SIZE = 20
     elif max_chunks_per_section >= 8:
@@ -1114,8 +1109,6 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             
             if not status['can_enable']:
                 response += "⚠️ **Note:** Visual analysis cannot be enabled due to:\n"
-                if status['fast_mode']:
-                    response += "• System is in FAST_MODE (insufficient resources)\n"
                 if status['env_disabled']:
                     response += "• DOCSRAY_DISABLE_VISUALS environment variable is set\n"
             else:
@@ -1174,10 +1167,7 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             
             detail_level = arguments.get("detail_level", "standard")
             
-            # Adjust parameters based on detail level
-            if FAST_MODE:
-                detail_level = "brief"  # Force brief mode in fast mode
-                
+
             if detail_level == "brief":
                 max_chunks = 3
                 brief_mode = True
