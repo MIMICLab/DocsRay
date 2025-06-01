@@ -68,22 +68,15 @@ def analyze_image_with_llm(image: Image.Image, page_num: int, img_idx: int) -> s
     local_llm, local_llm_large = get_llm_models()
     
     # Prepare multimodal prompt
-    prompt = f"""Analyze this image from page {page_num + 1} of a PDF document. 
+    prompt = f"""Describe this image from page {page_num + 1} of a PDF document in a single paragraph.
 
-Please describe:
-1. What type of visual content this is (chart, graph, diagram, photo, table, etc.)
-2. The main information or data it contains
-3. Any text, labels, or legends visible in the image
-4. Key insights or patterns shown
-
-Provide a clear, concise description that would help someone understand the content without seeing the image.
+Include: what type of visual it is, its main content, any visible text/labels, and key insights.
+Write naturally as one flowing paragraph, not as a numbered list.
 """
-
     try:
         # Use the large model for better image understanding
         response = local_llm_large.generate(prompt, image=image)
         description = local_llm_large.strip_response(response)
-        
         return f"[Figure {img_idx + 1} on page {page_num + 1}]: {description}"
     except Exception as e:
         print(f"Error analyzing image with LLM: {e}", file=sys.stderr)
@@ -129,7 +122,7 @@ def analyze_visual_content(page, page_num: int) -> str:
     
     # Extract images
     images = extract_images_from_page(page)
-    
+
     if images:
         print(f"  Found {len(images)} images on page {page_num + 1}", file=sys.stderr)
         

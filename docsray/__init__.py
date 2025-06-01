@@ -2,13 +2,14 @@
 DocsRay - PDF Question-Answering System with MCP Integration
 """
 
-__version__ = "0.3.1"
+__version__ = "0.4.0"
 __author__ = "Taehoon Kim"
 
 import os
 from pathlib import Path
 os.environ["LLAMA_LOG_LEVEL"] = "40"  # Set log level to ERROR for Llama models
-
+os.environ["GGML_LOG_LEVEL"] = "error"
+os.environ["LLAMA_CPP_LOG_LEVEL"] = "ERROR"
 # Set up default paths
 DOCSRAY_HOME = Path(os.environ.get("DOCSRAY_HOME", Path.home() / ".docsray"))
 DATA_DIR = DOCSRAY_HOME / "data"
@@ -17,13 +18,15 @@ CACHE_DIR = DOCSRAY_HOME / "cache"
 
 import psutil
 
-# (Optional) GPU VRAM 체크용
 try:
     import torch
     has_cuda = torch.cuda.is_available()
+    has_mps = torch.backends.mps.is_available()
+    has_gpu = has_cuda or has_mps
 except ImportError:
     has_cuda = False
-
+    has_mps = False
+    has_gpu = False
 
 def get_available_ram_gb():
     """Return available RAM in GB."""
@@ -55,22 +58,26 @@ MAX_TOKENS = 32768  # Default value for high memory systems
 FAST_MODE = False  # Default to normal mode
 FULL_FEATURE_MODE = False  # Default to normal mode
 
-if available_gb < 2:
-    MAX_TOKENS = 4096  # Very low memory systems
-    FAST_MODE = True  # Enable fast mode for very low memory systems
-
-if available_gb < 4:
-    FAST_MODE = True # Enable fast mode for low memory systems
-    MAX_TOKENS = 8192  # Very low memory systems
-
-elif available_gb < 8:
-    MAX_TOKENS = 16384  # Low memory systems
-elif available_gb > 32:
-    MAX_TOKENS = 0
-    FULL_FEATURE_MODE = True  # Enable full feature mode for high memory systems
-
-print(f"MAX_TOKENS set to {MAX_TOKENS} (Available GB: {available_gb:.2f})")
-
+# GPU가 없으면 무조건 FAST_MODE 활성화
+if not has_gpu:
+    FAST_MODE = True
+    MAX_TOKENS = 8192
+    print(f"No GPU detected - FAST_MODE enabled (Available RAM: {available_gb:.2f} GB)")
+else:
+    # GPU가 있는 경우 메모리 기반 설정
+    if available_gb < 2:
+        MAX_TOKENS = 4096
+        FAST_MODE = True
+    elif available_gb < 4:
+        FAST_MODE = True
+        MAX_TOKENS = 8192
+    elif available_gb < 8:
+        MAX_TOKENS = 16384
+    elif available_gb > 32:
+        MAX_TOKENS = 0
+        FULL_FEATURE_MODE = True
+    
+    print(f"MAX_TOKENS set to {MAX_TOKENS} (Available {'VRAM' if has_cuda else 'Memory'}: {available_gb:.2f} GB)")
 # Create directories if they don't exist
 for dir_path in [DOCSRAY_HOME, DATA_DIR, MODEL_DIR, CACHE_DIR]:
     dir_path.mkdir(parents=True, exist_ok=True)

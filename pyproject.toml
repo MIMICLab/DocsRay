@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "docsray"
-version = "0.3.1"
+version = "0.4.0"
 description = "PDF Question-Answering System with MCP Integration"
 authors = [{name = "Taehoon Kim", email = "taehoonkim@sogang.ac.kr"}]
 readme = "README.md"

@@ -12,6 +12,7 @@ from docsray import FAST_MODE, FULL_FEATURE_MODE, MAX_TOKENS
 import base64
 import io
 from PIL import Image
+from contextlib import redirect_stderr
 
 class LlamaTokenizer:
     def __init__(self, llama_model):
@@ -44,35 +45,34 @@ class LocalLLM:
             current_dir = Path(__file__).parent.absolute()
             project_root = current_dir.parent.parent  # Go up two levels
             model_name = str(project_root / model_name)
-        
-        # Check if we're in MCP mode (less verbose)
-        is_mcp_mode = os.getenv('DOCSRAY_MCP_MODE') == '1'
-        
+
         # Check if file exists
         if not os.path.exists(model_name):
             raise FileNotFoundError(f"Model file not found: {model_name}")
         
-        
-        # For multimodal models, look for mmproj file
-        self.mmproj_path = None
-        chat_handler = None
-        if is_multimodal and "gemma" in model_name.lower():
+            
+        with open(os.devnull, 'w') as devnull:
+            with redirect_stderr(devnull):
+                # For multimodal models, look for mmproj file
+                self.mmproj_path = None
+                chat_handler = None
+                if is_multimodal and "gemma" in model_name.lower():
 
-            model_dir = Path(model_name).parent
-            mmproj_files = list(model_dir.glob("*mmproj*.gguf"))          
-            self.mmproj_path = str(mmproj_files[0])
-            chat_handler = Gemma3ChatHandler(clip_model_path=self.mmproj_path) 
+                    model_dir = Path(model_name).parent
+                    mmproj_files = list(model_dir.glob("*mmproj*.gguf"))          
+                    self.mmproj_path = str(mmproj_files[0])
+                    chat_handler = Gemma3ChatHandler(clip_model_path=self.mmproj_path, verbose=False) 
 
-        
-        self.model = Llama( 
-                            model_path=model_name,
-                            n_gpu_layers= -1,
-                            n_ctx = MAX_TOKENS,
-                            verbose=False,
-                            flash_attn=True,
-                            chat_handler=chat_handler
-                            )
-        self.tokenizer = LlamaTokenizer(self.model)
+                
+                self.model = Llama( 
+                                    model_path=model_name,
+                                    n_gpu_layers= -1,
+                                    n_ctx = MAX_TOKENS,
+                                    verbose=False,
+                                    flash_attn=True,
+                                    chat_handler=chat_handler
+                                )
+                self.tokenizer = LlamaTokenizer(self.model)
 
     def generate(self, prompt, image=None):
         """
@@ -114,6 +114,7 @@ class LocalLLM:
                 response = self.model.create_chat_completion(
                     messages=messages,
                     max_tokens=output_tokens,
+                    stop = ['<end_of_turn>'],
                     temperature=0.7,
                     top_p=0.95,
                     repeat_penalty=1.1
