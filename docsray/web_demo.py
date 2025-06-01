@@ -12,13 +12,6 @@ import time
 import pathlib
 import gradio as gr
 
-import signal  # for POSIX‑style timeout
-
-class _Timeout(Exception):
-    """Raised when document processing exceeds the time limit."""
-
-def _timeout_handler(signum, frame):
-    raise _Timeout()
 
 from docsray.chatbot import PDFChatBot, DEFAULT_SYSTEM_PROMPT
 from docsray.scripts import pdf_extractor, chunker, build_index, section_rep_builder
@@ -50,10 +43,6 @@ def process_document(file_path: str, session_dir: Path, analyze_visuals: bool = 
         analyze_visuals: Whether to analyze visual content (default: True)
         progress_callback: Optional progress callback function
     """
-    # ---- timeout guard (POSIX only) ---------------------------------------
-    TIME_LIMIT = 300  # 5 minutes
-    signal.signal(signal.SIGALRM, _timeout_handler)
-    signal.alarm(TIME_LIMIT)
     try:
         start_time = time.time()
         file_name = Path(file_path).name
@@ -129,14 +118,6 @@ def process_document(file_path: str, session_dir: Path, analyze_visuals: bool = 
             progress_callback(1.0, "✅ Processing complete!")
         
         return sections, chunk_index, msg
-    except _Timeout:
-        error_msg = "⏰ Error: processing timed out (5 min)"
-        if progress_callback is not None:
-            try:
-                progress_callback(0.0, error_msg)
-            except:
-                pass
-        return None, None, error_msg
     except Exception as e:
         error_msg = f"❌ Error processing document: {str(e)}"
         if progress_callback is not None:
@@ -145,8 +126,7 @@ def process_document(file_path: str, session_dir: Path, analyze_visuals: bool = 
             except:
                 pass
         return None, None, error_msg
-    finally:
-        signal.alarm(0)  # cancel alarm
+
     
 def load_document(file, analyze_visuals: bool, session_state: Dict, progress=gr.Progress()) -> Tuple[Dict, str, gr.update]:
     """Load and process uploaded document with progress tracking"""

@@ -1,6 +1,6 @@
 [project]
 name = "docsray"
-version = "1.0.7"
+version = "1.0.9"
 description = "PDF Question-Answering System with MCP Integration"
 authors = [{name = "Taehoon Kim", email = "taehoonkim@sogang.ac.kr"}]
 readme = "README.md"
