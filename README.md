@@ -128,8 +128,8 @@ else:
 
 | System Memory | Mode | OCR | Visual Analysis | Max Tokens |
 |--------------|------|-----|-----------------|------------|
-| < 4GB | FAST_MODE | ❌ | ❌ | 4,096 |
-| 4-8GB | FAST_MODE | ✅ (Pytesseract) | Limited | 8K |
+| < 4GB | FAST_MODE | ❌ | ❌ |8K |
+| 4-8GB | FAST_MODE | ✅ (Pytesseract) | Limited | 16K |
 | 8-16GB | Standard | ✅ (Pytesseract) | ✅ | 16K |
 | 16-32GB | Standard | ✅ (Pytesseract) | ✅ | 32K |
 | > 32GB | FULL_FEATURE | ✅ (AI OCR) | ✅  | 128K |

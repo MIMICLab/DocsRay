@@ -336,11 +336,7 @@ with gr.Blocks(
                     label="👁️ Analyze Visual Content",
                     value=True,
                     info="Extract and analyze images, charts, and figures (slower but more comprehensive)",
-                    visible=not FAST_MODE  # Hide in FAST_MODE
                 )
-            
-            if FAST_MODE:
-                gr.Markdown("⚡ **FAST_MODE Active**: Visual analysis is disabled for performance")
             
             upload_btn = gr.Button("📤 Process Document", variant="primary", size="lg")
             

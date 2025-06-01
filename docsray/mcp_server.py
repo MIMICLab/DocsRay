@@ -423,6 +423,7 @@ def summarize_document_by_sections(sections: List, chunk_index: List,
     # Determine detail level for cache
     if FAST_MODE:
         detail_level = "brief"
+        BATCH_SIZE = 20       
     elif max_chunks_per_section <= 3:
         detail_level = "brief"
         BATCH_SIZE = 20
@@ -970,9 +971,6 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             folder_path = arguments.get("folder_path")
             analyze_visuals = arguments.get("analyze_visuals", True)
             
-            if FAST_MODE:
-                analyze_visuals = False
-            # Determine full path
             if folder_path:
                 file_path = Path(folder_path) / filename
             else:

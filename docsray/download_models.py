@@ -34,6 +34,11 @@ def download_models():
         },
         {
             "dir": MODEL_DIR / "gemma-3-1b-it-GGUF",
+            "file": "gemma-3-1b-it-Q4_K_M.gguf",
+            "url": "https://huggingface.co/ggml-org/gemma-3-1b-it-GGUF/resolve/main/gemma-3-1b-it-Q4_K_M.gguf"
+        },
+        {
+            "dir": MODEL_DIR / "gemma-3-1b-it-GGUF",
             "file": "gemma-3-1b-it-Q8_0.gguf",
             "url": "https://huggingface.co/ggml-org/gemma-3-1b-it-GGUF/resolve/main/gemma-3-1b-it-Q8_0.gguf"
         },
@@ -41,6 +46,11 @@ def download_models():
             "dir": MODEL_DIR / "gemma-3-4b-it-GGUF",
             "file": "gemma-3-4b-it-Q8_0.gguf",
             "url": "https://huggingface.co/ggml-org/gemma-3-4b-it-GGUF/resolve/main/gemma-3-4b-it-Q8_0.gguf"
+        },
+        {
+            "dir": MODEL_DIR / "gemma-3-4b-it-GGUF",
+            "file": "gemma-3-4b-it-Q8_0.gguf",
+            "url": "https://huggingface.co/ggml-org/gemma-3-4b-it-GGUF/resolve/main/gemma-3-4b-it-Q4_K_M.gguf"
         },
         {
             "dir": MODEL_DIR / "gemma-3-4b-it-GGUF",

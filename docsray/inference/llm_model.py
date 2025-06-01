@@ -207,16 +207,14 @@ def get_llm_models():
             print("Running in full feature mode. Using larger model for inference.")
             # In full feature mode, use 4B model for everything including multimodal
             local_llm = LocalLLM(model_name=large_model_path, device=device, is_multimodal=True)
-        else:
-            # Standard mode: 1B for text, 4B for multimodal
-            local_llm = LocalLLM(model_name=small_model_path, device=device, is_multimodal=False)
-            
-        if FAST_MODE:
+            local_llm_large = local_llm   
+        elif FAST_MODE:
             print("Running in fast mode. Using smaller model for inference.")
-            # In fast mode, use the same small model for both
-            local_llm_large = local_llm
+            local_llm = LocalLLM(model_name=str(MODEL_DIR / "gemma-3-1b-it-GGUF" / "gemma-3-1b-it-Q4_K_M.gguf"), device=device, is_multimodal=True)
+            local_llm_large = LocalLLM(model_name=str(MODEL_DIR / "gemma-3-4b-it-GGUF" / "gemma-3-4b-it-Q4_K_M.gguf"), device=device, is_multimodal=True)
         else:
             # Standard mode: 4B model with multimodal capabilities
+            local_llm = LocalLLM(model_name=small_model_path, device=device, is_multimodal=True)            
             local_llm_large = LocalLLM(model_name=large_model_path, device=device, is_multimodal=True)
     
     return local_llm, local_llm_large
