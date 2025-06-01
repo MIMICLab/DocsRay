@@ -86,8 +86,8 @@ else:
 DISABLE_VISUAL_ANALYSIS = os.environ.get("DOCSRAY_DISABLE_VISUALS", "0") == "1"
 
 if os.environ.get("DOCSRAY_DEBUG", "0") == "1":
-    print(f"장치: {detected_device}")
-    print(f"사용 가능 메모리: {available_gb:.2f} GB")
+    print(f"Current Device: {detected_device}")
+    print(f"Available Memory: {available_gb:.2f} GB")
     print(f"FAST_MODE: {FAST_MODE}")
     print(f"MAX_TOKENS: {MAX_TOKENS}")
     print(f"FULL_FEATURE_MODE: {FULL_FEATURE_MODE}")
