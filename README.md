@@ -15,6 +15,12 @@ A powerful PDF Question-Answering System that uses advanced embedding models and
 # 1. Install DocsRay
 pip install docsray
 
+# 1-1. Hotfix (Temporary)
+# Hotfix: Use the forked version of llama-cpp-python for Gemma3 Support
+# Note: This is a temporary fix until the official library supports Gemma3
+# Install the forked version of llama-cpp-python
+pip install git+https://github.com/kossum/llama-cpp-python.git@main
+
 # 2. Download required models (approximately 8GB)
 docsray download-models
 

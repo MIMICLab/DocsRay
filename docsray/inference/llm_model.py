@@ -2,7 +2,6 @@
 
 import torch
 from llama_cpp import Llama
-from llama_cpp.llama_chat_format import Gemma3ChatHandler
 
 import os
 import sys
@@ -12,6 +11,8 @@ import base64
 import io
 from PIL import Image
 from contextlib import redirect_stderr
+from llama_cpp.llama_chat_format import Gemma3ChatHandler
+
 
 class LlamaTokenizer:
     def __init__(self, llama_model):
@@ -56,9 +57,8 @@ class LocalLLM:
                 self.mmproj_path = None
                 chat_handler = None
                 if is_multimodal and "gemma" in model_name.lower():
-
                     model_dir = Path(model_name).parent
-                    mmproj_files = list(model_dir.glob("*mmproj*.gguf"))          
+                    mmproj_files = list(model_dir.glob("*mmproj*.gguf"))        
                     self.mmproj_path = str(mmproj_files[0])
                     chat_handler = Gemma3ChatHandler(clip_model_path=self.mmproj_path, verbose=False) 
 
@@ -207,14 +207,15 @@ def get_llm_models():
             print("Running in full feature mode. Using larger model for inference.")
             # In full feature mode, use 4B model for everything including multimodal
             local_llm = LocalLLM(model_name=large_model_path, device=device, is_multimodal=True)
-            local_llm_large = local_llm   
+            local_llm_large = local_llm  
+
         elif FAST_MODE:
             print("Running in fast mode. Using smaller model for inference.")
-            local_llm = LocalLLM(model_name=str(MODEL_DIR / "gemma-3-1b-it-GGUF" / "gemma-3-1b-it-Q4_K_M.gguf"), device=device, is_multimodal=True)
+            local_llm = LocalLLM(model_name=str(MODEL_DIR / "gemma-3-1b-it-GGUF" / "gemma-3-1b-it-Q4_K_M.gguf"), device=device)
             local_llm_large = LocalLLM(model_name=str(MODEL_DIR / "gemma-3-4b-it-GGUF" / "gemma-3-4b-it-Q4_K_M.gguf"), device=device, is_multimodal=True)
         else:
             # Standard mode: 4B model with multimodal capabilities
-            local_llm = LocalLLM(model_name=small_model_path, device=device, is_multimodal=True)            
+            local_llm = LocalLLM(model_name=small_model_path, device=device)            
             local_llm_large = LocalLLM(model_name=large_model_path, device=device, is_multimodal=True)
     
     return local_llm, local_llm_large

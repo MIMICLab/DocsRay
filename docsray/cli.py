@@ -137,15 +137,13 @@ def configure_claude_desktop():
         print("❌ Unsupported OS for Claude Desktop")
         return
     
-    # Get DocsRay installation path - 안전한 방법으로
+    # Get DocsRay installation path
     try:
         import docsray
         
-        # 방법 1: __file__ 속성 확인
         if hasattr(docsray, '__file__') and docsray.__file__ is not None:
             docsray_path = Path(docsray.__file__).parent
         else:
-            # 방법 2: 모듈의 __path__ 사용
             if hasattr(docsray, '__path__'):
                 docsray_path = Path(docsray.__path__[0])
             else:
@@ -154,31 +152,25 @@ def configure_claude_desktop():
     except (AttributeError, ImportError, IndexError) as e:
         print(f"⚠️  Warning: Could not find docsray module path: {e}")
         
-        # 방법 3: sys.modules에서 찾기
         if 'docsray' in sys.modules:
             module = sys.modules['docsray']
             if hasattr(module, '__file__') and module.__file__:
                 docsray_path = Path(module.__file__).parent
             else:
-                # 방법 4: 현재 스크립트 위치 기준
                 current_file = Path(__file__).resolve()
                 docsray_path = current_file.parent
         else:
-            # 방법 5: 현재 작업 디렉토리 기준
             cwd = Path.cwd()
             if (cwd / "docsray").exists():
                 docsray_path = cwd / "docsray"
             else:
                 docsray_path = cwd
     
-    # MCP server 경로 확인
     mcp_server_path = docsray_path / "mcp_server.py"
-    
-    # MCP server 파일이 존재하는지 확인
+
     if not mcp_server_path.exists():
         print(f"❌ MCP server not found at: {mcp_server_path}")
         
-        # 다른 가능한 위치들 확인
         possible_locations = [
             docsray_path.parent / "docsray" / "mcp_server.py",
             Path(__file__).parent / "mcp_server.py",

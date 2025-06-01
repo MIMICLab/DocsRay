@@ -6,8 +6,8 @@ pdfplumber
 tiktoken
 
 # For LLMs
-#llama-cpp-python
-llama-cpp-python @ git+https://github.com/kossum/llama-cpp-python.git
+llama_cpp_python
+
 # PyTorch 
 torch
 

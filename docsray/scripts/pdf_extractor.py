@@ -118,15 +118,7 @@ def extract_images_from_page(page, min_width: int = 100, min_height: int = 100) 
         
         # Extract image
         pix = fitz.Pixmap(page.parent, xref)
-        
-        # Convert to PIL Image
-        if pix.n - pix.alpha < 4:  # GRAY or RGB
-            img_data = pix.tobytes("png")
-        else:  # CMYK
-            pix = fitz.Pixmap(fitz.csRGB, pix)
-            img_data = pix.tobytes("png")
-        
-        pil_img = Image.open(io.BytesIO(img_data))
+        pil_img = Image.open(io.BytesIO(pix.pil_tobytes(format="PNG")))
         
         # Check size
         if pil_img.width >= min_width and pil_img.height >= min_height:
@@ -237,8 +229,7 @@ def analyze_visual_content(page, page_num: int) -> str:
                     # Render the area as image
                     mat = fitz.Matrix(2, 2)  # 2x zoom for better quality
                     pix = page.get_pixmap(matrix=mat, clip=bbox)
-                    img_data = pix.tobytes("png")
-                    vector_img = Image.open(io.BytesIO(img_data))
+                    vector_img = Image.open(io.BytesIO(pix.pil_tobytes(format="PNG")))
                     
                     # Analyze with LLM
                     description = analyze_image_with_llm(vector_img, page_num, len(images))
@@ -372,9 +363,8 @@ def ocr_page_with_llm(page, dpi: int = 350) -> str:
         # Render page to high-quality image
         zoom = dpi / 72
         pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom), alpha=False)
-        img = Image.open(io.BytesIO(pix.tobytes("png")))
+        img = Image.open(io.BytesIO(pix.pil_tobytes(format="PNG")))
         
-        # FULL_FEATURE_MODE일 때만 LLM OCR 사용
         if FULL_FEATURE_MODE:
             text = ocr_with_llm(img, page.number)
         else:

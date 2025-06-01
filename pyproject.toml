@@ -1,31 +1,37 @@
-[build-system]
-requires = ["setuptools>=61.0", "wheel"]
-build-backend = "setuptools.build_meta"
-
 [project]
 name = "docsray"
-version = "1.0.1"
+version = "1.0.2"
 description = "PDF Question-Answering System with MCP Integration"
 authors = [{name = "Taehoon Kim", email = "taehoonkim@sogang.ac.kr"}]
 readme = "README.md"
 requires-python = ">=3.8"
 license = {text = "MIT"}
-dynamic = ["dependencies"]
 
-[project.urls]
-Homepage = "https://docsray.com"
-Repository = "https://github.com/MIMICLab/DocsRay"
-Documentation = "https://github.com/MIMICLab/DocsRay/blob/main/README.md"
-
-[project.scripts]
-docsray = "docsray.cli:main"
-
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["docsray*"]
-
-[tool.setuptools.package-data]
-docsray = ["data/*"]
-
-[tool.setuptools.dynamic]
-dependencies = {file = ["requirements.txt"]}
+dependencies = [
+    "PyMuPDF",
+    "pdfplumber",
+    "tiktoken",
+    "torch",
+    "protobuf",
+    "fastapi",
+    "uvicorn",
+    "mcp",
+    "numpy",
+    "pandas",
+    "pillow",
+    "scikit-learn",
+    "opencv-python",
+    "psutil",
+    "pytesseract",
+    "llama-cpp-python",
+    "gradio",
+    "pypandoc>=1.11",
+    "python-docx>=0.8.11",
+    "docx2pdf>=0.1.8",
+    "openpyxl>=3.0.10",
+    "python-pptx>=0.6.21",
+    "pdfkit>=1.0.0",
+    "markdown>=3.4.1",
+    "pyhwp",
+    "olefile",
+]
