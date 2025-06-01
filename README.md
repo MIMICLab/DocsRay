@@ -117,7 +117,7 @@ Automatically detects system resources and optimizes performance:
 # Automatic resource detection and mode configuration
 if available_ram >= 32GB:
     FULL_FEATURE_MODE = True  # All features enabled
-elif available_ram < 8GB:
+elif available_ram < 16GB:
     FAST_MODE = True  # Lightweight mode
 else:
     # Standard mode (balanced performance)
@@ -135,8 +135,8 @@ else:
 | System Memory |    Mode   | OCR | Visual Analysis | Max Tokens |
 |--------------|------------|--------------|--------------|------------|
 | < 8GB | FAST_MODE(Q4) | ✅ (Pytesseract) | ✅ |16K |
-| 8-16GB | Standard (Q8) | ✅ (Pytesseract) | ✅ | 16K |
-| 16-32GB | Standard (Q8) | ✅ (Pytesseract) | ✅ | 32K |
+| 8-16GB | FAST_MODE (Q4) | ✅ (Pytesseract) | ✅ | 32K |
+| 16-32GB | STANDARD (Q8) | ✅ (Pytesseract) | ✅ | 32K |
 | > 32GB | FULL_FEATURE (Q8) | ✅ (AI OCR) | ✅  | 128K |
 
 ## 📁 Project Structure

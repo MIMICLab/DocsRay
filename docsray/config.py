@@ -56,14 +56,16 @@ FULL_FEATURE_MODE = False
 
 if not has_gpu:
     FAST_MODE = True
-    MAX_TOKENS = 8192
+    MAX_TOKENS = 16384
 else:
     if device_type == 'cuda':
         if available_gb < 8:
             FAST_MODE = True
             MAX_TOKENS = 16384
         elif available_gb < 16:
+            FAST_MODE = True
             MAX_TOKENS = 16384
+            MAX_TOKENS = 32768
         elif available_gb < 32:
             MAX_TOKENS = 32768
         else:
@@ -74,7 +76,9 @@ else:
             FAST_MODE = True
             MAX_TOKENS = 16384
         elif available_gb < 16:
+            FAST_MODE = True
             MAX_TOKENS = 16384
+            MAX_TOKENS = 32768
         elif available_gb < 32:
             MAX_TOKENS = 32768
         else:

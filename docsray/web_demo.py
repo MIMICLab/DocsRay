@@ -16,7 +16,6 @@ import gradio as gr
 from docsray.chatbot import PDFChatBot, DEFAULT_SYSTEM_PROMPT
 from docsray.scripts import pdf_extractor, chunker, build_index, section_rep_builder
 from docsray.scripts.file_converter import FileConverter
-from docsray.config import FAST_MODE
 
 # Create a temporary directory for this session
 TEMP_DIR = Path(tempfile.gettempdir()) / "docsray_web"
@@ -40,16 +39,11 @@ def process_document(file_path: str, session_dir: Path, analyze_visuals: bool = 
     Args:
         file_path: Path to the document file
         session_dir: Session directory for caching
-        analyze_visuals: Whether to analyze visual content (default: True)
         progress_callback: Optional progress callback function
     """
     try:
         start_time = time.time()
         file_name = Path(file_path).name
-        
-        # FAST_MODE에서는 visual analysis 강제 비활성화
-        if FAST_MODE:
-            analyze_visuals = False
         
         # Progress: Starting
         if progress_callback is not None:
