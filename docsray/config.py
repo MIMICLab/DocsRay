@@ -71,13 +71,13 @@ else:
             MAX_TOKENS = 0  
             FULL_FEATURE_MODE = True
     elif device_type == 'mps':
-        if available_gb < 8:
+        if available_gb < 16:
             FAST_MODE = True
             MAX_TOKENS = 16384
-        elif available_gb < 16:
+        elif available_gb < 32:
             FAST_MODE = True
             MAX_TOKENS = 32768
-        elif available_gb < 32:
+        elif available_gb < 64:
             MAX_TOKENS = 32768
         else:
             MAX_TOKENS = 0  
