@@ -91,9 +91,20 @@ class LocalLLM:
                 image = rgb_image
             elif image.mode != 'RGB':
                 image = image.convert('RGB')
-            
+            if FULL_FEATURE_MODE:
+                w, h = image.size
+                if w < h:
+                    new_w = 896
+                    new_h = int(h * (896 / w))
+                else:
+                    new_h = 896
+                    new_w = int(w * (896 / h))
+                resized = image.resize((new_w, new_h), Image.LANCZOS)
+            else:
+                resized = image.resize((896, 896), Image.LANCZOS)
+
             # Convert image to data URI
-            image_uri = image_to_base64_data_uri(image, format="PNG")
+            image_uri = image_to_base64_data_uri(resized, format="PNG")
             messages = [
                 {
                     "role": "user",
@@ -106,7 +117,14 @@ class LocalLLM:
             
             # Calculate max tokens for output
             available_tokens = MAX_TOKENS if MAX_TOKENS > 0 else 131072
-            output_tokens = min(8192, available_tokens // 4)
+            if FAST_MODE:
+                min_tokens = 2048
+            elif FULL_FEATURE_MODE:
+                min_tokens = 8192
+            else:
+                min_tokens = 4096    
+
+            output_tokens = min(min_tokens, available_tokens // 4)
             
             # Generate response
             try:
@@ -118,9 +136,9 @@ class LocalLLM:
                     top_p=0.95,
                     repeat_penalty=1.1
                 )
-                result = response['choices'][0]['message']['content']
+                result = response['choices'][0]['message']['content']  
                 return result.strip()
-                
+
             except Exception as e:
                 print(f"Error in multimodal generation: {e}", file=sys.stderr)
                 import traceback

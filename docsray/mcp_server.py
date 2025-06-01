@@ -890,7 +890,7 @@ def list_documents(folder_path: Optional[str] = None) -> List[Dict[str, str]]:
     return sorted(documents, key=lambda x: x["name"])
 
 # Enhanced PDF Processing to store raw text
-def process_pdf(pdf_path: str, analyze_visuals: bool = None, timeout: int = EXTRACT_TIMEOUT) -> Tuple[List, List, List[str]]:
+def process_pdf(pdf_path: str, analyze_visuals: bool = None) -> Tuple[List, List, List[str]]:
     """Process PDF and build search index, also return raw pages text."""
     pdf_basename = Path(pdf_path).stem
     
@@ -911,13 +911,7 @@ def process_pdf(pdf_path: str, analyze_visuals: bool = None, timeout: int = EXTR
     def _do_extract():
         return pdf_extractor.extract_content(pdf_path, analyze_visuals=analyze_visuals)
     
-    try:
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
-            future = ex.submit(_do_extract)
-            extracted = future.result(timeout=timeout)
-    except concurrent.futures.TimeoutError:
-        raise RuntimeError("PDF extraction timed out.")
-    
+    extracted = _do_extract()
     pages_text = extracted.get("pages_text", [])
     
     if sections is None or chunk_index is None:

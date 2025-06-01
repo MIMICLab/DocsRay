@@ -13,12 +13,12 @@ async def interactive_test():
         choice = input("Choice (1-5): ")
         
         if choice == "1":
-            result = await call_tool("list_pdfs", {})
+            result = await call_tool("list_documents", {})
             print(result[0].text)
             
         elif choice == "2":
             filename = input("PDF Filename: ")
-            result = await call_tool("load_pdf", {"filename": filename})
+            result = await call_tool("load_document", {"filename": filename})
             print(result[0].text)
             
         elif choice == "3":
