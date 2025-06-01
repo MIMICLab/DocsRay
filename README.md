@@ -18,8 +18,14 @@ pip install docsray
 # 1-1. Hotfix (Temporary)
 # Hotfix: Use the forked version of llama-cpp-python for Gemma3 Support
 # Note: This is a temporary fix until the official library supports Gemma3
-# Install the forked version of llama-cpp-python
+
 pip install git+https://github.com/kossum/llama-cpp-python.git@main
+
+# For Metal (Apple Silicon)
+CMAKE_ARGS=-DLLAMA_METAL=on FORCE_CMAKE=1 pip install git+https://github.com/kossum/llama-cpp-python.git@main --force-reinstall --upgrade --no-cache-dir
+
+# For CUDA (NVIDIA)
+CMAKE_ARGS=-DGGML_CUDA=on FORCE_CMAKE=1 pip install git+https://github.com/kossum/llama-cpp-python.git@main --force-reinstall --upgrade --no-cache-dir
 
 # 2. Download required models (approximately 8GB)
 docsray download-models
@@ -105,11 +111,11 @@ DocsRay now features an intelligent hybrid OCR system that automatically selects
 - **Standard Mode (RAM 8-32GB)**: Traditional Pytesseract-based OCR
   - Stable and fast text extraction
   - Multi-language support (including Korean)
-  
+  - Recognizes figures and tables
 - **FAST_MODE (RAM < 8GB)**: OCR disabled
   - Memory efficiency prioritized
-  - Processes only PDFs with embedded text
-
+  - Recognizes figures and tables
+    
 ### Adaptive Performance Optimization
 Automatically detects system resources and optimizes performance:
 
@@ -350,10 +356,6 @@ export DOCSRAY_HOME=/path/to/custom/directory
 
 # Force specific mode
 export DOCSRAY_FAST_MODE=1  # Force FAST_MODE
-
-# GPU configuration
-export DOCSRAY_USE_GPU=1
-export DOCSRAY_GPU_LAYERS=-1  # Use all layers on GPU
 
 # Model paths (optional)
 export DOCSRAY_MODEL_DIR=/path/to/models
