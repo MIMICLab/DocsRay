@@ -1,9 +1,6 @@
 #!/usr/bin/env python3
 """Post-installation script for DocsRay"""
 
-import subprocess
-import sys
-
 def show_hotfix_message():
     """Display the hotfix installation message"""
     print("\n" + "="*70)
@@ -31,10 +28,20 @@ def hotfix_check():
             print("\n✅ Gemma3 support already installed!")
             print("\nNext step: Download the required models")
             print("docsray download-models\n")
+
         except ImportError:
             show_hotfix_message()
+            return False
+        return True
     except ImportError:
         show_hotfix_message()
+        return False
+    return True
+def main():
+    """Run the post-installation hotfix check"""
+    print("Running DocsRay post-installation hotfix check...")
+    hotfix_check()
+    print("Post-installation check completed.")
 
 if __name__ == "__main__":
     main()

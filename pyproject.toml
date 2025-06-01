@@ -1,6 +1,6 @@
 [project]
 name = "docsray"
-version = "1.0.5"
+version = "1.0.6"
 description = "PDF Question-Answering System with MCP Integration"
 authors = [{name = "Taehoon Kim", email = "taehoonkim@sogang.ac.kr"}]
 readme = "README.md"
@@ -35,3 +35,17 @@ dependencies = [
     "pyhwp",
     "olefile",
 ]
+
+[project.scripts]
+docsray = "docsray.cli:main"
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["docsray"]
+include-package-data = true
+
+[tool.setuptools.package-data]
+docsray = ["data/*"]

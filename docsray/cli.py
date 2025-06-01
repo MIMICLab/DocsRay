@@ -8,7 +8,12 @@ import os
 from pathlib import Path
 from docsray.config import FAST_MODE
 from docsray.post_install import hotfix_check
+
 def main():
+    hotfix_installed = hotfix_check()
+    if not hotfix_installed:
+        return
+    
     parser = argparse.ArgumentParser(
         description="DocsRay - PDF Question-Answering System",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -75,8 +80,8 @@ Examples:
     ask_parser.add_argument("--pdf", required=True, help="PDF file name")
     
     args = parser.parse_args()
-    hotfix_check()  # Run post-install hotfix check
     
+
     if args.command == "download-models":
         from docsray.download_models import download_models, check_models
         if args.check:
@@ -119,8 +124,13 @@ Examples:
         ask_question_cli(args.question, args.pdf)
     
     else:
-        parser.print_help()
+        if hotfix_check():
+            parser.print_help()
+        else:
+            return
 
+
+    
 def configure_claude_desktop():
     """Configure Claude Desktop for MCP integration"""
     import json
