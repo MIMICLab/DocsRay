@@ -4,10 +4,10 @@ from docsray.mcp_server import call_tool
 async def interactive_test():
     while True:
         print("\n=== MCP Tool Test ===")
-        print("1. List PDF Documents")
-        print("2. Load PDF Document")
-        print("3. Summarize Document")
-        print("4. Ask Question")
+        print("1. List Documents")
+        print("2. Load a Document")
+        print("3. Summarize a Document")
+        print("4. Ask a Question")
         print("5. Exit")
         
         choice = input("Choice (1-5): ")

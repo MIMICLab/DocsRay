@@ -3,6 +3,8 @@ import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import json
+import asyncio
+
 from docsray.search.section_coarse_search import coarse_search_sections
 from docsray.search.fine_search import fine_search_chunks
 from docsray.inference.embedding_model import get_embedding_model
@@ -180,3 +182,8 @@ if __name__ == "__main__":
         answer_output, reference_output = chatbot.answer(query)
         print("Answer Output:", answer_output)
         print("Reference Output:", reference_output)
+
+async def answer_async(self, query: str, **kwargs):
+    """비동기 답변 생성 (웹/API용)"""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, self.answer, query, **kwargs)

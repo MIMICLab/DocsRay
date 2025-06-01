@@ -7,7 +7,10 @@ import tempfile
 from pathlib import Path
 import json
 import uuid
-
+import pickle
+import time
+import pathlib
+ROOT = pathlib.Path(__file__).resolve().parents[1]
 import gradio as gr
 
 from docsray.chatbot import PDFChatBot, DEFAULT_SYSTEM_PROMPT
@@ -28,58 +31,86 @@ def create_session_dir() -> Path:
     session_dir.mkdir(exist_ok=True)
     return session_dir
 
-def process_document(file_path: str, session_dir: Path) -> Tuple[list, list, str]:
+def process_document(file_path: str, session_dir: Path, progress_callback=None) -> Tuple[list, list, str]:
     """
     Process a document file and return sections, chunk index, and status message.
     Supports all file formats through auto-conversion.
     """
     try:
-        print(f"📄 Processing document: {file_path}")
+        start_time = time.time()
+        file_name = Path(file_path).name
+        
+        # Progress: Starting
+        if progress_callback:
+            progress_callback(0.1, f"📄 Starting to process: {file_name}")
         
         # Extract content (auto-converts if needed)
+        if progress_callback:
+            progress_callback(0.2, f"📖 Extracting content from {file_name}...")
+        
         extracted = pdf_extractor.extract_content(file_path)
         
         # Create chunks
-        print("✂️  Creating chunks...")
+        if progress_callback:
+            progress_callback(0.4, "✂️ Creating text chunks...")
+        
         chunks = chunker.process_extracted_file(extracted)
         
         # Build search index
-        print("🔍 Building search index...")
+        if progress_callback:
+            progress_callback(0.6, "🔍 Building search index...")
+        
         chunk_index = build_index.build_chunk_index(chunks)
         
         # Build section representations
-        print("📊 Building section representations...")
+        if progress_callback:
+            progress_callback(0.8, "📊 Building section representations...")
+        
         sections = section_rep_builder.build_section_reps(extracted["sections"], chunk_index)
         
         # Save to session cache
+        if progress_callback:
+            progress_callback(0.9, "💾 Saving to cache...")
+        
         cache_data = {
             "sections": sections,
             "chunk_index": chunk_index,
-            "filename": Path(file_path).name,
+            "filename": file_name,
             "metadata": extracted.get("metadata", {})
         }
         
-        cache_file = session_dir / f"{Path(file_path).stem}_cache.json"
-        with open(cache_file, "w", encoding="utf-8") as f:
-            json.dump(cache_data, f, ensure_ascii=False)
+        # Save with pickle for better performance
+        cache_file = session_dir / f"{Path(file_path).stem}_cache.pkl"
+        with open(cache_file, "wb") as f:
+            pickle.dump(cache_data, f)
+        
+        # Calculate processing time
+        elapsed_time = time.time() - start_time
         
         # Create status message
         was_converted = extracted.get("metadata", {}).get("was_converted", False)
         original_format = extracted.get("metadata", {}).get("original_format", "")
         
-        msg = f"✅ Successfully processed: {Path(file_path).name}\n"
+        msg = f"✅ Successfully processed: {file_name}\n"
         if was_converted:
             msg += f"🔄 Converted from {original_format.upper()} to PDF\n"
         msg += f"📑 Sections: {len(sections)}\n"
-        msg += f"🔍 Chunks: {len(chunks)}"
+        msg += f"🔍 Chunks: {len(chunks)}\n"
+        msg += f"⏱️ Processing time: {elapsed_time:.1f} seconds"
+        
+        if progress_callback:
+            progress_callback(1.0, "✅ Processing complete!")
         
         return sections, chunk_index, msg
         
     except Exception as e:
-        return None, None, f"❌ Error processing document: {str(e)}"
+        error_msg = f"❌ Error processing document: {str(e)}"
+        if progress_callback:
+            progress_callback(0.0, error_msg)
+        return None, None, error_msg
 
-def load_document(file, session_state: Dict) -> Tuple[Dict, str, gr.Update]:
-    """Load and process uploaded document"""
+def load_document(file, session_state: Dict, progress=gr.Progress()) -> Tuple[Dict, str, gr.Update]:
+    """Load and process uploaded document with progress tracking"""
     if file is None:
         return session_state, "Please upload a document", gr.update()
     
@@ -93,10 +124,16 @@ def load_document(file, session_state: Dict) -> Tuple[Dict, str, gr.Update]:
     # Copy file to session directory
     file_name = Path(file.name).name
     dest_path = session_dir / file_name
+    
+    progress(0.05, f"📁 Copying {file_name} to session...")
     shutil.copy(file.name, dest_path)
     
-    # Process document
-    sections, chunk_index, msg = process_document(str(dest_path), session_dir)
+    # Process document with progress callback
+    sections, chunk_index, msg = process_document(
+        str(dest_path), 
+        session_dir,
+        progress_callback=progress
+    )
     
     if sections is not None:
         # Store in session
@@ -111,7 +148,12 @@ def load_document(file, session_state: Dict) -> Tuple[Dict, str, gr.Update]:
         
         # Update dropdown
         choices = [doc["filename"] for doc in session_state["documents"].values()]
-        dropdown_update = gr.update(choices=choices, value=file_name, visible=True)
+        dropdown_update = gr.update(
+            choices=choices, 
+            value=file_name, 
+            visible=True,
+            label=f"Loaded Documents ({len(choices)})"
+        )
     else:
         dropdown_update = gr.update()
     
@@ -126,33 +168,53 @@ def switch_document(selected_file: str, session_state: Dict) -> Tuple[Dict, str]
     for doc_id, doc_info in session_state["documents"].items():
         if doc_info["filename"] == selected_file:
             session_state["current_doc"] = doc_id
-            return session_state, f"Switched to: {selected_file}"
+            
+            # Get document info
+            sections = doc_info["sections"]
+            chunks = doc_info["chunk_index"]
+            
+            msg = f"📄 Switched to: {selected_file}\n"
+            msg += f"📑 Sections: {len(sections)}\n"
+            msg += f"🔍 Chunks: {len(chunks)}"
+            
+            return session_state, msg
     
     return session_state, "Document not found"
 
-def ask_question(question: str, session_state: Dict, system_prompt: str, use_coarse: bool) -> Tuple[str, str]:
-    """Process a question about the current document"""
+def ask_question(question: str, session_state: Dict, system_prompt: str, use_coarse: bool, progress=gr.Progress()) -> Tuple[str, str]:
+    """Process a question about the current document with progress tracking"""
     if not question.strip():
         return "Please enter a question", ""
     
     if "current_doc" not in session_state or not session_state.get("documents"):
         return "Please upload a document first", ""
     
-    # Get current document
-    current_doc = session_state["documents"][session_state["current_doc"]]
-    sections = current_doc["sections"]
-    chunk_index = current_doc["chunk_index"]
-    
-    # Create chatbot and get answer
-    prompt = system_prompt or DEFAULT_SYSTEM_PROMPT
-    chatbot = PDFChatBot(sections, chunk_index, system_prompt=prompt)
-    
-    answer_output, reference_output = chatbot.answer(
-        question, 
-        fine_only=not use_coarse
-    )
-    
-    return answer_output, reference_output
+    try:
+        # Get current document
+        current_doc = session_state["documents"][session_state["current_doc"]]
+        sections = current_doc["sections"]
+        chunk_index = current_doc["chunk_index"]
+        
+        progress(0.2, "🤔 Thinking about your question...")
+        
+        # Create chatbot and get answer
+        prompt = system_prompt or DEFAULT_SYSTEM_PROMPT
+        chatbot = PDFChatBot(sections, chunk_index, system_prompt=prompt)
+        
+        progress(0.5, "🔍 Searching relevant sections...")
+        
+        # Get answer
+        answer_output, reference_output = chatbot.answer(
+            question, 
+            fine_only=not use_coarse
+        )
+        
+        progress(1.0, "✅ Answer ready!")
+        
+        return answer_output, reference_output
+        
+    except Exception as e:
+        return f"❌ Error: {str(e)}", ""
 
 def clear_session(session_state: Dict) -> Tuple[Dict, str, gr.Update, gr.Update, gr.Update]:
     """Clear all documents and reset session"""
@@ -167,8 +229,8 @@ def clear_session(session_state: Dict) -> Tuple[Dict, str, gr.Update, gr.Update,
     
     return (
         new_state,
-        "Session cleared",
-        gr.update(value="", visible=False),  # dropdown
+        "✅ Session cleared successfully",
+        gr.update(choices=[], value=None, visible=False),  # dropdown
         gr.update(value=""),  # answer
         gr.update(value="")   # references
     )
@@ -197,13 +259,25 @@ def get_supported_formats() -> str:
     return info
 
 # Create Gradio interface
-with gr.Blocks(title="DocsRay - Universal Document Q&A") as demo:
+with gr.Blocks(
+    title="DocsRay - Universal Document Q&A",
+    theme=gr.themes.Soft(),
+    css="""
+    .gradio-container {
+        max-width: 1200px !important;
+    }
+    #doc-dropdown {
+        background-color: #f8f9fa;
+    }
+    """
+) as demo:
     # Header
     gr.Markdown(
         """
         # 🚀 DocsRay - Universal Document Q&A System
         
         Upload any document (PDF, Word, Excel, PowerPoint, Images, etc.) and ask questions about it!
+        All processing happens in your session - no login required.
         """
     )
     
@@ -223,84 +297,108 @@ with gr.Blocks(title="DocsRay - Universal Document Q&A") as demo:
                            ".txt", ".md", ".html", ".png", ".jpg", ".jpeg"],
                 type="filepath"
             )
-            upload_btn = gr.Button("📤 Process Document", variant="primary")
+            upload_btn = gr.Button("📤 Process Document", variant="primary", size="lg")
             
             # Document selector (hidden initially)
             doc_dropdown = gr.Dropdown(
                 label="Loaded Documents",
                 choices=[],
                 visible=False,
-                interactive=True
+                interactive=True,
+                elem_id="doc-dropdown"
             )
             
-            # Status
-            status = gr.Textbox(label="Status", lines=4, interactive=False)
+            # Status with better styling
+            status = gr.Textbox(
+                label="Status", 
+                lines=5, 
+                interactive=False,
+                show_label=True
+            )
             
-            # Clear button
-            clear_btn = gr.Button("🗑️ Clear All Documents", variant="stop")
+            # Action buttons in a row
+            with gr.Row():
+                clear_btn = gr.Button("🗑️ Clear Session", variant="stop", size="sm")
+                refresh_btn = gr.Button("🔄 Refresh", variant="secondary", size="sm")
             
-            # Supported formats
-            with gr.Accordion("Supported Formats", open=False):
+            # Supported formats in accordion
+            with gr.Accordion("📋 Supported Formats", open=False):
                 gr.Markdown(get_supported_formats())
         
         # Right column - Q&A interface
         with gr.Column(scale=2):
             gr.Markdown("### 💬 Ask Questions")
             
-            # System prompt
-            with gr.Accordion("System Prompt", open=False):
-                prompt_input = gr.Textbox(
-                    label="Customize the system prompt",
-                    lines=5,
-                    value=DEFAULT_SYSTEM_PROMPT
-                )
-            
             # Question input
             question_input = gr.Textbox(
                 label="Your Question",
                 placeholder="What would you like to know about the document?",
-                lines=2
+                lines=2,
+                autofocus=True
             )
             
-            # Search options
+            # Search options in a row
             with gr.Row():
                 use_coarse = gr.Checkbox(
                     label="Use Coarse-to-Fine Search",
                     value=True,
-                    info="Enable section-based search for better accuracy"
+                    info="Recommended for better accuracy"
                 )
-                ask_btn = gr.Button("🔍 Ask Question", variant="primary")
+                ask_btn = gr.Button("🔍 Ask Question", variant="primary", size="lg")
             
-            # Results
-            answer_output = gr.Textbox(
-                label="Answer",
-                lines=10,
-                interactive=False
-            )
+            # Results in tabs
+            with gr.Tabs():
+                with gr.TabItem("💡 Answer"):
+                    answer_output = gr.Textbox(
+                        label="",
+                        lines=12,
+                        interactive=False,
+                        show_copy_button=True
+                    )
+                
+                with gr.TabItem("📚 References"):
+                    reference_output = gr.Textbox(
+                        label="",
+                        lines=10,
+                        interactive=False,
+                        show_copy_button=True
+                    )
             
-            reference_output = gr.Textbox(
-                label="References",
-                lines=6,
-                interactive=False
-            )
+            # System prompt in accordion
+            with gr.Accordion("⚙️ Advanced Settings", open=False):
+                prompt_input = gr.Textbox(
+                    label="System Prompt",
+                    lines=5,
+                    value=DEFAULT_SYSTEM_PROMPT,
+                    info="Customize how the AI responds"
+                )
     
-    # Examples
-    gr.Examples(
-        examples=[
-            ["What is the main topic of this document?"],
-            ["Summarize the key findings"],
-            ["What data or statistics are mentioned?"],
-            ["What are the conclusions or recommendations?"],
-            ["Explain the methodology used"],
-        ],
-        inputs=question_input
-    )
+    # Examples section
+    with gr.Row():
+        gr.Examples(
+            examples=[
+                ["What is the main topic of this document?"],
+                ["Summarize the key findings in bullet points"],
+                ["What data or statistics are mentioned?"],
+                ["What are the conclusions or recommendations?"],
+                ["Explain the methodology used"],
+                ["What charts or figures are in this document?"],
+                ["List all the important dates mentioned"],
+                ["What are the limitations discussed?"],
+            ],
+            inputs=question_input,
+            label="Example Questions"
+        )
     
     # Event handlers
     upload_btn.click(
         load_document,
         inputs=[file_input, session_state],
-        outputs=[session_state, status, doc_dropdown]
+        outputs=[session_state, status, doc_dropdown],
+        show_progress=True
+    ).then(
+        lambda: gr.update(value=None),
+        outputs=[file_input]
     )
     
     doc_dropdown.change(
@@ -312,13 +410,15 @@ with gr.Blocks(title="DocsRay - Universal Document Q&A") as demo:
     ask_btn.click(
         ask_question,
         inputs=[question_input, session_state, prompt_input, use_coarse],
-        outputs=[answer_output, reference_output]
+        outputs=[answer_output, reference_output],
+        show_progress=True
     )
     
     question_input.submit(
         ask_question,
         inputs=[question_input, session_state, prompt_input, use_coarse],
-        outputs=[answer_output, reference_output]
+        outputs=[answer_output, reference_output],
+        show_progress=True
     )
     
     clear_btn.click(
@@ -326,11 +426,18 @@ with gr.Blocks(title="DocsRay - Universal Document Q&A") as demo:
         inputs=[session_state],
         outputs=[session_state, status, doc_dropdown, answer_output, reference_output]
     )
+    
+    refresh_btn.click(
+        lambda s: (s, "🔄 Refreshed", gr.update()),
+        inputs=[session_state],
+        outputs=[session_state, status, doc_dropdown]
+    )
 
 def cleanup_old_sessions():
     """Clean up old session directories (called periodically)"""
     import time
     current_time = time.time()
+    cleaned = 0
     
     for session_dir in TEMP_DIR.iterdir():
         if session_dir.is_dir():
@@ -338,6 +445,10 @@ def cleanup_old_sessions():
             dir_age = current_time - session_dir.stat().st_mtime
             if dir_age > SESSION_TIMEOUT:
                 shutil.rmtree(session_dir, ignore_errors=True)
+                cleaned += 1
+    
+    if cleaned > 0:
+        print(f"🧹 Cleaned up {cleaned} old sessions")
 
 def main():
     """Entry point for docsray-web command"""
@@ -355,12 +466,14 @@ def main():
     
     print(f"🚀 Starting DocsRay Web Interface")
     print(f"📍 Local URL: http://localhost:{args.port}")
+    print(f"🌐 Network URL: http://{args.host}:{args.port}")
     
-    demo.launch(
+    demo.queue(max_size=10).launch(
         server_name=args.host,
         server_port=args.port,
         share=args.share,
-        favicon_path=None
+        favicon_path=None,
+        show_error=True
     )
 
 if __name__ == "__main__":

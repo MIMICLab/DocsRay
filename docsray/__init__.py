@@ -2,7 +2,7 @@
 DocsRay - PDF Question-Answering System with MCP Integration
 """
 
-__version__ = "0.4.0"
+__version__ = "1.0.0"
 __author__ = "Taehoon Kim"
 
 import os
@@ -82,7 +82,17 @@ for dir_path in [DOCSRAY_HOME, DATA_DIR, MODEL_DIR, CACHE_DIR]:
     dir_path.mkdir(parents=True, exist_ok=True)
 
 # Conditional imports to avoid circular dependencies
-__all__ = ["__version__", "DOCSRAY_HOME", "DATA_DIR", "MODEL_DIR", "CACHE_DIR"]
+__all__ = [
+    "__version__", 
+    "DOCSRAY_HOME", 
+    "DATA_DIR", 
+    "MODEL_DIR", 
+    "CACHE_DIR",
+    "FAST_MODE",
+    "FULL_FEATURE_MODE", 
+    "MAX_TOKENS",
+    "PDFChatBot"  # 성공적으로 import된 경우
+]
 
 try:
     from .chatbot import PDFChatBot

@@ -1,42 +1,17 @@
-FROM python:3.11-slim
-
-# Install all system dependencies
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    cmake \
-    git \
-    tesseract-ocr \
-    tesseract-ocr-kor \
-    libgl1-mesa-glx \
-    libglib2.0-0 \
-    libsm6 \
-    libxext6 \
-    libxrender-dev \
-    libgomp1 \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
-
-WORKDIR /app
-
-# Copy and install Python dependencies
+# Multi-stage build로 이미지 크기 줄이기
+FROM python:3.11-slim as builder
+# 빌드 의존성 설치
+RUN apt-get update && apt-get install -y build-essential cmake git
+# Python 패키지 설치
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the entire project
-COPY . .
-
-# Install the package
-RUN pip install --no-cache-dir -e .
-
-# Create necessary directories
-RUN mkdir -p /app/.docsray/models /app/data/mcp_data/cache /app/data/original
-
-# Download models during build (이미지에 포함)
-RUN python -m docsray.download_models || echo "Model download failed, will retry at runtime"
-
-# Set environment variables
-ENV DOCSRAY_MCP_MODE=1
-ENV DOCSRAY_HOME=/app/.docsray
-
-# Start MCP server
-CMD ["python", "-m", "docsray.mcp_server"]
+FROM python:3.11-slim
+# 런타임 의존성만 설치
+RUN apt-get update && apt-get install -y \
+    tesseract-ocr tesseract-ocr-kor \
+    libgl1-mesa-glx libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+    
+# 빌더에서 패키지 복사
+COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages

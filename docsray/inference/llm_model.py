@@ -1,7 +1,6 @@
 # src/inference/llm_model.py 
 
 import torch
-from docsray import MAX_TOKENS
 from llama_cpp import Llama
 from llama_cpp.llama_chat_format import Gemma3ChatHandler
 
