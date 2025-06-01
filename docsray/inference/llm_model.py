@@ -3,6 +3,8 @@
 import torch
 from docsray import MAX_TOKENS
 from llama_cpp import Llama
+from llama_cpp.llama_chat_format import Gemma3ChatHandler
+
 import os
 import sys
 from pathlib import Path
@@ -46,40 +48,30 @@ class LocalLLM:
         # Check if we're in MCP mode (less verbose)
         is_mcp_mode = os.getenv('DOCSRAY_MCP_MODE') == '1'
         
-        if not is_mcp_mode:
-            print(f"Loading LLM from: {model_name}", file=sys.stderr)
-            if is_multimodal:
-                print(f"Multimodal mode enabled for vision tasks", file=sys.stderr)
-        
         # Check if file exists
         if not os.path.exists(model_name):
             raise FileNotFoundError(f"Model file not found: {model_name}")
         
-        # Initialize model with appropriate settings
-        model_kwargs = {
-            "model_path": model_name,
-            "n_gpu_layers": -1,
-            "n_ctx": MAX_TOKENS,
-            "no_perf": True,
-            "logits_all": True,
-            "verbose": False,
-            "flash_attn": True,
-        }
         
         # For multimodal models, look for mmproj file
         self.mmproj_path = None
+        chat_handler = None
         if is_multimodal and "gemma" in model_name.lower():
+
             model_dir = Path(model_name).parent
-            mmproj_files = list(model_dir.glob("*mmproj*.gguf"))
-            
-            if mmproj_files:
-                self.mmproj_path = str(mmproj_files[0])
-                model_kwargs["mmproj"] = self.mmproj_path
-                print(f"Using mmproj: {self.mmproj_path}", file=sys.stderr)
-            else:
-                print("Warning: No mmproj file found, multimodal features may not work", file=sys.stderr)
+            mmproj_files = list(model_dir.glob("*mmproj*.gguf"))          
+            self.mmproj_path = str(mmproj_files[0])
+            chat_handler = Gemma3ChatHandler(clip_model_path=self.mmproj_path) 
+
         
-        self.model = Llama(**model_kwargs)
+        self.model = Llama( 
+                            model_path=model_name,
+                            n_gpu_layers= -1,
+                            n_ctx = MAX_TOKENS,
+                            verbose=False,
+                            flash_attn=True,
+                            chat_handler=chat_handler
+                            )
         self.tokenizer = LlamaTokenizer(self.model)
 
     def generate(self, prompt, image=None):
@@ -103,7 +95,6 @@ class LocalLLM:
             
             # Convert image to data URI
             image_uri = image_to_base64_data_uri(image, format="PNG")
-            
             messages = [
                 {
                     "role": "user",
@@ -120,7 +111,6 @@ class LocalLLM:
             
             # Generate response
             try:
-                print("Calling create_chat_completion with multimodal input...", file=sys.stderr)
                 response = self.model.create_chat_completion(
                     messages=messages,
                     max_tokens=output_tokens,
@@ -128,9 +118,7 @@ class LocalLLM:
                     top_p=0.95,
                     repeat_penalty=1.1
                 )
-                print(response)
                 result = response['choices'][0]['message']['content']
-                print(f"Multimodal response received: {len(result)} chars", file=sys.stderr)
                 return result.strip()
                 
             except Exception as e:
@@ -150,7 +138,7 @@ class LocalLLM:
                 formatted_prompt = f"<|im_start|>user\n{prompt}<|im_end|><|im_start|>assistant\n"
                 stop = ['<|im_end|>']
             
-            output_tokens = MAX_TOKENS if MAX_TOKENS > 0 else 4096
+            output_tokens = MAX_TOKENS if MAX_TOKENS > 0 else 8192
             
             answer = self.model(
                 formatted_prompt,
