@@ -1,6 +1,17 @@
 import os
 import torch
 import psutil
+from pathlib import Path
+
+# Paths
+DOCSRAY_HOME = Path(os.environ.get("DOCSRAY_HOME", Path.home() / ".docsray"))
+DATA_DIR = DOCSRAY_HOME / "data"
+MODEL_DIR = DOCSRAY_HOME / "models"
+CACHE_DIR = DOCSRAY_HOME / "cache"
+
+# Create directories
+for dir_path in [DOCSRAY_HOME, DATA_DIR, MODEL_DIR, CACHE_DIR]:
+    dir_path.mkdir(parents=True, exist_ok=True)
 
 def get_available_ram_gb():
     mem = psutil.virtual_memory()
