@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-# mcp_server.py - Enhanced version with document summarization
+# mcp_server.py - Enhanced version with visual analysis toggle
 
-"""Enhanced MCP Server for DocsRay PDF Question-Answering System with Directory Management and Document Summarization"""
+"""Enhanced MCP Server for DocsRay PDF Question-Answering System with Visual Analysis Control"""
 
 import asyncio
 import json
@@ -67,7 +67,7 @@ ensure_models_exist()
 os.environ['DOCSRAY_MCP_MODE'] = '1'
 
 
-from docsray.config import FAST_MODE
+from docsray.config import FAST_MODE, DISABLE_VISUAL_ANALYSIS
 
 # MCP imports
 from mcp.server import Server
@@ -97,6 +97,9 @@ current_prompt: str = DEFAULT_SYSTEM_PROMPT
 current_pdf_name: Optional[str] = None
 current_pdf_folder: Path = DEFAULT_PDF_FOLDER  # Current working directory
 current_pages_text: Optional[List[str]] = None  # Store raw page text for summarization
+
+# Visual analysis global setting
+visual_analysis_enabled: bool = not DISABLE_VISUAL_ANALYSIS and not FAST_MODE
 
 # Enhanced System Prompt for Summarization
 SUMMARIZATION_PROMPT = """You are a professional document analyst. Your task is to create a comprehensive summary of a PDF document based on its sections.
@@ -145,7 +148,12 @@ def load_config() -> Dict[str, Any]:
     try:
         if CONFIG_FILE.exists():
             with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
+                config = json.load(f)
+                # Load visual analysis setting if saved
+                if "visual_analysis_enabled" in config:
+                    global visual_analysis_enabled
+                    visual_analysis_enabled = config["visual_analysis_enabled"]
+                return config
     except Exception as e:
         print(f"Warning: Could not load config: {e}", file=sys.stderr)
     return {}
@@ -153,6 +161,8 @@ def load_config() -> Dict[str, Any]:
 def save_config(config: Dict[str, Any]) -> None:
     """Save configuration to file."""
     try:
+        # Save current visual analysis setting
+        config["visual_analysis_enabled"] = visual_analysis_enabled
         with open(CONFIG_FILE, "w", encoding="utf-8") as f:
             json.dump(config, f, ensure_ascii=False, indent=2, default=str)
     except Exception as e:
@@ -229,7 +239,37 @@ def setup_initial_directory() -> Path:
 # Initialize current directory
 current_pdf_folder = setup_initial_directory()
 
-# Directory Management functions
+# Visual Analysis Control Functions
+def set_visual_analysis(enabled: bool) -> Tuple[bool, str]:
+    """Enable or disable visual analysis globally."""
+    global visual_analysis_enabled
+    
+    if FAST_MODE and enabled:
+        return False, "❌ Visual analysis cannot be enabled in FAST_MODE"
+    
+    if DISABLE_VISUAL_ANALYSIS and enabled:
+        return False, "❌ Visual analysis is disabled by environment variable DOCSRAY_DISABLE_VISUALS"
+    
+    visual_analysis_enabled = enabled
+    
+    # Save to config
+    config = load_config()
+    config["visual_analysis_enabled"] = enabled
+    save_config(config)
+    
+    status = "enabled" if enabled else "disabled"
+    return True, f"✅ Visual analysis {status} globally"
+
+def get_visual_analysis_status() -> Dict[str, Any]:
+    """Get current visual analysis status and settings."""
+    return {
+        "enabled": visual_analysis_enabled,
+        "fast_mode": FAST_MODE,
+        "env_disabled": DISABLE_VISUAL_ANALYSIS,
+        "can_enable": not FAST_MODE and not DISABLE_VISUAL_ANALYSIS
+    }
+
+# Directory Management functions (keeping existing ones)
 def get_current_directory() -> str:
     """Get current PDF directory path."""
     return str(current_pdf_folder.absolute())
@@ -351,18 +391,26 @@ def list_documents(folder_path: Optional[str] = None) -> List[Dict[str, str]]:
     return sorted(documents, key=lambda x: x["name"])
 
 # Enhanced PDF Processing to store raw text
-def process_pdf(pdf_path: str, timeout: int = EXTRACT_TIMEOUT) -> Tuple[List, List, List[str]]:
+def process_pdf(pdf_path: str, analyze_visuals: bool = None, timeout: int = EXTRACT_TIMEOUT) -> Tuple[List, List, List[str]]:
     """Process PDF and build search index, also return raw pages text."""
     pdf_basename = Path(pdf_path).stem
+    
+    # Use global setting if not specified
+    if analyze_visuals is None:
+        analyze_visuals = visual_analysis_enabled
     
     # Check cache first
     sections, chunk_index = _load_cache(pdf_basename)
     
     # We need to extract anyway to get pages_text for summarization
     print(f"Processing PDF: {pdf_path}", file=sys.stderr)
+    if analyze_visuals:
+        print(f"👁️ Visual analysis: Enabled", file=sys.stderr)
+    else:
+        print(f"👁️ Visual analysis: Disabled", file=sys.stderr)
     
     def _do_extract():
-        return pdf_extractor.extract_pdf_content(pdf_path)
+        return pdf_extractor.extract_content(pdf_path, analyze_visuals=analyze_visuals)
     
     try:
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
@@ -783,11 +831,30 @@ async def list_tools() -> List[Tool]:
                     "folder_path": {"type": "string", "description": "Folder path (optional, uses current if not specified)"},
                     "analyze_visuals": {
                         "type": "boolean", 
-                        "description": "Whether to analyze visual content (default: true, disabled in FAST_MODE)",
-                        "default": True
+                        "description": "Whether to analyze visual content (default: uses global setting)",
+                        "default": None
                     }
                 },
                 "required": ["filename"]
+            }
+        ),
+        Tool(
+            name="set_visual_analysis",
+            description="Enable or disable visual analysis globally for all documents",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "enabled": {"type": "boolean", "description": "Enable (true) or disable (false) visual analysis"}
+                },
+                "required": ["enabled"]
+            }
+        ),
+        Tool(
+            name="get_visual_analysis_status",
+            description="Get current visual analysis settings and status",
+            inputSchema={
+                "type": "object",
+                "properties": {}
             }
         ),
         Tool(
@@ -947,7 +1014,7 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
         elif name == "load_document":
             filename = arguments["filename"]
             folder_path = arguments.get("folder_path")
-            analyze_visuals = arguments.get("analyze_visuals", True)
+            analyze_visuals = arguments.get("analyze_visuals")
             
             if folder_path:
                 file_path = Path(folder_path) / filename
@@ -968,16 +1035,20 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
                 if not file_path.exists():
                     return [TextContent(type="text", text=f"❌ Document file not found: {file_path}")]
             
-            # Process the document (auto-conversion handled by extract_content)
-            # Process the document with visual analysis option
+            # Process the document
             try:
                 from docsray.scripts import pdf_extractor
                 
-                # extract_content 호출 시 analyze_visuals 전달
+                # Use global setting if not specified
+                if analyze_visuals is None:
+                    analyze_visuals = visual_analysis_enabled
+                
+                # Extract content with visual analysis option
                 extracted = pdf_extractor.extract_content(
                     str(file_path),
                     analyze_visuals=analyze_visuals
                 )
+                
                 # Process extracted content
                 chunks = chunker.process_extracted_file(extracted)
                 chunk_index = build_index.build_chunk_index(chunks)
@@ -1001,11 +1072,7 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
                     original_format = extracted["metadata"].get("original_format", "unknown")
                     response += f"🔄 Converted from: {original_format.upper()} to PDF\n"
                 
-                if FAST_MODE:
-                    response += f"⚡ Visual analysis: Disabled (FAST_MODE)\n"
-                else:
-                    response += f"👁️ Visual analysis: {'Enabled' if analyze_visuals else 'Disabled'}\n"
-                
+                response += f"👁️ Visual analysis: {'Enabled' if analyze_visuals else 'Disabled'}\n"
                 response += f"📊 File size: {file_size:.1f} MB\n"
                 response += f"📄 Pages: {num_pages}\n"
                 response += f"📑 Sections: {num_sections}\n"
@@ -1018,6 +1085,43 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
 
             except Exception as e:
                 return [TextContent(type="text", text=f"❌ Error processing document: {str(e)}")]
+        
+        elif name == "set_visual_analysis":
+            enabled = arguments["enabled"]
+            success, message = set_visual_analysis(enabled)
+            
+            if success:
+                # Add status information
+                status = get_visual_analysis_status()
+                response = f"{message}\n\n"
+                response += f"📊 **Current Settings:**\n"
+                response += f"• Visual Analysis: {'✅ Enabled' if status['enabled'] else '❌ Disabled'}\n"
+                response += f"• Fast Mode: {'Yes' if status['fast_mode'] else 'No'}\n"
+                response += f"• Environment Override: {'Yes' if status['env_disabled'] else 'No'}\n"
+            else:
+                response = message
+            
+            return [TextContent(type="text", text=response)]
+        
+        elif name == "get_visual_analysis_status":
+            status = get_visual_analysis_status()
+            
+            response = f"👁️ **Visual Analysis Status:**\n\n"
+            response += f"• **Currently:** {'✅ Enabled' if status['enabled'] else '❌ Disabled'}\n"
+            response += f"• **Fast Mode:** {'Yes (forced off)' if status['fast_mode'] else 'No'}\n"
+            response += f"• **Environment Variable:** {'DOCSRAY_DISABLE_VISUALS=1 (forced off)' if status['env_disabled'] else 'Not set'}\n"
+            response += f"• **Can Enable:** {'Yes' if status['can_enable'] else 'No'}\n\n"
+            
+            if not status['can_enable']:
+                response += "⚠️ **Note:** Visual analysis cannot be enabled due to:\n"
+                if status['fast_mode']:
+                    response += "• System is in FAST_MODE (insufficient resources)\n"
+                if status['env_disabled']:
+                    response += "• DOCSRAY_DISABLE_VISUALS environment variable is set\n"
+            else:
+                response += "💡 **Tip:** Use 'set_visual_analysis' to toggle this setting."
+            
+            return [TextContent(type="text", text=response)]
              
         elif name == "reset_initial_setup":
             # Reset config and run initial setup again
@@ -1227,12 +1331,13 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
 
 async def run_mcp_server():
     """Run the MCP server (async version)."""
-    print(f"Starting DocsRay MCP Server (Enhanced with Directory Management and Summarization)...", file=sys.stderr)
+    print(f"Starting DocsRay MCP Server (Enhanced with Visual Analysis Control)...", file=sys.stderr)
     print(f"Default PDF Folder: {DEFAULT_PDF_FOLDER}", file=sys.stderr)
     print(f"Current PDF Folder: {current_pdf_folder}", file=sys.stderr)
     print(f"Cache Directory: {CACHE_DIR}", file=sys.stderr)
     print(f"Config File: {CONFIG_FILE}", file=sys.stderr)
     print(f"Fast Mode: {'Enabled' if FAST_MODE else 'Disabled'}", file=sys.stderr)
+    print(f"Visual Analysis: {'Enabled' if visual_analysis_enabled else 'Disabled'}", file=sys.stderr)
     
     # Show available PDFs on startup
     pdf_list = get_pdf_list()
