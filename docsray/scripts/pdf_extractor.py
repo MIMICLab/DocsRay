@@ -77,8 +77,7 @@ Please describe:
 4. Key insights or patterns shown
 
 Provide a clear, concise description that would help someone understand the content without seeing the image.
-
-Description:"""
+"""
 
     try:
         # Use the large model for better image understanding
@@ -108,8 +107,7 @@ def ocr_with_llm(image: Image.Image, page_num: int) -> str:
 - Text in different languages if present
 
 Output only the extracted text, no descriptions or explanations.
-
-Extracted text:"""
+"""
 
     try:
         response = local_llm_large.generate(prompt, image=image)

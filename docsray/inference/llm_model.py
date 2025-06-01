@@ -24,6 +24,14 @@ class LlamaTokenizer:
     def decode(self, ids):
         return self._llama.detokenize(ids).decode("utf-8", errors="ignore")
 
+def image_to_base64_data_uri(image: Image.Image, format: str = "JPEG", quality: int = 85) -> str:
+    """Convert PIL Image to base64 data URI."""
+    buffered = io.BytesIO()
+    image.save(buffered, format=format, quality=quality, optimize=True)
+    img_base64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
+    mime_type = f"image/{format.lower()}"
+    return f'data:{mime_type};base64,{img_base64}'
+    
 class LocalLLM:
     def __init__(self, model_name="google/gemma-3-1b-it", device="gpu", is_multimodal=False):
         self.device = device
@@ -53,16 +61,23 @@ class LocalLLM:
             "n_gpu_layers": -1,
             "n_ctx": MAX_TOKENS,
             "no_perf": True,
-            "logits_all": False,
-            "verbose": False
+            "logits_all": True,
+            "verbose": False,
+            "flash_attn": True,
         }
         
-        # For multimodal Gemma models, we need special handling
-        if is_multimodal and "gemma" in model_name.lower() and "4b" in model_name.lower():
-            # Gemma-3-4B multimodal uses a specific chat handler
-            # Note: This assumes the model has vision capabilities built-in
-            model_kwargs["chat_handler"] = None  # Will handle formatting ourselves
-            model_kwargs["clip_model_path"] = None  # Gemma has integrated vision
+        # For multimodal models, look for mmproj file
+        self.mmproj_path = None
+        if is_multimodal and "gemma" in model_name.lower():
+            model_dir = Path(model_name).parent
+            mmproj_files = list(model_dir.glob("*mmproj*.gguf"))
+            
+            if mmproj_files:
+                self.mmproj_path = str(mmproj_files[0])
+                model_kwargs["mmproj"] = self.mmproj_path
+                print(f"Using mmproj: {self.mmproj_path}", file=sys.stderr)
+            else:
+                print("Warning: No mmproj file found, multimodal features may not work", file=sys.stderr)
         
         self.model = Llama(**model_kwargs)
         self.tokenizer = LlamaTokenizer(self.model)
@@ -75,156 +90,92 @@ class LocalLLM:
             prompt: Text prompt
             image: PIL Image object (optional)
         """
-        # Format prompt based on model type
-        if "gemma" in self.model.model_path.lower():
-            if image is not None and self.is_multimodal:
-                # Determine max image size based on context window
-                if FULL_FEATURE_MODE and MAX_TOKENS == 0:
-                    # Full context window available - use maximum quality
-                    max_size = (896, 896)
-                    jpeg_quality = 90
-                    fallback_size = (672, 672)
-                elif MAX_TOKENS >= 32768:
-                    # Large context window
-                    max_size = (672, 672)
-                    jpeg_quality = 85
-                    fallback_size = (448, 448)
-                elif MAX_TOKENS >= 16384:
-                    # Limited context window - be more conservative
-                    max_size = (336, 336)  # Start smaller
-                    jpeg_quality = 75
-                    fallback_size = (224, 224)
-                else:
-                    # Very limited context
-                    max_size = (224, 224)
-                    jpeg_quality = 70
-                    fallback_size = (168, 168)
+        if image is not None and self.is_multimodal and self.mmproj_path:
+            # Use chat completion API for multimodal input
+            
+            # Convert to RGB if necessary
+            if image.mode in ('RGBA', 'LA'):
+                rgb_image = Image.new('RGB', image.size, (255, 255, 255))
+                rgb_image.paste(image, mask=image.split()[-1] if image.mode == 'RGBA' else None)
+                image = rgb_image
+            elif image.mode != 'RGB':
+                image = image.convert('RGB')
+            
+            # Convert image to data URI
+            image_uri = image_to_base64_data_uri(image, format="PNG")
+            
+            messages = [
+                {
+                    "role": "user",
+                    "content": [
+                                {'type': 'text', 'text': prompt},
+                                {'type': 'image_url', 'image_url': image_uri},
+                    ]
+                }
+            ]
+            
+            # Calculate max tokens for output
+            available_tokens = MAX_TOKENS if MAX_TOKENS > 0 else 131072
+            output_tokens = min(8192, available_tokens // 4)
+            
+            # Generate response
+            try:
+                print("Calling create_chat_completion with multimodal input...", file=sys.stderr)
+                response = self.model.create_chat_completion(
+                    messages=messages,
+                    max_tokens=output_tokens,
+                    temperature=0.7,
+                    top_p=0.95,
+                    repeat_penalty=1.1
+                )
+                print(response)
+                result = response['choices'][0]['message']['content']
+                print(f"Multimodal response received: {len(result)} chars", file=sys.stderr)
+                return result.strip()
                 
-                # Calculate new size maintaining aspect ratio
-                if image.width > max_size[0] or image.height > max_size[1]:
-                    image.thumbnail(max_size, Image.Resampling.LANCZOS)
-                
-                # Convert to RGB if necessary (remove alpha channel)
-                if image.mode in ('RGBA', 'LA'):
-                    rgb_image = Image.new('RGB', image.size, (255, 255, 255))
-                    rgb_image.paste(image, mask=image.split()[-1] if image.mode == 'RGBA' else None)
-                    image = rgb_image
-                elif image.mode != 'RGB':
-                    image = image.convert('RGB')
-                
-                # First attempt with current size
-                buffered = io.BytesIO()
-                image.save(buffered, format="JPEG", quality=jpeg_quality, optimize=True)
-                img_base64 = base64.b64encode(buffered.getvalue()).decode()
-                
-                # More accurate token estimation for base64 encoded images
-                # Base64 increases size by ~33%, and each token is ~4 chars
-                # Plus Gemma template overhead
-                template_overhead = 150  # Increased overhead estimate
-                estimated_tokens = (len(img_base64) // 3) + (len(prompt) // 4) + template_overhead
-                available_tokens = MAX_TOKENS if MAX_TOKENS > 0 else 32768
-                
-                # For 16384 context, be extra conservative
-                if MAX_TOKENS == 16384:
-                    target_usage = 0.4  # Only use 40% for prompt+image
-                else:
-                    target_usage = 0.6  # Use 60% for larger contexts
-                
-                if estimated_tokens > available_tokens * target_usage:
-                    # Reduce size more aggressively
-                    image.thumbnail(fallback_size, Image.Resampling.LANCZOS)
-                    buffered = io.BytesIO()
-                    image.save(buffered, format="JPEG", quality=jpeg_quality-10, optimize=True)
-                    img_base64 = base64.b64encode(buffered.getvalue()).decode()
-                    
-                    # Check again
-                    estimated_tokens = (len(img_base64) // 3) + (len(prompt) // 4) + template_overhead
-                    if estimated_tokens > available_tokens * target_usage:
-                        # Final attempt with very small size
-                        final_size = (168, 168) if MAX_TOKENS >= 16384 else (112, 112)
-                        image.thumbnail(final_size, Image.Resampling.LANCZOS)
-                        buffered = io.BytesIO()
-                        image.save(buffered, format="JPEG", quality=65, optimize=True)
-                        img_base64 = base64.b64encode(buffered.getvalue()).decode()
-                        
-                        # Log the final size for debugging
-                        final_tokens = (len(img_base64) // 3) + (len(prompt) // 4) + template_overhead
-                        print(f"Image resized to {image.size}, estimated tokens: {final_tokens}/{available_tokens}", file=sys.stderr)
-                
-                # Gemma-3 multimodal format with proper template
-                formatted_prompt = f"<start_of_turn>user\n{prompt}\n<start_of_image>\n<img src=\"data:image/jpeg;base64,{img_base64}\"><end_of_turn>\n<start_of_turn>model\n"
-            else:
-                # Standard Gemma text-only format
-                formatted_prompt = f"<start_of_turn>user\n{prompt}<end_of_turn>\n<start_of_turn>model\n"
-            stop = ['<end_of_turn>']
+            except Exception as e:
+                print(f"Error in multimodal generation: {e}", file=sys.stderr)
+                import traceback
+                traceback.print_exc()
+                # Fallback to text-only
+                print("Falling back to text-only generation", file=sys.stderr)
+                return self.generate(prompt, image=None)
+        
         else:
-            # Other models (e.g., LLaMA format)
-            if image is not None and self.is_multimodal:
-                # Use same conservative approach for other models
-                if MAX_TOKENS >= 32768:
-                    max_size = (448, 448)
-                    jpeg_quality = 80
-                elif MAX_TOKENS >= 16384:
-                    max_size = (336, 336)
-                    jpeg_quality = 75
-                else:
-                    max_size = (224, 224)
-                    jpeg_quality = 70
-                
-                image.thumbnail(max_size, Image.Resampling.LANCZOS)
-                
-                if image.mode in ('RGBA', 'LA'):
-                    rgb_image = Image.new('RGB', image.size, (255, 255, 255))
-                    rgb_image.paste(image, mask=image.split()[-1] if image.mode == 'RGBA' else None)
-                    image = rgb_image
-                elif image.mode != 'RGB':
-                    image = image.convert('RGB')
-                
-                buffered = io.BytesIO()
-                image.save(buffered, format="JPEG", quality=jpeg_quality, optimize=True)
-                img_base64 = base64.b64encode(buffered.getvalue()).decode()
-                
-                formatted_prompt = f"<|im_start|>user\n<image>{img_base64}</image>\n{prompt}<|im_end|><|im_start|>assistant\n"
+            # Text-only generation
+            if "gemma" in self.model.model_path.lower():
+                formatted_prompt = f"<start_of_turn>user\n{prompt}<end_of_turn>\n<start_of_turn>model\n"
+                stop = ['<end_of_turn>']
             else:
                 formatted_prompt = f"<|im_start|>user\n{prompt}<|im_end|><|im_start|>assistant\n"
-            stop = ['<|im_end|>']
-        
-        # Generate response
-        # Adjust max output tokens based on how much context we used
-        if image is not None:
-            # Very conservative output tokens for image inputs
-            if MAX_TOKENS == 16384:
-                output_tokens = 1024  # Very limited
-            elif MAX_TOKENS > 0:
-                output_tokens = min(2048, int(MAX_TOKENS * 0.25))
-            else:
-                output_tokens = 2048
-        else:
+                stop = ['<|im_end|>']
+            
             output_tokens = MAX_TOKENS if MAX_TOKENS > 0 else 4096
             
-        answer = self.model(
-            formatted_prompt,
-            max_tokens=output_tokens,
-            stop=stop,
-            echo=True,  # Include the prompt in the response
-            temperature=0.7,
-            top_p=0.95,
-            repeat_penalty=1.1,
-        )
-        
-        result = answer['choices'][0]['text']
-        print(result, file=sys.stderr)  # Log the full response for debugging
-        return result.strip()
+            answer = self.model(
+                formatted_prompt,
+                max_tokens=output_tokens,
+                stop=stop,
+                echo=True,
+                temperature=0.7,
+                top_p=0.95,
+                repeat_penalty=1.1,
+            )
+            
+            result = answer['choices'][0]['text']
+
+            return result.strip()
     
     def strip_response(self, response):
         """Extract the model's response from the full generated text."""
+        if not response:
+            return response
+            
         if "gemma" in self.model.model_path.lower():
-            # Handle both with and without image tags
             if '<start_of_turn>model' in response:
                 response = response.split('<start_of_turn>model')[-1]
             if '<end_of_turn>' in response:
                 response = response.split('<end_of_turn>')[0]
-            # Also remove any trailing newlines from the formatted response
             return response.strip().lstrip('\n')
         else:
             if '<|im_start|>assistant' in response:

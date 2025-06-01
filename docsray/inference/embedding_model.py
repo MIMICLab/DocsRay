@@ -53,6 +53,7 @@ class EmbeddingModel:
             n_ctx=0,
             logits_all=False,
             embedding=True,
+            flash_attn= True,
             verbose=False
         )
         self.model_2 = Llama(

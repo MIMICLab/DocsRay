@@ -20,6 +20,7 @@ def show_progress(block_num, block_size, total_size):
 def download_models():
     """Download required models to user's home directory"""
     
+
     models = [
         {
             "dir": MODEL_DIR / "bge-m3-gguf",
@@ -34,12 +35,17 @@ def download_models():
         {
             "dir": MODEL_DIR / "gemma-3-1b-it-GGUF",
             "file": "gemma-3-1b-it-Q8_0.gguf",
-            "url": "https://huggingface.co/unsloth/gemma-3-1b-it-GGUF/resolve/main/gemma-3-1b-it-Q8_0.gguf"
+            "url": "https://huggingface.co/ggml-org/gemma-3-1b-it-GGUF/resolve/main/gemma-3-1b-it-Q8_0.gguf"
         },
         {
             "dir": MODEL_DIR / "gemma-3-4b-it-GGUF",
             "file": "gemma-3-4b-it-Q8_0.gguf",
-            "url": "https://huggingface.co/unsloth/gemma-3-1b-it-GGUF/resolve/main/gemma-3-4b-it-Q8_0.gguf"
+            "url": "https://huggingface.co/ggml-org/gemma-3-4b-it-GGUF/resolve/main/gemma-3-4b-it-Q8_0.gguf"
+        },
+        {
+            "dir": MODEL_DIR / "gemma-3-4b-it-GGUF",
+            "file": "mmproj-gemma-3-4b-it-f16.gguf",
+            "url": "https://huggingface.co/ggml-org/gemma-3-4b-it-GGUF/resolve/main/mmproj-model-f16.gguf"
         }
     ]
     
