@@ -27,12 +27,6 @@ CMAKE_ARGS=-DLLAMA_METAL=on FORCE_CMAKE=1 pip install git+https://github.com/kos
 # For CUDA (NVIDIA)
 CMAKE_ARGS=-DGGML_CUDA=on FORCE_CMAKE=1 pip install git+https://github.com/kossum/llama-cpp-python.git@main --force-reinstall --upgrade --no-cache-dir
 
-# 1-2. Tesseract OCR (For visual analysis)
-sudo apt-get install tesseract-ocr   # Debian/Ubuntu
-sudo apt-get install tesseract-ocr-kor
-brew install tesseract-ocr   # MacOS
-brew install tesseract-ocr-kor
-
 # 2. Download required models (approximately 8GB)
 docsray download-models
 
@@ -58,7 +52,7 @@ docsray web  # Launch Web UI
 - **Universal Document Support**: Automatically converts 30+ file formats to PDF for processing
 - **Smart File Conversion**: Handles Office documents, images, HTML, Markdown, and more
 
-## 🎯 What's New in v1.2.2
+## 🎯 What's New in v1.2.5
 ### Universal Document Support
 DocsRay now automatically converts various document formats to PDF for processing:
 
@@ -107,49 +101,29 @@ docsray process /path/to/image.png
 ```
 
 ### Hybrid OCR System
-DocsRay now features an intelligent hybrid OCR system that automatically selects the optimal OCR method based on your system resources:
+DocsRay now features an intelligent AI-OCR powered by Gemma3-4b.
+You can also choose to use traditional Tesseract OCR simply by installing:
+```bash
+sudo apt-get install tesseract-ocr   # Debian/Ubuntu
+sudo apt-get install tesseract-ocr-kor
+brew install tesseract-ocr   # MacOS
+brew install tesseract-ocr-kor
+```
 
-- **FULL_FEATURE_MODE (RAM > 32GB)**: AI-powered OCR using Gemma-3-4B model
-  - Accurately recognizes complex layouts and multilingual text
-  - Understands context when extracting text from tables, charts, and diagrams
-  - Significantly improves text quality from scanned PDFs
-
-- **Standard Mode (RAM 8-32GB)**: Traditional Pytesseract-based OCR
-  - Stable and fast text extraction
-  - Multi-language support (including Korean)
-  - Recognizes figures and tables
-- **FAST_MODE (RAM < 8GB)**: OCR disabled
-  - Memory efficiency prioritized
-  - Recognizes figures and tables
-    
 ### Adaptive Performance Optimization
 Automatically detects system resources and optimizes performance:
 
-```python
-# Automatic resource detection and mode configuration
-if available_ram >= 32GB:
-    FULL_FEATURE_MODE = True  # All features enabled
-elif available_ram < 16GB:
-    FAST_MODE = True  # Lightweight mode
-else:
-    # Standard mode (balanced performance)
-```
+| System Memory |    Mode   | OCR | Visual Analysis | Max Tokens |
+|--------------|------------|--------------|--------------|------------|
+| < 8GB | FAST_MODE(Q4) | ✅ | ✅ |16K |
+| 8-16GB | FAST_MODE (Q4) | ✅ | ✅ | 32K |
+| 16-24GB | STANDARD (Q8) | ✅ | ✅ | 32K |
+| > 24GB | FULL_FEATURE (F16) | ✅ | ✅  | 32K |
 
 ### Enhanced MCP Commands
 - **Cache Management**: `clear_all_cache`, `get_cache_info`
 - **Improved Summarization**: Batch processing with section-by-section caching
-- **Detail Levels**: Adjustable summary detail (brief/standard/detailed)
-
-## 📊 Performance Optimization Guide
-
-### Recommended Settings by Memory
-
-| System Memory |    Mode   | OCR | Visual Analysis | Max Tokens |
-|--------------|------------|--------------|--------------|------------|
-| < 8GB | FAST_MODE(Q4) | ✅ (Pytesseract) | ✅ |16K |
-| 8-16GB | FAST_MODE (Q4) | ✅ (Pytesseract) | ✅ | 32K |
-| 16-32GB | STANDARD (Q8) | ✅ (Pytesseract) | ✅ | 32K |
-| > 32GB | FULL_FEATURE (Q8) | ✅ (AI OCR) | ✅  | 128K |
+- **Detail Levels**: Adjustable summary detail (brief/standard/detailed
 
 ## 📁 Project Structure
 

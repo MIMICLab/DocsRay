@@ -14,11 +14,12 @@ from PIL import Image
 import pandas as pd
 import numpy as np
 from sklearn.cluster import KMeans
-import pytesseract
-
 
 # Import FAST_MODE to determine if we can use image recognition
-from docsray.config import FAST_MODE, MAX_TOKENS, FULL_FEATURE_MODE
+from docsray.config import FAST_MODE, MAX_TOKENS, FULL_FEATURE_MODE, USE_TESSERACT
+
+if USE_TESSERACT:
+    import pytesseract
 
 # LLM for outline generation and image analysis
 from docsray.inference.llm_model import local_llm, local_llm_large
@@ -339,11 +340,12 @@ def ocr_page_with_llm(page, dpi: int = 350) -> str:
     pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom), alpha=False)
     img = Image.open(io.BytesIO(pix.pil_tobytes(format="PNG")))
     
-    if FULL_FEATURE_MODE:
-        text = ocr_with_llm(img, page.number)
-    else:
+    if USE_TESSERACT:
         text = pytesseract.image_to_string(img)
-        
+    else:
+        text = ocr_with_llm(img, page.number)         
+     
+
     return text.strip()
       
     

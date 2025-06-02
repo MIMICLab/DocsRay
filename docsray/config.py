@@ -9,6 +9,14 @@ DATA_DIR = DOCSRAY_HOME / "data"
 MODEL_DIR = DOCSRAY_HOME / "models"
 CACHE_DIR = DOCSRAY_HOME / "cache"
 
+
+try:
+    import pytesseract
+    USE_TESSERACT =True
+except:
+    print("Pytesseract not installed. Using gemma3 for OCR")
+    USE_TESSERACT = False
+    
 # Create directories
 for dir_path in [DOCSRAY_HOME, DATA_DIR, MODEL_DIR, CACHE_DIR]:
     dir_path.mkdir(parents=True, exist_ok=True)
@@ -54,19 +62,19 @@ FAST_MODE = False
 MAX_TOKENS = 32768
 STANDARD_MODE = False
 FULL_FEATURE_MODE = False
-min_available_gb = 4
+min_available_gb = 8
 
 if not has_gpu:
     FAST_MODE = True
-    MAX_TOKENS = MAX_TOKENS // 4
+    MAX_TOKENS = MAX_TOKENS // 2
 else:
-    if available_gb < min_available_gb * 2:
-        FAST_MODE = True
-        MAX_TOKENS = MAX_TOKENS // 4
-    elif available_gb < min_available_gb * 4:
+    if available_gb < min_available_gb:
         FAST_MODE = True
         MAX_TOKENS = MAX_TOKENS // 2
-    elif available_gb < min_available_gb * 8:
+    elif available_gb < min_available_gb * 2:
+        FAST_MODE = True
+        MAX_TOKENS = MAX_TOKENS 
+    elif available_gb < min_available_gb * 3:
         STANDARD_MODE = True
     else:
         FULL_FEATURE_MODE = True

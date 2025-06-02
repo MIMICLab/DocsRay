@@ -31,7 +31,6 @@ scikit-learn
 gradio
 opencv-python
 psutil
-pytesseract
 
 # ===== NEW: File Conversion Dependencies =====
 
