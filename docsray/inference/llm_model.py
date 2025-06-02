@@ -132,10 +132,13 @@ class LocalLLM:
             # Calculate max tokens for output
             available_tokens = MAX_TOKENS if MAX_TOKENS > 0 else 131072   
 
+            output_tokens = available_tokens // 4
+            
             # Generate response
             try:
                 response = self.model.create_chat_completion(
                     messages=messages,
+                    max_tokens=output_tokens,
                     stop = ['<end_of_turn>'],
                     temperature=0.7,
                     top_p=0.95,
