@@ -29,15 +29,15 @@ def download_models():
         model_path = model["dir"] / model["file"]    
         print(f"\n[{i}/{len(models)}] Checking {model['file']}...")
         if FAST_MODE:
-            if model["file"] not in FAST_MODELS:
+            if model not in FAST_MODELS:
                 print(f"Skipping {model['file']} for FAST_MODE")
                 continue
         elif STANDARD_MODE:
-            if model["file"] not in STANDARD_MODELS:
+            if model not in STANDARD_MODELS:
                 print(f"Skipping {model['file']} for STANDARD_MODE")
                 continue
         else:
-            if model["file"] not in FULL_FEATURE_MODELS:
+            if model not in FULL_FEATURE_MODELS:
                 print(f"Skipping {model['file']} for FULL_FEATURE_MODE")
                 continue
 
