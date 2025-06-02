@@ -132,11 +132,11 @@ class LocalLLM:
             # Calculate max tokens for output
             available_tokens = MAX_TOKENS if MAX_TOKENS > 0 else 131072
             if FAST_MODE:
-                min_tokens = 2048
+                min_tokens = 1024
             elif FULL_FEATURE_MODE:
-                min_tokens = 8192
+                min_tokens = 4096
             else:
-                min_tokens = 4096    
+                min_tokens = 2048    
 
             output_tokens = min(min_tokens, available_tokens // 4)
             
