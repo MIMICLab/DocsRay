@@ -27,6 +27,15 @@ CMAKE_ARGS=-DLLAMA_METAL=on FORCE_CMAKE=1 pip install git+https://github.com/kos
 # For CUDA (NVIDIA)
 CMAKE_ARGS=-DGGML_CUDA=on FORCE_CMAKE=1 pip install git+https://github.com/kossum/llama-cpp-python.git@main --force-reinstall --upgrade --no-cache-dir
 
+# 1-2. Tesseract OCR
+# For faster OCR, install Tesseract with appropriate language pack.
+
+pip install pytesseract
+sudo apt-get install tesseract-ocr   # Debian/Ubuntu
+sudo apt-get install tesseract-ocr-kor
+brew install tesseract-ocr   # MacOS
+brew install tesseract-ocr-kor
+
 # 2. Download required models (approximately 8GB)
 docsray download-models
 
@@ -101,8 +110,9 @@ docsray process /path/to/image.png
 ```
 
 ### Hybrid OCR System
-DocsRay now features an intelligent AI-OCR powered by Gemma3-4b.
-You can also choose to use traditional Tesseract OCR simply by installing:
+DocsRay now features an AI-OCR powered by Gemma3-4b.
+You can also choose to use Tesseract OCR simply by installing:
+
 ```bash
 sudo apt-get install tesseract-ocr   # Debian/Ubuntu
 sudo apt-get install tesseract-ocr-kor

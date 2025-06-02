@@ -132,7 +132,8 @@ class LocalLLM:
                 messages=messages,
                 stop = ['<end_of_turn>'],
                 max_tokens=MAX_TOKENS//8,
-                temperature=0.7,
+                temperature=1.0,
+                top_k=64,
                 top_p=0.95,
                 repeat_penalty=1.1
             )
@@ -147,9 +148,10 @@ class LocalLLM:
             answer = self.model(
                 formatted_prompt,
                 stop=['<end_of_turn>'],
-                max_tokens=0,
+                max_tokens=MAX_TOKENS,
                 echo=True,
-                temperature=0.7,
+                temperature=1.0,
+                top_k=64,
                 top_p=0.95,
                 repeat_penalty=1.1,
             )
