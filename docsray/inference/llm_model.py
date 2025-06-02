@@ -105,17 +105,17 @@ class LocalLLM:
             elif image.mode != 'RGB':
                 image = image.convert('RGB')
 
-            #if FULL_FEATURE_MODE:
-            #    w, h = image.size
-            #    if w < h:
-            #        new_w = 896
-            #        new_h = int(h * (896 / w))
-            #    else:
-            #        new_h = 896
-            #        new_w = int(w * (896 / h))
-            #    resized = image.resize((new_w, new_h), Image.LANCZOS)
-            #else:
-            resized = image.resize((896, 896), Image.LANCZOS)
+            if FULL_FEATURE_MODE:
+                w, h = image.size
+                if w < h:
+                    new_w = 896
+                    new_h = int(h * (896 / w))
+                else:
+                    new_h = 896
+                    new_w = int(w * (896 / h))
+                resized = image.resize((new_w, new_h), Image.LANCZOS)
+            else:
+                resized = image.resize((896, 896), Image.LANCZOS)
 
             # Convert image to data URI
             image_uri = image_to_base64_data_uri(resized, format="PNG")
@@ -130,21 +130,12 @@ class LocalLLM:
             ]
             
             # Calculate max tokens for output
-            available_tokens = MAX_TOKENS if MAX_TOKENS > 0 else 131072
-            if FAST_MODE:
-                min_tokens = 1024
-            elif FULL_FEATURE_MODE:
-                min_tokens = 4096
-            else:
-                min_tokens = 2048    
+            available_tokens = MAX_TOKENS if MAX_TOKENS > 0 else 131072   
 
-            output_tokens = min(min_tokens, available_tokens // 4)
-            
             # Generate response
             try:
                 response = self.model.create_chat_completion(
                     messages=messages,
-                    max_tokens=output_tokens,
                     stop = ['<end_of_turn>'],
                     temperature=0.7,
                     top_p=0.95,
@@ -154,6 +145,7 @@ class LocalLLM:
                 return result.strip()
 
             except Exception as e:
+
                 return "Error generating multimodal response."
 
         
