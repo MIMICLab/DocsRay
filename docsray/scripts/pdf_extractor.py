@@ -135,15 +135,11 @@ def analyze_image_with_llm(image: Image.Image, page_num: int, img_idx: int) -> s
     """
     
     # Prepare multimodal prompt
-    prompt = prompt = f"""In 2-3 sentences, describe this page {page_num + 1} visual: what it shows and its main message."""
-    try:
-        # Use the large model for better image understanding
-        response = local_llm_large.generate(prompt, image=image)
-        description = local_llm_large.strip_response(response)
-        return f"[Figure {img_idx + 1} on page {page_num + 1}]: {description}"
-    except Exception as e:
-        print(f"Error analyzing image with LLM: {e}", file=sys.stderr)
-        return f"[Figure {img_idx + 1} on page {page_num + 1}]: Unable to analyze image"
+    prompt = f"""Describe visual in 1-2 sentences. Start directly with the content description."""
+    # Use the large model for better image understanding
+    response = local_llm_large.generate(prompt, image=image)
+    description = local_llm_large.strip_response(response)
+    return f"[Figure {img_idx + 1} on page {page_num + 1}]: {description}\n\n"
 
 def ocr_with_llm(image: Image.Image, page_num: int) -> str:
     """
@@ -151,13 +147,11 @@ def ocr_with_llm(image: Image.Image, page_num: int) -> str:
     """
     
     # OCR-specific prompt
-    prompt = """Transcribe all text from this image verbatim. 
-Include every word, number, and label you can see.
-Maintain original formatting with line breaks."""
+    prompt = """Extract text from this image and present it as readable paragraphs. Start directly with the content."""
 
     response = local_llm_large.generate(prompt, image=image)
     extracted_text = local_llm_large.strip_response(response)
-    return extracted_text.strip()
+    return extracted_text.strip()+'\n\n'
 
 def analyze_visual_content(page, page_num: int) -> str:
     """
