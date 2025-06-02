@@ -154,7 +154,8 @@ class LocalLLM:
                 return result.strip()
 
             except Exception as e:
-                return "FAILED to process multimodal input"
+                self.generate(prompt)  # Fallback to text-only generation on error
+                return "Error generating multimodal response."
 
         
         else:
