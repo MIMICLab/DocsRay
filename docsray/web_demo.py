@@ -41,80 +41,76 @@ def process_document(file_path: str, session_dir: Path, analyze_visuals: bool = 
         session_dir: Session directory for caching
         progress_callback: Optional progress callback function
     """
-    try:
-        start_time = time.time()
-        file_name = Path(file_path).name
-        
-        # Progress: Starting
-        if progress_callback is not None:
-            progress_callback(0.1, f"📄 Starting to process: {file_name}")
-        
-        # Extract content with visual analysis option
-        if progress_callback is not None:
-            status_msg = f"📖 Extracting content from {file_name}..."
-            if analyze_visuals:
-                status_msg += " (with visual analysis)"
-            progress_callback(0.2, status_msg)
-        
-        extracted = pdf_extractor.extract_content(
-            file_path,
-            analyze_visuals=analyze_visuals  
-        )
-        # Create chunks
-        if progress_callback is not None:
-            progress_callback(0.4, "✂️ Creating text chunks...")
-        
-        chunks = chunker.process_extracted_file(extracted)
-        
-        # Build search index
-        if progress_callback is not None:
-            progress_callback(0.6, "🔍 Building search index...")
-        
-        chunk_index = build_index.build_chunk_index(chunks)
-        
-        # Build section representations
-        if progress_callback is not None:
-            progress_callback(0.8, "📊 Building section representations...")
-        
-        sections = section_rep_builder.build_section_reps(extracted["sections"], chunk_index)
-        
-        # Save to session cache
-        if progress_callback is not None:
-            progress_callback(0.9, "💾 Saving to cache...")
-        
-        cache_data = {
-            "sections": sections,
-            "chunk_index": chunk_index,
-            "filename": file_name,
-            "metadata": extracted.get("metadata", {})
-        }
-        
-        # Save with pickle for better performance
-        cache_file = session_dir / f"{Path(file_path).stem}_cache.pkl"
-        with open(cache_file, "wb") as f:
-            pickle.dump(cache_data, f)
-        
-        # Calculate processing time
-        elapsed_time = time.time() - start_time
-        
-        # Create status message
-        was_converted = extracted.get("metadata", {}).get("was_converted", False)
-        original_format = extracted.get("metadata", {}).get("original_format", "")
-        
-        msg = f"✅ Successfully processed: {file_name}\n"
-        if was_converted:
-            msg += f"🔄 Converted from {original_format.upper()} to PDF\n"
-        msg += f"📑 Sections: {len(sections)}\n"
-        msg += f"🔍 Chunks: {len(chunks)}\n"
-        msg += f"⏱️ Processing time: {elapsed_time:.1f} seconds"
-        
-        if progress_callback is not None:
-            progress_callback(1.0, "✅ Processing complete!")
-        
-        return sections, chunk_index, msg
-    except Exception as e:
-        error_msg = f"❌ Error processing document: {str(e)}"
-        return None, None, error_msg
+    start_time = time.time()
+    file_name = Path(file_path).name
+    
+    # Progress: Starting
+    if progress_callback is not None:
+        progress_callback(0.1, f"📄 Starting to process: {file_name}")
+    
+    # Extract content with visual analysis option
+    if progress_callback is not None:
+        status_msg = f"📖 Extracting content from {file_name}..."
+        if analyze_visuals:
+            status_msg += " (with visual analysis)"
+        progress_callback(0.2, status_msg)
+    
+    extracted = pdf_extractor.extract_content(
+        file_path,
+        analyze_visuals=analyze_visuals  
+    )
+    # Create chunks
+    if progress_callback is not None:
+        progress_callback(0.4, "✂️ Creating text chunks...")
+    
+    chunks = chunker.process_extracted_file(extracted)
+    
+    # Build search index
+    if progress_callback is not None:
+        progress_callback(0.6, "🔍 Building search index...")
+    
+    chunk_index = build_index.build_chunk_index(chunks)
+    
+    # Build section representations
+    if progress_callback is not None:
+        progress_callback(0.8, "📊 Building section representations...")
+    
+    sections = section_rep_builder.build_section_reps(extracted["sections"], chunk_index)
+    
+    # Save to session cache
+    if progress_callback is not None:
+        progress_callback(0.9, "💾 Saving to cache...")
+    
+    cache_data = {
+        "sections": sections,
+        "chunk_index": chunk_index,
+        "filename": file_name,
+        "metadata": extracted.get("metadata", {})
+    }
+    
+    # Save with pickle for better performance
+    cache_file = session_dir / f"{Path(file_path).stem}_cache.pkl"
+    with open(cache_file, "wb") as f:
+        pickle.dump(cache_data, f)
+    
+    # Calculate processing time
+    elapsed_time = time.time() - start_time
+    
+    # Create status message
+    was_converted = extracted.get("metadata", {}).get("was_converted", False)
+    original_format = extracted.get("metadata", {}).get("original_format", "")
+    
+    msg = f"✅ Successfully processed: {file_name}\n"
+    if was_converted:
+        msg += f"🔄 Converted from {original_format.upper()} to PDF\n"
+    msg += f"📑 Sections: {len(sections)}\n"
+    msg += f"🔍 Chunks: {len(chunks)}\n"
+    msg += f"⏱️ Processing time: {elapsed_time:.1f} seconds"
+    
+    if progress_callback is not None:
+        progress_callback(1.0, "✅ Processing complete!")
+    
+    return sections, chunk_index, msg
 
     
 def load_document(file, analyze_visuals: bool, session_state: Dict, progress=gr.Progress()) -> Tuple[Dict, str, gr.update]:
@@ -198,35 +194,32 @@ def ask_question(question: str, session_state: Dict, system_prompt: str, use_coa
     if "current_doc" not in session_state or not session_state.get("documents"):
         return "Please upload a document first", ""
     
-    try:
-        # Get current document
-        current_doc = session_state["documents"][session_state["current_doc"]]
-        sections = current_doc["sections"]
-        chunk_index = current_doc["chunk_index"]
+    # Get current document
+    current_doc = session_state["documents"][session_state["current_doc"]]
+    sections = current_doc["sections"]
+    chunk_index = current_doc["chunk_index"]
+    
+    if progress is not None:
+        progress(0.2, "🤔 Thinking about your question...")
+    
+    # Create chatbot and get answer
+    prompt = system_prompt or DEFAULT_SYSTEM_PROMPT
+    chatbot = PDFChatBot(sections, chunk_index, system_prompt=prompt)
+    
+    if progress is not None:
+        progress(0.5, "🔍 Searching relevant sections...")
+    
+    # Get answer
+    answer_output, reference_output = chatbot.answer(
+        question, 
+        fine_only=not use_coarse
+    )
+    
+    if progress is not None:
+        progress(1.0, "✅ Answer ready!")
+    
+    return answer_output, reference_output
         
-        if progress is not None:
-            progress(0.2, "🤔 Thinking about your question...")
-        
-        # Create chatbot and get answer
-        prompt = system_prompt or DEFAULT_SYSTEM_PROMPT
-        chatbot = PDFChatBot(sections, chunk_index, system_prompt=prompt)
-        
-        if progress is not None:
-            progress(0.5, "🔍 Searching relevant sections...")
-        
-        # Get answer
-        answer_output, reference_output = chatbot.answer(
-            question, 
-            fine_only=not use_coarse
-        )
-        
-        if progress is not None:
-            progress(1.0, "✅ Answer ready!")
-        
-        return answer_output, reference_output
-        
-    except Exception as e:
-        return f"❌ Error: {str(e)}", ""
 
 def clear_session(session_state: Dict) -> Tuple[Dict, str, gr.update, gr.update, gr.update]:
     """Clear all documents and reset session"""

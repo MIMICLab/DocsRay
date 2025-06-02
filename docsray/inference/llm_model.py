@@ -128,23 +128,15 @@ class LocalLLM:
                     ]
                 }
             ]
-            
-            # Generate response
-            try:
-                response = self.model.create_chat_completion(
-                    messages=messages,
-                    stop = ['<end_of_turn>'],
-                    temperature=0.7,
-                    top_p=0.95,
-                    repeat_penalty=1.1
-                )
-                result = response['choices'][0]['message']['content']  
-                return result.strip()
-
-            except Exception as e:
-
-                return "Error generating multimodal response."
-
+            response = self.model.create_chat_completion(
+                messages=messages,
+                stop = ['<end_of_turn>'],
+                temperature=0.7,
+                top_p=0.95,
+                repeat_penalty=1.1
+            )
+            result = response['choices'][0]['message']['content']  
+            return result.strip()
         
         else:
             # Text-only generation
