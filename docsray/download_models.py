@@ -22,15 +22,6 @@ def show_progress(block_num, block_size, total_size):
 def download_models():
     """Download required models to user's home directory"""
 
-
-    for model in models:
-        if FAST_MODE in model["required"]:
-            FAST_MODELS.append(model)
-        if STANDARD_MODE in model["required"]:
-            STANDARD_MODELS.append(model)
-        if FULL_FEATURE_MODE in model["required"]:
-            FULL_FEATURE_MODELS.append(model)
-
     print("Starting DocsRay model download...")
     print(f"Storage location: {MODEL_DIR}")
     
@@ -98,40 +89,54 @@ def check_models():
     
     print("📋 Model Status Check:")
     print(f"Base path: {MODEL_DIR}")
+
+    if FAST_MODE:
+        models_list = FAST_MODELS
+    elif STANDARD_MODE:
+        models_list = STANDARD_MODELS
+    elif FULL_FEATURE_MODE:
+        models_list = FULL_FEATURE_MODELS
     
     total_size = 0
-    missing_count = 0
-    for model_path, description in models:
-        if FAST_MODE:
-            if model_path not in FAST_MODELS:
-                print(f"Skipping {model_path} for FAST_MODE")
-                continue
-        elif STANDARD_MODE:
-            if model_path not in STANDARD_MODELS:
-                print(f"Skipping {model_path} for STANDARD_MODE")
-                continue
-        else:
-            if model_path not in FULL_FEATURE_MODELS:
-                print(f"Skipping {model_path} for FULL_FEATURE_MODE")
-                continue
-        print(f"Checking {description}...")
-        full_path = MODEL_DIR / model_path
-
+    available_models = []
+    missing_models = []
+    
+    for model in models_list:
+        full_path = model["dir"] / model["file"]
+        
         if full_path.exists():
             file_size = full_path.stat().st_size / (1024 * 1024)
             total_size += file_size
-            print(f"✅ {description}: {file_size:.1f} MB")
+            available_models.append((model['file'], file_size))
         else:
-            print(f"❌ {description}: Missing")
-            missing_count += 1
+            missing_models.append(model['file'])
     
+    print("\n📊 Available Models:")
+    for desc, size in available_models:
+        print(f"  ✅ {desc}: {size:.1f} MB")
+    
+    if missing_models:
+        print("\n❌ Missing Models:")
+        for desc in missing_models:
+            print(f"  ❌ {desc}")
+    
+    print("\n" + "="*50)
+    print(f"📈 Summary:")
     if total_size > 0:
-        print(f"\nTotal downloaded size: {total_size:.1f} MB ({total_size/1024:.1f} GB)")
+        gb_size = total_size / 1024
+        print(f"  • Total size: {total_size:.1f} MB ({gb_size:.2f} GB)")
     
-    if missing_count > 0:
-        print(f"\n⚠️  {missing_count} models are missing. Run 'docsray download-models' to download them.")
+    if missing_models:
+        print(f"\n⚠️  {len(missing_models)} models are missing.")
+        print("💡 Run 'docsray download-models' to download them.")
     else:
-        print("\n✅ All models are ready!")
+        print("\n✅ All models are ready for use!")
+    
+    return {
+        'available': len(available_models),
+        'missing': len(missing_models),
+        'total_size_mb': total_size
+    }
 
 def main():
     """Main entry point for command line"""

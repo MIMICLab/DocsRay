@@ -19,7 +19,7 @@ def get_embedding_model_paths(models_list):
             bge_model_path = str(model["dir"] / model["file"])
         elif "multilingual-e5-large" in model["file"] and model["file"].endswith(".gguf"):
             e5_model_path = str(model["dir"] / model["file"])
-    
+
     return bge_model_path, e5_model_path
 
 EPS = 1e-8              
@@ -125,20 +125,19 @@ else:
 # Lazy initialization
 embedding_model = None
 
-def get_embedding_model():
-    if embedding_model is None:     
-        if FAST_MODE:
-            model_name_1, model_name_2 = get_embedding_model_paths(FAST_MODELS)
-        elif STANDARD_MODE: 
-            model_name_1, model_name_2 = get_embedding_model_paths(STANDARD_MODELS)
-        else:
-            model_name_1, model_name_2 = get_embedding_model_paths(FULL_FEATURE_MODELS)
+def get_embedding_model():  
+    if FAST_MODE:
+        model_name_1, model_name_2 = get_embedding_model_paths(FAST_MODELS)
+    elif STANDARD_MODE: 
+        model_name_1, model_name_2 = get_embedding_model_paths(STANDARD_MODELS)
+    else:
+        model_name_1, model_name_2 = get_embedding_model_paths(FULL_FEATURE_MODELS)
 
-        embedding_model = EmbeddingModel(
-            model_name_1=model_name_1, 
-            model_name_2=model_name_2, 
-            device=device
-        )
+    embedding_model = EmbeddingModel(
+        model_name_1=model_name_1, 
+        model_name_2=model_name_2, 
+        device=device
+    )
     
     return embedding_model
 

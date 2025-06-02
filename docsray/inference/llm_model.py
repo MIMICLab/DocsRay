@@ -61,11 +61,7 @@ class LocalLLM:
         if not os.path.isabs(model_name):
             current_dir = Path(__file__).parent.absolute()
             project_root = current_dir.parent.parent  # Go up two levels
-            self.model_path = str(project_root / model_name)
-
-        # Check if file exists
-        if not os.path.exists(self.model_path):
-            raise FileNotFoundError(f"Model file not found: {self.model_path}")
+            self.model_name = str(project_root / model_name)
 
         self.mmproj_path = None
         chat_handler = None
@@ -74,23 +70,21 @@ class LocalLLM:
             if not os.path.isabs(mmproj_name):
                 # If relative path, resolve it relative to model directory
                 model_dir = Path(model_name).parent
-                self.mmproj_path = str(model_dir / mmproj_name)
-            else:
-                self.mmproj_path = mmproj_name
-            if not os.path.exists(self.mmproj_path):
-                raise FileNotFoundError(f"MMProj file not found: {self.mmproj_path}")
+                self.mmproj_name = str(model_dir / mmproj_name)
             
-            chat_handler = Gemma3ChatHandler(clip_model_path=self.mmproj_path, verbose=False)
-        
-        self.model = Llama( 
-            model_path=model_name,
-            n_gpu_layers=-1,
-            n_ctx=MAX_TOKENS,
-            verbose=False,
-            flash_attn=True,
-            chat_handler=chat_handler
-        )
-        self.tokenizer = LlamaTokenizer(self.model)
+            chat_handler = Gemma3ChatHandler(clip_model_path=self.mmproj_name, 
+                                             verbose=False)
+        with open(os.devnull, 'w') as devnull:
+            with redirect_stderr(devnull):
+                self.model = Llama( 
+                    model_path=model_name,
+                    n_gpu_layers=-1,
+                    n_ctx=MAX_TOKENS,
+                    verbose=False,
+                    flash_attn=True,
+                    chat_handler=chat_handler
+                )
+                self.tokenizer = LlamaTokenizer(self.model)
 
     def generate(self, prompt, image=None):
         """
@@ -157,6 +151,7 @@ class LocalLLM:
                     repeat_penalty=1.1
                 )
                 result = response['choices'][0]['message']['content']  
+                print(result)
                 return result.strip()
 
             except Exception as e:
@@ -189,7 +184,6 @@ class LocalLLM:
             )
             
             result = answer['choices'][0]['text']
-
             return result.strip()
     
     def strip_response(self, response):
@@ -224,18 +218,15 @@ local_llm_large = None
 
 def get_llm_models():
     """Get or create the LLM model instances"""
-    global local_llm, local_llm_large
+    if FAST_MODE:
+        small_model_path, large_model_path, mmproj_path = get_gemma_model_paths(FAST_MODELS)
+    elif STANDARD_MODE: 
+        small_model_path, large_model_path, mmproj_path = get_gemma_model_paths(STANDARD_MODELS)
+    else:
+        small_model_path, large_model_path, mmproj_path = get_gemma_model_paths(FULL_FEATURE_MODELS)
     
-    if local_llm is None or local_llm_large is None:
-        if FAST_MODE:
-            small_model_path, large_model_path, mmproj_path = get_gemma_model_paths(FAST_MODELS)
-        elif STANDARD_MODE: 
-            small_model_path, large_model_path, mmproj_path = get_gemma_model_paths(STANDARD_MODELS)
-        else:
-            small_model_path, large_model_path, mmproj_path = get_gemma_model_paths(FULL_FEATURE_MODELS)
-        
-        local_llm = LocalLLM(model_name=small_model_path, device=device)            
-        local_llm_large = LocalLLM(model_name=large_model_path, mmproj_name=mmproj_path, device=device, is_multimodal=True)
+    local_llm = LocalLLM(model_name=small_model_path, device=device)            
+    local_llm_large = LocalLLM(model_name=large_model_path, mmproj_name=mmproj_path, device=device, is_multimodal=True)
     
     return local_llm, local_llm_large
 
