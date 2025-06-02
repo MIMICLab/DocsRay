@@ -36,18 +36,6 @@ class EmbeddingModel:
         """
         self.device = device
         
-        # Convert relative path to absolute path
-        if not os.path.isabs(model_name_1):
-            # Find the project root directory
-            current_dir = Path(__file__).parent.absolute()
-            project_root = current_dir.parent.parent  # Go up two levels from src/inference/
-            model_name_1 = str(project_root / model_name_1)
-        
-        if not os.path.isabs(model_name_2):
-            current_dir = Path(__file__).parent.absolute()
-            project_root = current_dir.parent.parent
-            model_name_2 = str(project_root / model_name_2)
-        
         # Check if we're in MCP mode (less verbose)
         is_mcp_mode = os.getenv('DOCSRAY_MCP_MODE') == '1'
         
@@ -61,25 +49,25 @@ class EmbeddingModel:
         if not os.path.exists(model_name_2):
             raise FileNotFoundError(f"Model file not found: {model_name_2}")
         
-        with open(os.devnull, 'w') as devnull:
-            with redirect_stderr(devnull):        
-                self.model_1 = Llama(
-                    model_path=model_name_1,
-                    n_gpu_layers=-1,
-                    n_ctx=0,
-                    logits_all=False,
-                    embedding=True,
-                    flash_attn= True,
-                    verbose=False
-                )
-                self.model_2 = Llama(
-                    model_path=model_name_2,
-                    n_gpu_layers=-1,
-                    n_ctx=0,
-                    logits_all=False,
-                    embedding=True,
-                    verbose=False
-                )
+        #with open(os.devnull, 'w') as devnull:
+        #    with redirect_stderr(devnull):        
+        self.model_1 = Llama(
+            model_path=model_name_1,
+            n_gpu_layers=-1,
+            n_ctx=0,
+            logits_all=False,
+            embedding=True,
+            flash_attn= True,
+            verbose=False
+        )
+        self.model_2 = Llama(
+            model_path=model_name_2,
+            n_gpu_layers=-1,
+            n_ctx=0,
+            logits_all=False,
+            embedding=True,
+            verbose=False
+        )
 
 
     def get_embedding(self, text: str, is_query: bool = False):
