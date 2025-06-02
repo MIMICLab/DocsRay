@@ -131,7 +131,7 @@ class LocalLLM:
             response = self.model.create_chat_completion(
                 messages=messages,
                 stop = ['<end_of_turn>'],
-                max_tokens=MAX_TOKENS//16,
+                max_tokens=MAX_TOKENS//8,
                 temperature=0.7,
                 top_p=0.95,
                 repeat_penalty=1.1

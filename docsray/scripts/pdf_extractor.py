@@ -140,7 +140,7 @@ def analyze_image_with_llm(image: Image.Image, page_num: int, img_idx: int) -> s
     response = local_llm_large.generate(prompt, image=image)
     description = local_llm_large.strip_response(response)
     
-    return f"\n\n[Figure {img_idx + 1} on page {page_num + 1}]: {description}\n\n"
+    return f"[Figure {img_idx + 1} on page {page_num + 1}]: {description}"
 
 def ocr_with_llm(image: Image.Image, page_num: int) -> str:
     """

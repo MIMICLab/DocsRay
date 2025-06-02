@@ -68,12 +68,9 @@ if not has_gpu:
     FAST_MODE = True
     MAX_TOKENS = MAX_TOKENS // 2
 else:
-    if available_gb < min_available_gb:
+    if available_gb < min_available_gb * 2:
         FAST_MODE = True
         MAX_TOKENS = MAX_TOKENS // 2
-    elif available_gb < min_available_gb * 2:
-        FAST_MODE = True
-        MAX_TOKENS = MAX_TOKENS 
     elif available_gb < min_available_gb * 3:
         STANDARD_MODE = True
     else:
