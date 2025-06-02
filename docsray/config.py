@@ -122,7 +122,7 @@ ALL_MODELS = [
     {
         "dir": MODEL_DIR / "gemma-3-4b-it-GGUF",
         "file": "gemma-3-4b-it-Q4_K_M.gguf",
-        "url": "https://huggingface.co/tgisaturday/Docsray/resolve/main/gemma-3-4b-it-GGUF/gemma-3-1b-it-Q4_K_M.gguf",
+        "url": "https://huggingface.co/tgisaturday/Docsray/resolve/main/gemma-3-4b-it-GGUF/gemma-3-4b-it-Q4_K_M.gguf",
         "required": ["FAST_MODE"]
     },
     {

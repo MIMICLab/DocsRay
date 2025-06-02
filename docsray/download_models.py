@@ -7,7 +7,13 @@ import urllib.request
 from docsray.config import MODEL_DIR, FAST_MODE, STANDARD_MODE, FULL_FEATURE_MODE
 from docsray.config import ALL_MODELS, FAST_MODELS, STANDARD_MODELS, FULL_FEATURE_MODELS
 
-models = ALL_MODELS
+if FAST_MODE:
+    models = FAST_MODELS
+elif STANDARD_MODE:
+    models = STANDARD_MODELS
+elif FULL_FEATURE_MODE:
+    models = FULL_FEATURE_MODELS
+    
 
 def show_progress(block_num, block_size, total_size):
     """Display download progress"""
@@ -28,18 +34,6 @@ def download_models():
     for i, model in enumerate(models, 1):
         model_path = model["dir"] / model["file"]    
         print(f"\n[{i}/{len(models)}] Checking {model['file']}...")
-        if FAST_MODE:
-            if model not in FAST_MODELS:
-                print(f"Skipping {model['file']} for FAST_MODE")
-                continue
-        elif STANDARD_MODE:
-            if model not in STANDARD_MODELS:
-                print(f"Skipping {model['file']} for STANDARD_MODE")
-                continue
-        else:
-            if model not in FULL_FEATURE_MODELS:
-                print(f"Skipping {model['file']} for FULL_FEATURE_MODE")
-                continue
 
         if model_path.exists():
             file_size = model_path.stat().st_size / (1024 * 1024)
@@ -89,19 +83,12 @@ def check_models():
     
     print("📋 Model Status Check:")
     print(f"Base path: {MODEL_DIR}")
-
-    if FAST_MODE:
-        models_list = FAST_MODELS
-    elif STANDARD_MODE:
-        models_list = STANDARD_MODELS
-    elif FULL_FEATURE_MODE:
-        models_list = FULL_FEATURE_MODELS
     
     total_size = 0
     available_models = []
     missing_models = []
     
-    for model in models_list:
+    for model in models:
         full_path = model["dir"] / model["file"]
         
         if full_path.exists():
