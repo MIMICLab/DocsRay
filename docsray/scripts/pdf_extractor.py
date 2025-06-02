@@ -21,7 +21,7 @@ import pytesseract
 from docsray.config import FAST_MODE, MAX_TOKENS, FULL_FEATURE_MODE
 
 # LLM for outline generation and image analysis
-from docsray.inference.llm_model import get_llm_models
+from docsray.inference.llm_model import local_llm, local_llm_large
 
 from docsray.scripts.file_converter import FileConverter
 from pathlib import Path
@@ -132,8 +132,6 @@ def analyze_image_with_llm(image: Image.Image, page_num: int, img_idx: int) -> s
     """
     Use multimodal LLM to analyze and describe an image.
     """
-
-    local_llm, local_llm_large = get_llm_models()
     
     # Prepare multimodal prompt
     prompt = f"""Describe this image from page {page_num + 1} of a PDF document in a single paragraph.
@@ -154,8 +152,6 @@ def ocr_with_llm(image: Image.Image, page_num: int) -> str:
     """
     Use multimodal LLM for OCR instead of pytesseract.
     """
-
-    local_llm, local_llm_large = get_llm_models()
     
     # OCR-specific prompt
     prompt = """Extract and transcribe ALL text from this image. Include:
@@ -244,7 +240,6 @@ contents.  Pipeline:
     3) For each final block, ask the LLM to propose a short title.
 Returns a list of dicts identical in structure to build_sections_from_toc.
     """
-    local_llm, local_llm_large = get_llm_models()
 
     total_pages = len(pages_text)
     if total_pages == 0:

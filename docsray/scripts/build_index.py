@@ -7,7 +7,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.append(str(ROOT))
 
 import json
-from docsray.inference.embedding_model import get_embedding_model
+from docsray.inference.embedding_model import embedding_model
 
 def build_chunk_index(chunks):
     """
@@ -22,7 +22,6 @@ def build_chunk_index(chunks):
 
         [{ "embedding": [...], "metadata": {...} }, ...]
     """
-    embedding_model = get_embedding_model()
     
     contents = [c["content"] for c in chunks]
     embeddings = embedding_model.get_embeddings(contents)  # shape: (N, emb_dim)

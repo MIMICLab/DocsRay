@@ -20,7 +20,7 @@ from mcp.types import Tool, TextContent
 # DocsRay imports
 from docsray.chatbot import PDFChatBot, DEFAULT_SYSTEM_PROMPT
 from docsray.scripts import pdf_extractor, chunker, build_index, section_rep_builder
-from docsray.inference.llm_model import get_llm_models
+from docsray.inference.llm_model import local_llm, local_llm_large
 
 from docsray.scripts.file_converter import FileConverter
 from docsray.config import FAST_MODE, DISABLE_VISUAL_ANALYSIS
@@ -891,7 +891,6 @@ def summarize_document_by_sections(sections: List, chunk_index: List,
     Create a comprehensive summary of the document organized by sections.
     Process in batches of 10 sections per call.
     """
-    local_llm, local_llm_large = get_llm_models()
     
     # Use smaller model for everything in fast mode
     if brief_mode:
