@@ -16,7 +16,7 @@ try:
 except:
     print("Pytesseract not installed. Using gemma3 for OCR")
     USE_TESSERACT = False
-    
+
 # Create directories
 for dir_path in [DOCSRAY_HOME, DATA_DIR, MODEL_DIR, CACHE_DIR]:
     dir_path.mkdir(parents=True, exist_ok=True)
@@ -100,7 +100,7 @@ ALL_MODELS = [
     {
         "dir": MODEL_DIR / "multilingual-e5-large-gguf",
         "file": "multilingual-e5-large-Q8_0.gguf",
-        "url": "https://huggingface.co/tgisaturday/Docsray/resolve/main/multilingual-e5-large-gguf/multilingual-e5-large-F16.gguf",
+        "url": "https://huggingface.co/tgisaturday/Docsray/resolve/main/multilingual-e5-large-gguf/multilingual-e5-large-Q8_0.gguf",
         "required": ["FAST_MODE", "STANDARD_MODE"]
     },
     {
@@ -148,7 +148,7 @@ ALL_MODELS = [
     {
         "dir": MODEL_DIR / "gemma-3-4b-it-GGUF",
         "file": "mmproj-gemma-3-4b-it-F16.gguf",
-        "url": "https://huggingface.co/tgisaturday/Docsray/resolve/main/gemma-3-4b-it-GGUF/mmproj-gemma-3-4b-it-f16.gguf",
+        "url": "https://huggingface.co/tgisaturday/Docsray/resolve/main/gemma-3-4b-it-GGUF/mmproj-gemma-3-4b-it-F16.gguf",
         "required": ["FAST_MODE", "STANDARD_MODE", "FULL_FEATURE_MODE"]
     }
 ]
