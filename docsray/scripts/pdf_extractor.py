@@ -357,8 +357,7 @@ def ocr_page_with_llm(page, dpi: int = 350) -> str:
             
         return text.strip()
     except Exception as e:
-        print(f"Error in OCR for page {page.number + 1}: {e}", file=sys.stderr)
-        return ""
+        return f"Error in OCR for page {page.number + 1}: {e}"
     
 def extract_text_blocks_for_layout(page) -> pd.DataFrame:
     """
