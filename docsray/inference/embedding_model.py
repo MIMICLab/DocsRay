@@ -49,25 +49,25 @@ class EmbeddingModel:
         if not os.path.exists(model_name_2):
             raise FileNotFoundError(f"Model file not found: {model_name_2}")
         
-        #with open(os.devnull, 'w') as devnull:
-        #    with redirect_stderr(devnull):        
-        self.model_1 = Llama(
-            model_path=model_name_1,
-            n_gpu_layers=-1,
-            n_ctx=0,
-            logits_all=False,
-            embedding=True,
-            flash_attn= True,
-            verbose=False
-        )
-        self.model_2 = Llama(
-            model_path=model_name_2,
-            n_gpu_layers=-1,
-            n_ctx=0,
-            logits_all=False,
-            embedding=True,
-            verbose=False
-        )
+        with open(os.devnull, 'w') as devnull:
+            with redirect_stderr(devnull):        
+                self.model_1 = Llama(
+                    model_path=model_name_1,
+                    n_gpu_layers=-1,
+                    n_ctx=0,
+                    logits_all=False,
+                    embedding=True,
+                    flash_attn= True,
+                    verbose=False
+                )
+                self.model_2 = Llama(
+                    model_path=model_name_2,
+                    n_gpu_layers=-1,
+                    n_ctx=0,
+                    logits_all=False,
+                    embedding=True,
+                    verbose=False
+                )
 
 
     def get_embedding(self, text: str, is_query: bool = False):

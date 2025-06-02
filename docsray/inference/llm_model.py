@@ -156,11 +156,7 @@ class LocalLLM:
 
             except Exception as e:
                 print(f"Error in multimodal generation: {e}", file=sys.stderr)
-                import traceback
-                traceback.print_exc()
-                # Fallback to text-only
-                print("Falling back to text-only generation", file=sys.stderr)
-                return self.generate(prompt, image=None)
+
         
         else:
             # Text-only generation
