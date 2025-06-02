@@ -129,16 +129,10 @@ class LocalLLM:
                 }
             ]
             
-            # Calculate max tokens for output
-            available_tokens = MAX_TOKENS if MAX_TOKENS > 0 else 131072   
-
-            output_tokens = available_tokens // 4
-            
             # Generate response
             try:
                 response = self.model.create_chat_completion(
                     messages=messages,
-                    max_tokens=output_tokens,
                     stop = ['<end_of_turn>'],
                     temperature=0.7,
                     top_p=0.95,
@@ -161,11 +155,8 @@ class LocalLLM:
                 formatted_prompt = f"<|im_start|>user\n{prompt}<|im_end|><|im_start|>assistant\n"
                 stop = ['<|im_end|>']
             
-            output_tokens = MAX_TOKENS if MAX_TOKENS > 0 else 8192
-            
             answer = self.model(
                 formatted_prompt,
-                max_tokens=output_tokens,
                 stop=stop,
                 echo=True,
                 temperature=0.7,
@@ -201,10 +192,6 @@ elif torch.backends.mps.is_available():
     device = "mps"
 else:
     device = "cpu"
-
-# Lazy initialization
-local_llm = None
-local_llm_large = None
 
 def get_llm_models():
     """Get or create the LLM model instances"""

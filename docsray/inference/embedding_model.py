@@ -110,9 +110,6 @@ elif torch.backends.mps.is_available():
 else:
     device = "cpu"
 
-# Lazy initialization
-embedding_model = None
-
 def get_embedding_model():  
     if FAST_MODE:
         model_name_1, model_name_2 = get_embedding_model_paths(FAST_MODELS)
