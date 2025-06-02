@@ -135,11 +135,7 @@ def analyze_image_with_llm(image: Image.Image, page_num: int, img_idx: int) -> s
     """
     
     # Prepare multimodal prompt
-    prompt = f"""Describe this image from page {page_num + 1} of a PDF document in a single paragraph.
-
-Include: what type of visual it is, its main content, any visible text/labels, and key insights.
-Write naturally as one flowing paragraph, not as a numbered list.
-"""
+    prompt = prompt = f"""In 2-3 sentences, describe this page {page_num + 1} visual: what it shows and its main message."""
     try:
         # Use the large model for better image understanding
         response = local_llm_large.generate(prompt, image=image)
@@ -155,14 +151,9 @@ def ocr_with_llm(image: Image.Image, page_num: int) -> str:
     """
     
     # OCR-specific prompt
-    prompt = """Extract and transcribe ALL text from this image. Include:
-- All visible text, maintaining the original layout as much as possible
-- Headers, paragraphs, lists, captions
-- Any text in tables, charts, or diagrams
-- Text in different languages if present
-
-Output only the extracted text, no descriptions or explanations.
-"""
+    prompt = """Transcribe all text from this image verbatim. 
+Include every word, number, and label you can see.
+Maintain original formatting with line breaks."""
 
     response = local_llm_large.generate(prompt, image=image)
     extracted_text = local_llm_large.strip_response(response)
