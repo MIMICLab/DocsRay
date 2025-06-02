@@ -163,13 +163,9 @@ def ocr_with_llm(image: Image.Image, page_num: int) -> str:
 Output only the extracted text, no descriptions or explanations.
 """
 
-    try:
-        response = local_llm_large.generate(prompt, image=image)
-        extracted_text = local_llm_large.strip_response(response)
-        return extracted_text.strip()
-    except Exception as e:
-        print(f"Error performing OCR with LLM: {e}", file=sys.stderr)
-        return ""
+    response = local_llm_large.generate(prompt, image=image)
+    extracted_text = local_llm_large.strip_response(response)
+    return extracted_text.strip()
 
 def analyze_visual_content(page, page_num: int) -> str:
     """
@@ -338,21 +334,18 @@ def ocr_page_with_llm(page, dpi: int = 350) -> str:
     Uses pytesseract if not in FULL_FEATURE_MODE.
     """
 
-    try:
-        # Render page to high-quality image
-        zoom = dpi / 72
-        pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom), alpha=False)
-        img = Image.open(io.BytesIO(pix.pil_tobytes(format="PNG")))
+    # Render page to high-quality image
+    zoom = dpi / 72
+    pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom), alpha=False)
+    img = Image.open(io.BytesIO(pix.pil_tobytes(format="PNG")))
+    
+    if FULL_FEATURE_MODE:
+        text = ocr_with_llm(img, page.number)
+    else:
+        text = pytesseract.image_to_string(img)
         
-        if FULL_FEATURE_MODE:
-            text = ocr_with_llm(img, page.number)
-        else:
-            # 일반 모드에서는 pytesseract 사용
-            text = pytesseract.image_to_string(img)
-            
-        return text.strip()
-    except Exception as e:
-        return pytesseract.image_to_string(img)        
+    return text.strip()
+      
     
 def extract_text_blocks_for_layout(page) -> pd.DataFrame:
     """

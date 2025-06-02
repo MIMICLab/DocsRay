@@ -58,7 +58,7 @@ docsray web  # Launch Web UI
 - **Universal Document Support**: Automatically converts 30+ file formats to PDF for processing
 - **Smart File Conversion**: Handles Office documents, images, HTML, Markdown, and more
 
-## 🎯 What's New in v1.2.0
+## 🎯 What's New in v1.2.2
 ### Universal Document Support
 DocsRay now automatically converts various document formats to PDF for processing:
 
