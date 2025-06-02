@@ -154,7 +154,6 @@ class LocalLLM:
                 return result.strip()
 
             except Exception as e:
-                print(f"Error in multimodal generation: {e}", file=sys.stderr)
                 return "FAILED to process multimodal input"
 
         
