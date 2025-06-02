@@ -131,6 +131,7 @@ class LocalLLM:
             response = self.model.create_chat_completion(
                 messages=messages,
                 stop = ['<end_of_turn>'],
+                max_tokens=0,
                 temperature=0.7,
                 top_p=0.95,
                 repeat_penalty=1.1
@@ -141,16 +142,12 @@ class LocalLLM:
         
         else:
             # Text-only generation
-            if "gemma" in self.model.model_path.lower():
-                formatted_prompt = f"<start_of_turn>user\n{prompt}<end_of_turn>\n<start_of_turn>model\n"
-                stop = ['<end_of_turn>']
-            else:
-                formatted_prompt = f"<|im_start|>user\n{prompt}<|im_end|><|im_start|>assistant\n"
-                stop = ['<|im_end|>']
+            formatted_prompt = f"<start_of_turn>user\n{prompt}<end_of_turn>\n<start_of_turn>model\n"
             
             answer = self.model(
                 formatted_prompt,
-                stop=stop,
+                stop=['<end_of_turn>'],
+                max_tokens=0,
                 echo=True,
                 temperature=0.7,
                 top_p=0.95,
