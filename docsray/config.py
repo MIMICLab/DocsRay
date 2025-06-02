@@ -54,37 +54,23 @@ FAST_MODE = False
 MAX_TOKENS = 32768
 STANDARD_MODE = False
 FULL_FEATURE_MODE = False
+min_available_gb = 4
 
 if not has_gpu:
     FAST_MODE = True
-    MAX_TOKENS = 16384
+    MAX_TOKENS = MAX_TOKENS // 4
 else:
-    if device_type == 'cuda':
-        if available_gb < 8:
-            FAST_MODE = True
-            MAX_TOKENS = 16384
-        elif available_gb < 16:
-            FAST_MODE = True
-            MAX_TOKENS = 32768
-        elif available_gb < 32:
-            STANDARD_MODE = True
-            MAX_TOKENS = 32768
-        else:
-            MAX_TOKENS = 0  
-            FULL_FEATURE_MODE = True
-    elif device_type == 'mps':
-        if available_gb < 16:
-            FAST_MODE = True
-            MAX_TOKENS = 16384
-        elif available_gb < 24:
-            FAST_MODE = True
-            MAX_TOKENS = 32768
-        elif available_gb < 32:
-            STANDARD_MODE = True
-            MAX_TOKENS = 32768
-        else:
-            MAX_TOKENS = 0  
-            FULL_FEATURE_MODE = True
+    if available_gb < min_available_gb * 2:
+        FAST_MODE = True
+        MAX_TOKENS = MAX_TOKENS // 4
+    elif available_gb < min_available_gb * 4:
+        FAST_MODE = True
+        MAX_TOKENS = MAX_TOKENS // 2
+    elif available_gb < min_available_gb * 8:
+        STANDARD_MODE = True
+    else:
+        FULL_FEATURE_MODE = True
+
 
 FAST_MODELS = []
 STANDARD_MODELS = []
