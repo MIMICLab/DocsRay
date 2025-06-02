@@ -105,17 +105,17 @@ class LocalLLM:
             elif image.mode != 'RGB':
                 image = image.convert('RGB')
 
-            if FULL_FEATURE_MODE:
-                w, h = image.size
-                if w < h:
-                    new_w = 896
-                    new_h = int(h * (896 / w))
-                else:
-                    new_h = 896
-                    new_w = int(w * (896 / h))
-                resized = image.resize((new_w, new_h), Image.LANCZOS)
-            else:
-                resized = image.resize((896, 896), Image.LANCZOS)
+            #if FULL_FEATURE_MODE:
+            #    w, h = image.size
+            #    if w < h:
+            #        new_w = 896
+            #        new_h = int(h * (896 / w))
+            #    else:
+            #        new_h = 896
+            #        new_w = int(w * (896 / h))
+            #    resized = image.resize((new_w, new_h), Image.LANCZOS)
+            #else:
+            resized = image.resize((896, 896), Image.LANCZOS)
 
             # Convert image to data URI
             image_uri = image_to_base64_data_uri(resized, format="PNG")
@@ -154,7 +154,6 @@ class LocalLLM:
                 return result.strip()
 
             except Exception as e:
-                self.generate(prompt)  # Fallback to text-only generation on error
                 return "Error generating multimodal response."
 
         
