@@ -112,14 +112,9 @@ def process_document(file_path: str, session_dir: Path, analyze_visuals: bool = 
             progress_callback(1.0, "✅ Processing complete!")
         
         return sections, chunk_index, msg
-    except Exception as e:
-        error_msg = f"❌ Error processing document: {str(e)}"
-        if progress_callback is not None:
-            try:
-                progress_callback(0.0, error_msg)
-            except:
-                pass
-        return None, None, error_msg
+    #except Exception as e:
+    #    error_msg = f"❌ Error processing document: {str(e)}"
+    #    return None, None, error_msg
 
     
 def load_document(file, analyze_visuals: bool, session_state: Dict, progress=gr.Progress()) -> Tuple[Dict, str, gr.update]:

@@ -236,13 +236,13 @@ def build_sections_from_layout(pages_text: List[str],
                                min_pages: int = 3,
                                max_pages: int = 15) -> List[Dict[str, Any]]:
     """
-    Build pseudo‑TOC sections for a PDF lacking an explicit table of
-    contents.  Pipeline:
-      1) Split pages into fixed blocks of `init_chunk` pages.
-      2) For every proposed boundary, ask the local LLM whether the
-         adjacent pages cover the same topic.  Merge blocks if so.
-      3) For each final block, ask the LLM to propose a short title.
-    Returns a list of dicts identical in structure to build_sections_from_toc.
+Build pseudo‑TOC sections for a PDF lacking an explicit table of
+contents.  Pipeline:
+    1) Split pages into fixed blocks of `init_chunk` pages.
+    2) For every proposed boundary, ask the local LLM whether the
+        adjacent pages cover the same topic.  Merge blocks if so.
+    3) For each final block, ask the LLM to propose a short title.
+Returns a list of dicts identical in structure to build_sections_from_toc.
     """
     local_llm, local_llm_large = get_llm_models()
 
@@ -455,7 +455,7 @@ def extract_pdf_content(pdf_path: str,
                     words_df.sort_values(["y0", "x0"]).iterrows()
                 )
         else:
-            print(f"  Page {i+1}: No text found, performing pytesseract OCR...", file=sys.stderr)
+            print(f"  Page {i+1}: No text found, performing OCR...", file=sys.stderr)
             page_text = ocr_page_with_llm(page)
     
         # Analyze visual content if enabled
