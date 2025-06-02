@@ -6,89 +6,11 @@
 import asyncio
 import json
 import os
-import concurrent.futures
 import pickle
 import sys
 import time
 from typing import Any, Dict, List, Optional, Tuple
 from pathlib import Path
-
-from docsray.scripts.file_converter import FileConverter
-
-SCRIPT_DIR = Path(__file__).parent.absolute()
-base_dir = SCRIPT_DIR / "data"
-
-import platform
-from datetime import datetime
-
-# Check models before importing DocsRay modules
-def ensure_models_exist():
-    """Check if model files exist"""
-    try:
-        from docsray import MODEL_DIR
-    except ImportError:
-        MODEL_DIR = Path.home() / ".docsray" / "models"
-    
-    models = [
-        {
-            "dir": MODEL_DIR / "bge-m3-gguf",
-            "file": "bge-m3-Q8_0.gguf",
-            "url": "https://huggingface.co/lm-kit/bge-m3-gguf/resolve/main/bge-m3-Q8_0.gguf"
-        },
-        {
-            "dir": MODEL_DIR / "multilingual-e5-large-gguf",
-            "file": "multilingual-e5-large-Q8_0.gguf",
-            "url": "https://huggingface.co/KeyurRamoliya/multilingual-e5-large-GGUF/resolve/main/multilingual-e5-large-q8_0.gguf"
-        },
-        {
-            "dir": MODEL_DIR / "gemma-3-1b-it-GGUF",
-            "file": "gemma-3-1b-it-Q4_K_M.gguf",
-            "url": "https://huggingface.co/ggml-org/gemma-3-1b-it-GGUF/resolve/main/gemma-3-1b-it-Q4_K_M.gguf"
-        },
-        {
-            "dir": MODEL_DIR / "gemma-3-1b-it-GGUF",
-            "file": "gemma-3-1b-it-Q8_0.gguf",
-            "url": "https://huggingface.co/ggml-org/gemma-3-1b-it-GGUF/resolve/main/gemma-3-1b-it-Q8_0.gguf"
-        },
-        {
-            "dir": MODEL_DIR / "gemma-3-4b-it-GGUF",
-            "file": "gemma-3-4b-it-Q8_0.gguf",
-            "url": "https://huggingface.co/ggml-org/gemma-3-4b-it-GGUF/resolve/main/gemma-3-4b-it-Q8_0.gguf"
-        },
-        {
-            "dir": MODEL_DIR / "gemma-3-4b-it-GGUF",
-            "file": "gemma-3-4b-it-Q4_K_M.gguf",
-            "url": "https://huggingface.co/ggml-org/gemma-3-4b-it-GGUF/resolve/main/gemma-3-4b-it-Q4_K_M.gguf"
-        },
-        {
-            "dir": MODEL_DIR / "gemma-3-4b-it-GGUF",
-            "file": "mmproj-gemma-3-4b-it-f16.gguf",
-            "url": "https://huggingface.co/ggml-org/gemma-3-4b-it-GGUF/resolve/main/mmproj-model-f16.gguf"
-        }
-    ]
-    
-    missing_models = []
-    for model in models:
-        model_path = model["dir"] / model["file"]
-        if not model_path.exists():
-            missing_models.append(model["file"])
-    
-    if missing_models:
-        print("❌ Required model files are missing:", file=sys.stderr)
-        print(f"Expected location: {MODEL_DIR}", file=sys.stderr)
-        print("Please download models first with:", file=sys.stderr)
-        print("  docsray download-models", file=sys.stderr)
-        raise RuntimeError(f"{len(missing_models)} model files are missing: {', '.join(missing_models)}")
-    
-    print("✅ All required models are ready.", file=sys.stderr)
-
-ensure_models_exist()
-
-# Set environment variable to indicate MCP mode
-os.environ['DOCSRAY_MCP_MODE'] = '1'
-
-
-from docsray.config import FAST_MODE, DISABLE_VISUAL_ANALYSIS
 
 # MCP imports
 from mcp.server import Server
@@ -99,6 +21,21 @@ from mcp.types import Tool, TextContent
 from docsray.chatbot import PDFChatBot, DEFAULT_SYSTEM_PROMPT
 from docsray.scripts import pdf_extractor, chunker, build_index, section_rep_builder
 from docsray.inference.llm_model import get_llm_models
+
+from docsray.scripts.file_converter import FileConverter
+from docsray.config import FAST_MODE, DISABLE_VISUAL_ANALYSIS
+from docsray.config import MODEL_DIR, FAST_MODE, STANDARD_MODE, FULL_FEATURE_MODE
+from docsray.download_models import check_models
+
+SCRIPT_DIR = Path(__file__).parent.absolute()
+base_dir = SCRIPT_DIR / "data"
+
+import platform
+from datetime import datetime
+
+
+# Set environment variable to indicate MCP mode
+os.environ['DOCSRAY_MCP_MODE'] = '1'
 
 # Configuration
 DATA_DIR = base_dir / "mcp_data"
@@ -136,6 +73,9 @@ Guidelines:
 • Include relevant quotes or specific data points when they are crucial
 • Highlight connections between different sections when relevant
 """
+
+check_models()
+
 def get_recommended_search_paths() -> List[Dict[str, Any]]:
     """
     Get recommended search paths based on the operating system and common document locations.

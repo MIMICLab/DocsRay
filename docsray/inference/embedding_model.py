@@ -6,6 +6,21 @@ import os
 import sys
 from pathlib import Path
 from contextlib import redirect_stderr
+from docsray.config import FAST_MODE, STANDARD_MODE, FULL_FEATURE_MODE, MAX_TOKENS
+from docsray.config import ALL_MODELS, FAST_MODELS, STANDARD_MODELS, FULL_FEATURE_MODELS, MODEL_DIR
+
+def get_embedding_model_paths(models_list):
+    """Get the paths for embedding models based on the mode"""    
+    bge_model_path = None
+    e5_model_path = None
+    
+    for model in models_list:
+        if "bge-m3" in model["file"] and model["file"].endswith(".gguf"):
+            bge_model_path = str(model["dir"] / model["file"])
+        elif "multilingual-e5-large" in model["file"] and model["file"].endswith(".gguf"):
+            e5_model_path = str(model["dir"] / model["file"])
+    
+    return bge_model_path, e5_model_path
 
 EPS = 1e-8              
 
@@ -15,7 +30,7 @@ def _l2_normalize(arr):
     return arr / norm
 
 class EmbeddingModel:
-    def __init__(self, model_name_1="BAAI/bge-m3", model_name_2="intfloat/multilingual-e5-large", device="cpu"):
+    def __init__(self, model_name_1, model_name_2, device="cpu"):
         """
         Load the model and move it to the specified device.
         """
@@ -111,29 +126,20 @@ else:
 embedding_model = None
 
 def get_embedding_model():
-    """Get or create the embedding model instance"""
-    global embedding_model
-    if embedding_model is None:
-        try:
-            from docsray import MODEL_DIR
-        except ImportError:
-            MODEL_DIR = Path.home() / ".docsray" / "models"
-        
-        model_name_1 = str(MODEL_DIR / "bge-m3-gguf" / "bge-m3-Q8_0.gguf")
-        model_name_2 = str(MODEL_DIR / "multilingual-e5-large-gguf" / "multilingual-e5-large-Q8_0.gguf")
-        
-        if not os.path.exists(model_name_1) or not os.path.exists(model_name_2):
-            raise FileNotFoundError(
-                f"Model files not found. Please run 'docsray download-models' first.\n"
-                f"Expected locations:\n  {model_name_1}\n  {model_name_2}"
-            )
-        
-        embedding_model = EmbeddingModel(model_name_1=model_name_1, model_name_2=model_name_2, device=device)
+    if embedding_model is None:     
+        if FAST_MODE:
+            model_name_1, model_name_2 = get_embedding_model_paths(FAST_MODELS)
+        elif STANDARD_MODE: 
+            model_name_1, model_name_2 = get_embedding_model_paths(STANDARD_MODELS)
+        else:
+            model_name_1, model_name_2 = get_embedding_model_paths(FULL_FEATURE_MODELS)
+
+        embedding_model = EmbeddingModel(
+            model_name_1=model_name_1, 
+            model_name_2=model_name_2, 
+            device=device
+        )
     
     return embedding_model
 
-# For backward compatibility
-try:
-    embedding_model = get_embedding_model()
-except:
-    pass
+embedding_model = get_embedding_model()

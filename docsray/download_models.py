@@ -4,9 +4,10 @@
 import os
 import sys
 import urllib.request
-from pathlib import Path
-from docsray.config import MODEL_DIR
+from docsray.config import MODEL_DIR, FAST_MODE, STANDARD_MODE, FULL_FEATURE_MODE
+from docsray.config import ALL_MODELS, FAST_MODELS, STANDARD_MODELS, FULL_FEATURE_MODELS
 
+models = ALL_MODELS
 
 def show_progress(block_num, block_size, total_size):
     """Display download progress"""
@@ -20,54 +21,35 @@ def show_progress(block_num, block_size, total_size):
 
 def download_models():
     """Download required models to user's home directory"""
-    
 
-    models = [
-        {
-            "dir": MODEL_DIR / "bge-m3-gguf",
-            "file": "bge-m3-Q8_0.gguf",
-            "url": "https://huggingface.co/lm-kit/bge-m3-gguf/resolve/main/bge-m3-Q8_0.gguf"
-        },
-        {
-            "dir": MODEL_DIR / "multilingual-e5-large-gguf",
-            "file": "multilingual-e5-large-Q8_0.gguf",
-            "url": "https://huggingface.co/KeyurRamoliya/multilingual-e5-large-GGUF/resolve/main/multilingual-e5-large-q8_0.gguf"
-        },
-        {
-            "dir": MODEL_DIR / "gemma-3-1b-it-GGUF",
-            "file": "gemma-3-1b-it-Q4_K_M.gguf",
-            "url": "https://huggingface.co/ggml-org/gemma-3-1b-it-GGUF/resolve/main/gemma-3-1b-it-Q4_K_M.gguf"
-        },
-        {
-            "dir": MODEL_DIR / "gemma-3-1b-it-GGUF",
-            "file": "gemma-3-1b-it-Q8_0.gguf",
-            "url": "https://huggingface.co/ggml-org/gemma-3-1b-it-GGUF/resolve/main/gemma-3-1b-it-Q8_0.gguf"
-        },
-        {
-            "dir": MODEL_DIR / "gemma-3-4b-it-GGUF",
-            "file": "gemma-3-4b-it-Q8_0.gguf",
-            "url": "https://huggingface.co/ggml-org/gemma-3-4b-it-GGUF/resolve/main/gemma-3-4b-it-Q8_0.gguf"
-        },
-        {
-            "dir": MODEL_DIR / "gemma-3-4b-it-GGUF",
-            "file": "gemma-3-4b-it-Q4_K_M.gguf",
-            "url": "https://huggingface.co/ggml-org/gemma-3-4b-it-GGUF/resolve/main/gemma-3-4b-it-Q4_K_M.gguf"
-        },
-        {
-            "dir": MODEL_DIR / "gemma-3-4b-it-GGUF",
-            "file": "mmproj-gemma-3-4b-it-f16.gguf",
-            "url": "https://huggingface.co/ggml-org/gemma-3-4b-it-GGUF/resolve/main/mmproj-model-f16.gguf"
-        }
-    ]
-    
+
+    for model in models:
+        if FAST_MODE in model["required"]:
+            FAST_MODELS.append(model)
+        if STANDARD_MODE in model["required"]:
+            STANDARD_MODELS.append(model)
+        if FULL_FEATURE_MODE in model["required"]:
+            FULL_FEATURE_MODELS.append(model)
+
     print("Starting DocsRay model download...")
     print(f"Storage location: {MODEL_DIR}")
     
     for i, model in enumerate(models, 1):
-        model_path = model["dir"] / model["file"]
-        
+        model_path = model["dir"] / model["file"]    
         print(f"\n[{i}/{len(models)}] Checking {model['file']}...")
-        
+        if FAST_MODE:
+            if model["file"] not in FAST_MODELS:
+                print(f"Skipping {model['file']} for FAST_MODE")
+                continue
+        elif STANDARD_MODE:
+            if model["file"] not in STANDARD_MODELS:
+                print(f"Skipping {model['file']} for STANDARD_MODE")
+                continue
+        else:
+            if model["file"] not in FULL_FEATURE_MODELS:
+                print(f"Skipping {model['file']} for FULL_FEATURE_MODE")
+                continue
+
         if model_path.exists():
             file_size = model_path.stat().st_size / (1024 * 1024)
             print(f"✅ Already exists ({file_size:.1f} MB)")
@@ -114,25 +96,27 @@ def download_models():
 def check_models():
     """Check the status of currently downloaded models"""
     
-    models = [
-        ("bge-m3-gguf/bge-m3-Q8_0.gguf", "BGE-M3 Embedding Model (Q8_0)"),
-        ("multilingual-e5-large-gguf/multilingual-e5-large-Q8_0.gguf", "E5 Embedding Model (Q8_0)"),
-        ("gemma-3-1b-it-GGUF/gemma-3-1b-it-Q8_0.gguf", "Gemma 3 1B LLM (Q8_0)"),
-        ("gemma-3-1b-it-GGUF/gemma-3-1b-it-Q4_K_M.gguf", "Gemma 3 1B LLM (Q4_K_M)"),
-        ("gemma-3-4b-it-GGUF/gemma-3-4b-it-Q8_0.gguf", "Gemma 3 4B LLM (Q8_0)"),
-        ("gemma-3-4b-it-GGUF/gemma-3-4b-it-Q4_K_M.gguf", "Gemma 3 4B LLM (Q4_K_M)"),
-        ("gemma-3-4b-it-GGUF/mmproj-gemma-3-4b-it-f16.gguf", "Gemma 3 SigLIP Vision Encoder (F16)")
-    ]
-    
     print("📋 Model Status Check:")
     print(f"Base path: {MODEL_DIR}")
     
     total_size = 0
     missing_count = 0
-    
     for model_path, description in models:
+        if FAST_MODE:
+            if model_path not in FAST_MODELS:
+                print(f"Skipping {model_path} for FAST_MODE")
+                continue
+        elif STANDARD_MODE:
+            if model_path not in STANDARD_MODELS:
+                print(f"Skipping {model_path} for STANDARD_MODE")
+                continue
+        else:
+            if model_path not in FULL_FEATURE_MODELS:
+                print(f"Skipping {model_path} for FULL_FEATURE_MODE")
+                continue
+        print(f"Checking {description}...")
         full_path = MODEL_DIR / model_path
-        
+
         if full_path.exists():
             file_size = full_path.stat().st_size / (1024 * 1024)
             total_size += file_size

@@ -52,6 +52,7 @@ available_gb, detected_device = get_device_memory_gb()
 
 FAST_MODE = False
 MAX_TOKENS = 32768
+STANDARD_MODE = False
 FULL_FEATURE_MODE = False
 
 if not has_gpu:
@@ -66,6 +67,7 @@ else:
             FAST_MODE = True
             MAX_TOKENS = 32768
         elif available_gb < 32:
+            STANDARD_MODE = True
             MAX_TOKENS = 32768
         else:
             MAX_TOKENS = 0  
@@ -74,14 +76,88 @@ else:
         if available_gb < 16:
             FAST_MODE = True
             MAX_TOKENS = 16384
-        elif available_gb < 32:
+        elif available_gb < 24:
             FAST_MODE = True
             MAX_TOKENS = 32768
-        elif available_gb < 64:
+        elif available_gb < 32:
+            STANDARD_MODE = True
             MAX_TOKENS = 32768
         else:
             MAX_TOKENS = 0  
             FULL_FEATURE_MODE = True
+
+FAST_MODELS = []
+STANDARD_MODELS = []
+FULL_FEATURE_MODELS = []
+
+ALL_MODELS = [
+    {
+        "dir": MODEL_DIR / "bge-m3-gguf",
+        "file": "bge-m3-Q8_0.gguf",
+        "url": "https://huggingface.co/lm-kit/bge-m3-gguf/resolve/main/bge-m3-Q8_0.gguf",
+        "required": [FAST_MODE, STANDARD_MODE]
+    },
+{
+        "dir": MODEL_DIR / "bge-m3-gguf",
+        "file": "bge-m3-F16.gguf",
+        "url": "https://huggingface.co/doof-ferb/bge-m3-gguf/resolve/main/model-f16.gguf",
+        "required": [FULL_FEATURE_MODE]
+    },
+    {
+        "dir": MODEL_DIR / "multilingual-e5-large-gguf",
+        "file": "multilingual-e5-large-Q8_0.gguf",
+        "url": "https://huggingface.co/KeyurRamoliya/multilingual-e5-large-GGUF/resolve/main/multilingual-e5-large-q8_0.gguf",
+        "required": [FAST_MODE, STANDARD_MODE]
+    },
+    {
+        "dir": MODEL_DIR / "multilingual-e5-large-gguf",
+        "file": "multilingual-e5-large-F16.gguf",
+        "url": "https://huggingface.co/phate334/multilingual-e5-large-gguf/resolve/main/multilingual-e5-large-f16.gguf",
+        "required": [FULL_FEATURE_MODE]
+    },
+    {
+        "dir": MODEL_DIR / "gemma-3-1b-it-GGUF",
+        "file": "gemma-3-1b-it-Q4_K_M.gguf",
+        "url": "https://huggingface.co/ggml-org/gemma-3-1b-it-GGUF/resolve/main/gemma-3-1b-it-Q4_K_M.gguf",
+        "required": [FAST_MODE]
+    },
+    {
+        "dir": MODEL_DIR / "gemma-3-1b-it-GGUF",
+        "file": "gemma-3-1b-it-Q8_0.gguf",
+        "url": "https://huggingface.co/ggml-org/gemma-3-1b-it-GGUF/resolve/main/gemma-3-1b-it-Q8_0.gguf",
+        "required": [STANDARD_MODE]
+    },
+    {
+        "dir": MODEL_DIR / "gemma-3-1b-it-GGUF",
+        "file": "gemma-3-1b-it-F16.gguf",
+        "url": "https://huggingface.co/ggml-org/gemma-3-1b-it-GGUF/resolve/main/gemma-3-1b-it-f16.gguf",
+        "required": [FULL_FEATURE_MODE]
+    },
+    {
+        "dir": MODEL_DIR / "gemma-3-4b-it-GGUF",
+        "file": "gemma-3-4b-it-Q4_K_M.gguf",
+        "url": "https://huggingface.co/ggml-org/gemma-3-4b-it-GGUF/resolve/main/gemma-3-4b-it-Q4_K_M.gguf",
+        "required": [FAST_MODE]
+    },
+    {
+        "dir": MODEL_DIR / "gemma-3-4b-it-GGUF",
+        "file": "gemma-3-4b-it-Q8_0.gguf",
+        "url": "https://huggingface.co/ggml-org/gemma-3-4b-it-GGUF/resolve/main/gemma-3-4b-it-Q8_0.gguf",
+        "required": [STANDARD_MODE]
+    },
+    {
+        "dir": MODEL_DIR / "gemma-3-4b-it-GGUF",
+        "file": "gemma-3-4b-it-F16.gguf",
+        "url": "https://huggingface.co/ggml-org/gemma-3-4b-it-GGUF/resolve/main/gemma-3-4b-it-f16.gguf",
+        "required": [FULL_FEATURE_MODE]
+    },
+    {
+        "dir": MODEL_DIR / "gemma-3-4b-it-GGUF",
+        "file": "mmproj-gemma-3-4b-it-F16.gguf",
+        "url": "https://huggingface.co/ggml-org/gemma-3-4b-it-GGUF/resolve/main/mmproj-model-f16.gguf",
+        "required": [FAST_MODE, STANDARD_MODE, FULL_FEATURE_MODE]
+    }
+]
 
 DISABLE_VISUAL_ANALYSIS = os.environ.get("DOCSRAY_DISABLE_VISUALS", "0") == "1"
 
