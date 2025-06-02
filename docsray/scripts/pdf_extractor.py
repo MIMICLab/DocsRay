@@ -135,10 +135,11 @@ def analyze_image_with_llm(image: Image.Image, page_num: int, img_idx: int) -> s
     """
     
     # Prepare multimodal prompt
-    prompt = f"""Describe visual in 1-2 sentences. Start directly with the content description."""
+    prompt = """One sentence only: Describe everything important you see in the image."""
     # Use the large model for better image understanding
     response = local_llm_large.generate(prompt, image=image)
     description = local_llm_large.strip_response(response)
+    
     return f"\n\n[Figure {img_idx + 1} on page {page_num + 1}]: {description}\n\n"
 
 def ocr_with_llm(image: Image.Image, page_num: int) -> str:
