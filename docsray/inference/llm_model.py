@@ -107,17 +107,13 @@ class LocalLLM:
 
             if FULL_FEATURE_MODE:
                 w, h = image.size
-
-                if w >= h:
+                if w < h:
                     new_w = 896
                     new_h = int(h * (896 / w))
                 else:
                     new_h = 896
                     new_w = int(w * (896 / h))
-
-                image = image.resize((new_w, new_h), Image.LANCZOS)
-                final_image = image.resize((896, 672), Image.LANCZOS)
-                return final_image
+                resized = image.resize((new_w, new_h), Image.LANCZOS)
             else:
                 resized = image.resize((896, 896), Image.LANCZOS)
 
@@ -134,9 +130,11 @@ class LocalLLM:
             ]
             
             # Calculate max tokens for output
-            available_tokens = MAX_TOKENS if MAX_TOKENS > 0 else 32768
+            available_tokens = MAX_TOKENS if MAX_TOKENS > 0 else 131072
             if FAST_MODE:
                 min_tokens = 1024
+            elif FULL_FEATURE_MODE:
+                min_tokens = 4096
             else:
                 min_tokens = 2048    
 
@@ -153,11 +151,11 @@ class LocalLLM:
                     repeat_penalty=1.1
                 )
                 result = response['choices'][0]['message']['content']  
-                print(result)
                 return result.strip()
 
             except Exception as e:
                 print(f"Error in multimodal generation: {e}", file=sys.stderr)
+                return "FAILED to process multimodal input"
 
         
         else:
