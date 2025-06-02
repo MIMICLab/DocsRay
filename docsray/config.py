@@ -94,67 +94,67 @@ ALL_MODELS = [
     {
         "dir": MODEL_DIR / "bge-m3-gguf",
         "file": "bge-m3-Q8_0.gguf",
-        "url": "https://huggingface.co/lm-kit/bge-m3-gguf/resolve/main/bge-m3-Q8_0.gguf",
+        "url": "https://huggingface.co/tgisaturday/Docsray/resolve/main/bge-m3-gguf/bge-m3-Q8_0.gguf",
         "required": ["FAST_MODE", "STANDARD_MODE"]
     },
 {
         "dir": MODEL_DIR / "bge-m3-gguf",
         "file": "bge-m3-F16.gguf",
-        "url": "https://huggingface.co/doof-ferb/bge-m3-gguf/resolve/main/model-f16.gguf",
+        "url": "https://huggingface.co/tgisaturday/Docsray/resolve/main/bge-m3-gguf/bge-m3-F16.gguf",
         "required": ["FULL_FEATURE_MODE"]
     },
     {
         "dir": MODEL_DIR / "multilingual-e5-large-gguf",
         "file": "multilingual-e5-large-Q8_0.gguf",
-        "url": "https://huggingface.co/KeyurRamoliya/multilingual-e5-large-GGUF/resolve/main/multilingual-e5-large-q8_0.gguf",
+        "url": "https://huggingface.co/tgisaturday/Docsray/resolve/main/multilingual-e5-large-gguf/multilingual-e5-large-F16.gguf",
         "required": ["FAST_MODE", "STANDARD_MODE"]
     },
     {
         "dir": MODEL_DIR / "multilingual-e5-large-gguf",
         "file": "multilingual-e5-large-F16.gguf",
-        "url": "https://huggingface.co/phate334/multilingual-e5-large-gguf/resolve/main/multilingual-e5-large-f16.gguf",
+        "url": "https://huggingface.co/tgisaturday/Docsray/resolve/main/multilingual-e5-large-gguf/multilingual-e5-large-F16.gguf",
         "required": ["FULL_FEATURE_MODE"]
     },
     {
         "dir": MODEL_DIR / "gemma-3-1b-it-GGUF",
         "file": "gemma-3-1b-it-Q4_K_M.gguf",
-        "url": "https://huggingface.co/ggml-org/gemma-3-1b-it-GGUF/resolve/main/gemma-3-1b-it-Q4_K_M.gguf",
+        "url": "https://huggingface.co/tgisaturday/Docsray/resolve/main/gemma-3-1b-it-GGUF/gemma-3-1b-it-Q4_K_M.gguf",
         "required": ["FAST_MODE"]
     },
     {
         "dir": MODEL_DIR / "gemma-3-1b-it-GGUF",
         "file": "gemma-3-1b-it-Q8_0.gguf",
-        "url": "https://huggingface.co/ggml-org/gemma-3-1b-it-GGUF/resolve/main/gemma-3-1b-it-Q8_0.gguf",
+        "url": "https://huggingface.co/tgisaturday/Docsray/resolve/main/gemma-3-1b-it-GGUF/gemma-3-1b-it-Q8_0.gguf",
         "required": ["STANDARD_MODE"]
     },
     {
         "dir": MODEL_DIR / "gemma-3-1b-it-GGUF",
         "file": "gemma-3-1b-it-F16.gguf",
-        "url": "https://huggingface.co/ggml-org/gemma-3-1b-it-GGUF/resolve/main/gemma-3-1b-it-f16.gguf",
+        "url": "https://huggingface.co/tgisaturday/Docsray/resolve/main/gemma-3-1b-it-GGUF/gemma-3-1b-it-F16.gguf",
         "required": ["FULL_FEATURE_MODE"]
     },
     {
         "dir": MODEL_DIR / "gemma-3-4b-it-GGUF",
         "file": "gemma-3-4b-it-Q4_K_M.gguf",
-        "url": "https://huggingface.co/ggml-org/gemma-3-4b-it-GGUF/resolve/main/gemma-3-4b-it-Q4_K_M.gguf",
+        "url": "https://huggingface.co/tgisaturday/Docsray/resolve/main/gemma-3-4b-it-GGUF/gemma-3-1b-it-Q4_K_M.gguf",
         "required": ["FAST_MODE"]
     },
     {
         "dir": MODEL_DIR / "gemma-3-4b-it-GGUF",
         "file": "gemma-3-4b-it-Q8_0.gguf",
-        "url": "https://huggingface.co/ggml-org/gemma-3-4b-it-GGUF/resolve/main/gemma-3-4b-it-Q8_0.gguf",
+        "url": "https://huggingface.co/tgisaturday/Docsray/resolve/main/gemma-3-4b-it-GGUF/gemma-3-4b-it-Q8_0.gguf",
         "required": ["STANDARD_MODE"]
     },
     {
         "dir": MODEL_DIR / "gemma-3-4b-it-GGUF",
         "file": "gemma-3-4b-it-F16.gguf",
-        "url": "https://huggingface.co/ggml-org/gemma-3-4b-it-GGUF/resolve/main/gemma-3-4b-it-f16.gguf",
+        "url": "https://huggingface.co/tgisaturday/Docsray/resolve/main/gemma-3-4b-it-GGUF/gemma-3-4b-it-F16.gguf",
         "required": ["FULL_FEATURE_MODE"]
     },
     {
         "dir": MODEL_DIR / "gemma-3-4b-it-GGUF",
         "file": "mmproj-gemma-3-4b-it-F16.gguf",
-        "url": "https://huggingface.co/ggml-org/gemma-3-4b-it-GGUF/resolve/main/mmproj-model-f16.gguf",
+        "url": "https://huggingface.co/tgisaturday/Docsray/resolve/main/gemma-3-4b-it-GGUF/mmproj-gemma-3-4b-it-f16.gguf",
         "required": ["FAST_MODE", "STANDARD_MODE", "FULL_FEATURE_MODE"]
     }
 ]

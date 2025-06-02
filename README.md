@@ -27,6 +27,12 @@ CMAKE_ARGS=-DLLAMA_METAL=on FORCE_CMAKE=1 pip install git+https://github.com/kos
 # For CUDA (NVIDIA)
 CMAKE_ARGS=-DGGML_CUDA=on FORCE_CMAKE=1 pip install git+https://github.com/kossum/llama-cpp-python.git@main --force-reinstall --upgrade --no-cache-dir
 
+# 1-2. Tesseract OCR (For visual analysis)
+sudo apt-get install tesseract-ocr   # Debian/Ubuntu
+sudo apt-get install tesseract-ocr-kor
+brew install tesseract-ocr   # MacOS
+brew install tesseract-ocr-kor
+
 # 2. Download required models (approximately 8GB)
 docsray download-models
 
@@ -504,8 +510,10 @@ CMAKE_ARGS="-DLLAMA_METAL=on" pip install llama-cpp-python --no-cache-dir
 ### OCR Language Errors
 
 ```bash
-# Install Korean tesseract data
+sudo apt-get install tesseract-ocr   # Debian/Ubuntu
 sudo apt-get install tesseract-ocr-kor
+brew install tesseract-ocr   # MacOS
+brew install tesseract-ocr-kor
 ```
 
 ### File Conversion Issues
