@@ -109,10 +109,10 @@ class LocalLLM:
                 w, h = image.size
                 if w < h:
                     new_w = 896
-                    new_h = int(h * (896 / w))
+                    new_h = min(int(h * (896 / w), 896 * 2))
                 else:
                     new_h = 896
-                    new_w = int(w * (896 / h))
+                    new_w = min(int(w * (896 / h)), 896 * 2)
                 resized = image.resize((new_w, new_h), Image.LANCZOS)
             else:
                 resized = image.resize((896, 896), Image.LANCZOS)
