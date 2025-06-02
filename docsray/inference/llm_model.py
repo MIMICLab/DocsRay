@@ -107,13 +107,17 @@ class LocalLLM:
 
             if FULL_FEATURE_MODE:
                 w, h = image.size
-                if w < h:
+
+                if w >= h:
                     new_w = 896
-                    new_h = min(int(h * (896 / w), 896 * 2))
+                    new_h = int(h * (896 / w))
                 else:
                     new_h = 896
-                    new_w = min(int(w * (896 / h)), 896 * 2)
-                resized = image.resize((new_w, new_h), Image.LANCZOS)
+                    new_w = int(w * (896 / h))
+
+                image = image.resize((new_w, new_h), Image.LANCZOS)
+                final_image = image.resize((896, 672), Image.LANCZOS)
+                return final_image
             else:
                 resized = image.resize((896, 896), Image.LANCZOS)
 
