@@ -94,7 +94,7 @@ class LocalLLM:
             prompt: Text prompt
             image: PIL Image object (optional)
         """
-        if image is not None and self.is_multimodal and self.mmproj_path:
+        if image is not None and self.is_multimodal:
             # Use chat completion API for multimodal input
             
             # Convert to RGB if necessary
@@ -136,6 +136,7 @@ class LocalLLM:
                 repeat_penalty=1.1
             )
             result = response['choices'][0]['message']['content']  
+
             return result.strip()
         
         else:
