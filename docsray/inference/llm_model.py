@@ -116,7 +116,6 @@ class LocalLLM:
                 repeat_penalty=1.1
             )
             result = response['choices'][0]['message']['content']  
-            print(result)
             return result.strip()
         
         else:
