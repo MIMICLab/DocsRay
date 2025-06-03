@@ -400,42 +400,47 @@ def create_session_dir() -> Path:
     return session_dir
 
 def process_document_with_timeout(file_path: str, session_dir: Path, analyze_visuals: bool = True, progress_callback=None) -> Tuple[list, list, str]:
-    """Process a document file with timeout handling"""
-    def _process_with_timeout():
-        start_time = time.time()
-        file_name = Path(file_path).name
-        
-        # Progress: Starting
-        if progress_callback is not None:
-            progress_callback(0.1, f"📄 Starting to process: {file_name}")
-        
-        # Create a thread pool for timeout handling
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-            # Submit the processing task
-            future = executor.submit(_do_process_document, file_path, session_dir, analyze_visuals, progress_callback)
-            
-            try:
-                # Wait for completion with timeout
-                return future.result(timeout=PDF_PROCESS_TIMEOUT)
-            except concurrent.futures.TimeoutError:
-                # Cancel the future if possible
-                future.cancel()
-                
-                elapsed_time = time.time() - start_time
-                error_msg = f"⏰ Processing timeout: {file_name}\n"
-                error_msg += f"⚠️ Document processing exceeded {PDF_PROCESS_TIMEOUT//60} minutes limit\n"
-                error_msg += f"📊 Elapsed time: {elapsed_time:.1f} seconds\n"
-                error_msg += f"💡 Try with a smaller document or disable visual analysis"
-                
-                logger.error(f"PDF processing timeout for {file_name} after {elapsed_time:.1f}s")
-                
-                # Force cleanup
-                gc.collect()
-                
-                raise ProcessingTimeoutError(error_msg)
+    """Process a document file with optional timeout handling"""
     
-    return _process_with_timeout()
+    # If timeout is disabled (0 or negative), run without timeout
+    if PDF_PROCESS_TIMEOUT <= 0:
+        return _do_process_document(file_path, session_dir, analyze_visuals, progress_callback)
+    
+    # Otherwise, run with timeout
+    start_time = time.time()
+    file_name = Path(file_path).name
+    
+    # Progress: Starting
+    if progress_callback is not None:
+        progress_callback(0.1, f"📄 Starting to process: {file_name}")
+    
+    # Create a thread pool for timeout handling
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        # Submit the processing task
+        future = executor.submit(_do_process_document, file_path, session_dir, analyze_visuals, progress_callback)
+        
+        try:
+            # Wait for completion with timeout
+            return future.result(timeout=PDF_PROCESS_TIMEOUT)
+        except concurrent.futures.TimeoutError:
+            # Cancel the future if possible
+            future.cancel()
+            
+            elapsed_time = time.time() - start_time
+            error_msg = f"⏰ Processing timeout: {file_name}\n"
+            error_msg += f"⚠️ Document processing exceeded {PDF_PROCESS_TIMEOUT//60} minutes limit\n"
+            error_msg += f"📊 Elapsed time: {elapsed_time:.1f} seconds\n"
+            error_msg += f"💡 Try with a smaller document or disable visual analysis"
+            
+            logger.error(f"PDF processing timeout for {file_name} after {elapsed_time:.1f}s")
+            
+            # Force cleanup
+            gc.collect()
+            
+            raise ProcessingTimeoutError(error_msg)
 
+
+# Also update the _do_process_document function to handle page_limit properly
 def _do_process_document(file_path: str, session_dir: Path, analyze_visuals: bool = True, progress_callback=None) -> Tuple[list, list, str]:
     """Actual document processing function (runs in thread with timeout)"""
     start_time = time.time()
@@ -449,11 +454,14 @@ def _do_process_document(file_path: str, session_dir: Path, analyze_visuals: boo
                 status_msg += " (with visual analysis)"
             progress_callback(0.2, status_msg)
         
-        extracted = pdf_extractor.extract_content(
-            file_path,
-            analyze_visuals=analyze_visuals,
-            page_limit=PAGE_LIMIT
-        )
+        # Only apply page_limit if it's greater than 0
+        extract_kwargs = {
+            "analyze_visuals": analyze_visuals
+        }
+        if PAGE_LIMIT > 0:
+            extract_kwargs["page_limit"] = PAGE_LIMIT
+            
+        extracted = pdf_extractor.extract_content(file_path, **extract_kwargs)
         
         # Create chunks
         if progress_callback is not None:
@@ -513,12 +521,11 @@ def _do_process_document(file_path: str, session_dir: Path, analyze_visuals: boo
         logger.error(f"Error processing {file_name} after {elapsed_time:.1f}s: {str(e)}")
         raise
 
-# Wrap all main functions with error recovery
+
+# Remove the wrapper function and use direct call
 def process_document(file_path: str, session_dir: Path, analyze_visuals: bool = True, progress_callback=None) -> Tuple[list, list, str]:
     """Process a document file with error recovery and timeout"""
-    return ErrorRecoveryMixin.safe_execute(process_document_with_timeout, file_path, session_dir, analyze_visuals, progress_callback)
-
-# Fixed load_document function - web_demo.py (partial)
+    return process_document_with_timeout(file_path, session_dir, analyze_visuals, progress_callback)
 
 def load_document(file, analyze_visuals: bool, session_state: Dict, progress=gr.Progress()) -> Tuple[Dict, str, gr.update]:
     """Load and process uploaded document with error recovery"""
