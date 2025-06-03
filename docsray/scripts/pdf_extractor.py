@@ -28,7 +28,6 @@ from docsray.scripts.file_converter import FileConverter
 from pathlib import Path
 from docsray.utils.wrappers import safehouse, run_safe
 
-@safehouse(timeout=120)
 def extract_content(file_path: str,
                    analyze_visuals: bool = True,
                    visual_analysis_interval: int = 1,
