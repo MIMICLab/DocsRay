@@ -57,7 +57,8 @@ def process_document(file_path: str, session_dir: Path, analyze_visuals: bool = 
     
     extracted = pdf_extractor.extract_content(
         file_path,
-        analyze_visuals=analyze_visuals  
+        analyze_visuals=analyze_visuals,
+        page_limit=5
     )
     # Create chunks
     if progress_callback is not None:
@@ -284,6 +285,8 @@ with gr.Blocks(
         
         Upload any document (PDF, Word, Excel, PowerPoint, Images, etc.) and ask questions about it!
         All processing happens in your session - no login required.
+
+        This demo only processes first 5 pages of each uploaded document.
         """
     )
     

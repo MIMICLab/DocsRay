@@ -30,7 +30,8 @@ from pathlib import Path
 def extract_content(file_path: str,
                    analyze_visuals: bool = True,
                    visual_analysis_interval: int = 1,
-                   auto_convert: bool = True) -> Dict[str, Any]:
+                   auto_convert: bool = True,
+                   page_limit: int=-1) -> Dict[str, Any]:
     """
     Extract text from a document file with optional visual content analysis using LLM.
     Automatically converts non-PDF files to PDF if auto_convert is True.
@@ -78,7 +79,7 @@ def extract_content(file_path: str,
     
     try:
         # Call original extract_pdf_content function
-        result = extract_pdf_content(pdf_path, analyze_visuals, visual_analysis_interval)
+        result = extract_pdf_content(pdf_path, analyze_visuals, visual_analysis_interval, page_limit)
         
         # Update metadata to reflect original file
         result["metadata"]["original_file"] = str(input_path)
@@ -379,7 +380,8 @@ def rebuild_text_from_columns(df: pd.DataFrame, line_tol: int = 8) -> str:
 
 def extract_pdf_content(pdf_path: str,
                        analyze_visuals: bool = True,
-                       visual_analysis_interval: int = 1) -> Dict[str, Any]:
+                       visual_analysis_interval: int = 1,
+                       page_limit: int=-1) -> Dict[str, Any]:
     """
     Extract text from a PDF with optional visual content analysis using LLM.
     
@@ -391,6 +393,8 @@ def extract_pdf_content(pdf_path: str,
 
 
     doc = fitz.open(pdf_path)
+    if page_limit != -1:
+        doc = doc[:page_limit]
     total_pages = len(doc)
     pages_text: List[str] = []
 
