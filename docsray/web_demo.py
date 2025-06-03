@@ -726,38 +726,45 @@ try:
         ),
         css=CUSTOM_CSS
     ) as demo:
-        if PAGE_LIMIT > 0 :
-            page_limits =f'''<p style="font-size: 13px; color: #ef4444; font-weight: 600; margin-top: 8px;">
-                        ⚠️ Demo Mode: Only first {PAGE_LIMIT} pages of each document will be processed
-                    </p>'''
-        else:
-            page_limits =""
+        header_html = """
+        <div style="text-align: center; padding: 20px 0;">
+            <h1 style="font-size: 32px; font-weight: 700; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 8px;">
+                🚀 DocsRay
+            </h1>
+            <p style="font-size: 18px; color: #6b7280; font-weight: 500;">
+                Universal Document Q&A System
+            </p>
+            <p style="font-size: 14px; color: #9ca3af; max-width: 600px; margin: 8px auto;">
+                Upload any document (PDF, Word, Excel, PowerPoint, Images, etc.) and ask questions about it!
+                All processing happens in your session - no login required.
+            </p>
+        """
+
+        # Add page limit warning if applicable
+        if PAGE_LIMIT > 0:
+            header_html += f"""
+            <p style="font-size: 13px; color: #ef4444; font-weight: 600; margin-top: 8px;">
+                ⚠️ Demo Mode: Only first {PAGE_LIMIT} pages of each document will be processed
+            </p>
+        """
+
+        # Add timeout warning if applicable
         if PDF_PROCESS_TIMEOUT > 0:
-            timeout_limits=f'''<p style="font-size: 13px; color: #f59e0b; font-weight: 600; margin-top: 4px;">
-                    ⏰ Processing Timeout: {PDF_PROCESS_TIMEOUT//60} minutes per document
-                </p>'''
-        else:
-            timeout_limits = ""
-        # Header with better styling
+            header_html += f"""
+            <p style="font-size: 13px; color: #f59e0b; font-weight: 600; margin-top: 4px;">
+                ⏰ Processing Timeout: {PDF_PROCESS_TIMEOUT//60} minutes per document
+            </p>
+        """
+
+        # Close the div
+        header_html += "</div>"
+
+        # Create the Markdown component
         gr.Markdown(
-            f"""
-            <div style="text-align: center; padding: 20px 0;">
-                <h1 style="font-size: 32px; font-weight: 700; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 8px;">
-                    🚀 DocsRay
-                </h1>
-                <p style="font-size: 18px; color: #6b7280; font-weight: 500;">
-                    Universal Document Q&A System
-                </p>
-                <p style="font-size: 14px; color: #9ca3af; max-width: 600px; margin: 8px auto;">
-                    Upload any document (PDF, Word, Excel, PowerPoint, Images, etc.) and ask questions about it!
-                    All processing happens in your session - no login required.
-                </p>
-                {page_limits}{timeout_limits}
-                </div>
-            """,
+            header_html,
             elem_classes=["header-section"]
         )
-        
+                
         # Session state
         session_state = gr.State({})
         
