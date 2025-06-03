@@ -6,7 +6,7 @@ pdfplumber
 tiktoken
 
 # For LLMs
-llama_cpp_python
+llama-cpp-python
 
 # PyTorch 
 torch
@@ -54,10 +54,3 @@ markdown>=3.4.1  # Markdown to HTML conversion
 # HWP support
 pyhwp  # Basic HWP support
 olefile # Required by pyhwp
-
-
-# Optional but recommended system dependencies (install separately):
-# - LibreOffice (for reliable Office document conversion)
-# - wkhtmltopdf (for pdfkit)
-# - weasyprint  # Alternative HTML to PDF converter
-# - hwp5  # Alternative HWP library (optional)
