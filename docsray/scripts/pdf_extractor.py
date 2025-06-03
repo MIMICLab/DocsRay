@@ -123,24 +123,30 @@ def extract_images_from_page(page, min_width: int = 100, min_height: int = 100) 
             img_rects = page.get_image_rects(xref)
             if img_rects:
                 images.append((pil_img, img_rects[0]))
-        
         pix = None  # Free memory
-    
+    images.sort(key=lambda x: (x[1].y0, x[1].x0))
+    images = [img for img, rect in images]   
+
     return images
 
 
-def analyze_image_with_llm(image: Image.Image, page_num: int, img_idx: int) -> str:
+def analyze_image_with_llm(images: list, page_num: int) -> str:
     """
     Use multimodal LLM to analyze and describe an image.
     """
     
     # Prepare multimodal prompt
-    prompt = """One sentence only: Describe everything important you see in the image."""
+    prompt = """Write one sentence per image using this exact format:
+
+    Figure 1: [description]
+    Figure 2: [description]
+    Figure 3: [description]
+
+    Start immediately with Figure 1. No introduction needed."""
     # Use the large model for better image understanding
-    response = local_llm_large.generate(prompt, image=image)
-    description = local_llm_large.strip_response(response)
+    response = local_llm_large.generate(prompt, images=images)
     
-    return f"[Figure {img_idx + 1} on page {page_num + 1}]: {description}"
+    return f"\n\n[{page_num + 1}]\n\n{response}\n\n"
 
 def ocr_with_llm(image: Image.Image, page_num: int) -> str:
     """
@@ -158,22 +164,15 @@ def analyze_visual_content(page, page_num: int) -> str:
     """
     Analyze visual content (images, charts, tables) on a page using multimodal LLM.
     """
-
-    visual_descriptions = []
+    visual_graphics = []
+    visual_description = ""
     
     # Extract images
     images = extract_images_from_page(page)
 
     if images:
         print(f"  Found {len(images)} images on page {page_num + 1}", file=sys.stderr)
-        
-        for idx, (img, rect) in enumerate(images):
-            # Use LLM to analyze each image
-            description = analyze_image_with_llm(img, page_num, idx)
-            if description:
-                visual_descriptions.append(description)
-    
-    # Also check for vector graphics
+        visual_graphics += images
     drawings = page.get_drawings()
     if drawings:
         # Count different types of drawing elements
@@ -183,32 +182,23 @@ def analyze_visual_content(page, page_num: int) -> str:
         
         if lines > 10 or curves > 5 or rects > 5:
             # For complex vector graphics, render the page area as image and analyze
-            try:
-                # Get the bounding box of all drawings
-                all_rects = [fitz.Rect(d["rect"]) for d in drawings]
-                if all_rects:
-                    # Union of all drawing rectangles
-                    bbox = all_rects[0]
-                    for r in all_rects[1:]:
-                        bbox = bbox | r  # Union operation
-                    
-                    # Render the area as image
-                    mat = fitz.Matrix(2, 2)  # 2x zoom for better quality
-                    pix = page.get_pixmap(matrix=mat, clip=bbox)
-                    vector_img = Image.open(io.BytesIO(pix.pil_tobytes(format="PNG")))
-                    
-                    # Analyze with LLM
-                    description = analyze_image_with_llm(vector_img, page_num, len(images))
-                    if description:
-                        visual_descriptions.append(f"[Vector Graphics]: {description}")
-            except Exception as e:
-                print(f"Error analyzing vector graphics: {e}", file=sys.stderr)
-    
-    # Combine all visual descriptions
-    if visual_descriptions:
-        return "\n\n" + "\n".join(visual_descriptions)
-    else:
-        return ""
+            # Get the bounding box of all drawings
+            all_rects = [fitz.Rect(d["rect"]) for d in drawings]
+            if all_rects:
+                # Union of all drawing rectangles
+                bbox = all_rects[0]
+                for r in all_rects[1:]:
+                    bbox = bbox | r  # Union operation
+                
+                # Render the area as image
+                mat = fitz.Matrix(2, 2)  # 2x zoom for better quality
+                pix = page.get_pixmap(matrix=mat, clip=bbox)
+                vector_img = Image.open(io.BytesIO(pix.pil_tobytes(format="PNG")))
+                visual_graphics.append(vector_img)
+    if len(visual_graphics) > 0:
+        visual_description += analyze_image_with_llm(visual_graphics, page_num)
+    return visual_description
+
 
 def build_sections_from_layout(pages_text: List[str],
                                init_chunk: int = 5,

@@ -86,7 +86,7 @@ class LocalLLM:
                 )
                 self.tokenizer = LlamaTokenizer(self.model)
 
-    def generate(self, prompt, image=None):
+    def generate(self, prompt, images=None):
         """
         Generate text from prompt, optionally with an image for multimodal models.
         
@@ -94,50 +94,51 @@ class LocalLLM:
             prompt: Text prompt
             image: PIL Image object (optional)
         """
-        if image is not None and self.is_multimodal:
-            # Use chat completion API for multimodal input
-            
-            # Convert to RGB if necessary
-            if image.mode in ('RGBA', 'LA'):
-                rgb_image = Image.new('RGB', image.size, (255, 255, 255))
-                rgb_image.paste(image, mask=image.split()[-1] if image.mode == 'RGBA' else None)
-                image = rgb_image
-            elif image.mode != 'RGB':
-                image = image.convert('RGB')
-
-            if FULL_FEATURE_MODE:
-                w, h = image.size
-                if w < h:
-                    new_w = 896
-                    new_h = int(h * (896 / w))
-                else:
-                    new_h = 896
-                    new_w = int(w * (896 / h))
-                resized = image.resize((new_w, new_h), Image.LANCZOS)
-            else:
-                resized = image.resize((896, 896), Image.LANCZOS)
-
-            # Convert image to data URI
-            image_uri = image_to_base64_data_uri(resized, format="PNG")
+        if images is not None and self.is_multimodal:
             messages = [
                 {
                     "role": "user",
                     "content": [
                                 {'type': 'text', 'text': prompt},
-                                {'type': 'image_url', 'image_url': image_uri},
                     ]
                 }
             ]
+            # Use chat completion API for multimodal input
+            images = images[:MAX_TOKENS // 512 ] # limit number of images to use <50% of MAX_TOKENS
+            for image in images:
+                # Convert to RGB if necessary
+                if image.mode in ('RGBA', 'LA'):
+                    rgb_image = Image.new('RGB', image.size, (255, 255, 255))
+                    rgb_image.paste(image, mask=image.split()[-1] if image.mode == 'RGBA' else None)
+                    image = rgb_image
+                elif image.mode != 'RGB':
+                    pass
+
+                if FAST_MODE:
+                    resized = image.resize((896, 896), Image.LANCZOS)
+                else:
+                    w, h = image.size
+                    if w < h:
+                        new_w = 896
+                        new_h = int(h * (896 / w))
+                    else:
+                        new_h = 896
+                        new_w = int(w * (896 / h))
+                    resized = image.resize((new_w, new_h), Image.LANCZOS)
+                # Convert image to data URI
+                image_uri = image_to_base64_data_uri(resized, format="PNG")
+                messages[0]['content'].append({'type': 'image_url', 'image_url': image_uri})
+            print(len(messages[0]['content']))
             response = self.model.create_chat_completion(
                 messages=messages,
                 stop = ['<end_of_turn>'],
-                max_tokens=MAX_TOKENS//16,
+                max_tokens=MAX_TOKENS//2,
                 temperature=0.7,
                 top_p=0.95,
                 repeat_penalty=1.1
             )
             result = response['choices'][0]['message']['content']  
-
+            print(result)
             return result.strip()
         
         else:
@@ -162,18 +163,11 @@ class LocalLLM:
         if not response:
             return response
             
-        if "gemma" in self.model.model_path.lower():
-            if '<start_of_turn>model' in response:
-                response = response.split('<start_of_turn>model')[-1]
-            if '<end_of_turn>' in response:
-                response = response.split('<end_of_turn>')[0]
-            return response.strip().lstrip('\n')
-        else:
-            if '<|im_start|>assistant' in response:
-                response = response.split('<|im_start|>assistant')[-1]
-            if '<|im_end|>' in response:
-                response = response.split('<|im_end|>')[0]
-            return response.strip()
+        if '<start_of_turn>model' in response:
+            response = response.split('<start_of_turn>model')[-1]
+        if '<end_of_turn>' in response:
+            response = response.split('<end_of_turn>')[0]
+        return response.strip().lstrip('\n')
 
 
 if torch.cuda.is_available():

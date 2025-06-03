@@ -1544,55 +1544,55 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
                     return [TextContent(type="text", text=f"❌ Document file not found: {file_path}")]
             
             # Process the document
-            try:
-                from docsray.scripts import pdf_extractor
-                
-                # Use global setting if not specified
-                if analyze_visuals is None:
-                    analyze_visuals = visual_analysis_enabled
-                
-                # Extract content with visual analysis option
-                extracted = pdf_extractor.extract_content(
-                    str(file_path),
-                    analyze_visuals=analyze_visuals
-                )
-                
-                # Process extracted content
-                chunks = chunker.process_extracted_file(extracted)
-                chunk_index = build_index.build_chunk_index(chunks)
-                sections = section_rep_builder.build_section_reps(extracted["sections"], chunk_index)
-                
-                current_sections = sections
-                current_index = chunk_index
-                current_pdf_name = file_path.name
-                current_pages_text = extracted.get("pages_text", [])
-                
-                # Get file info
-                file_size = file_path.stat().st_size / (1024 * 1024)  # MB
-                num_sections = len(sections)
-                num_chunks = len(chunk_index)
-                num_pages = len(current_pages_text)
-                
-                response = f"✅ Successfully loaded: {file_path.name}\n"
-                response += f"📂 From: {file_path.parent}\n"
-                
-                if extracted["metadata"].get("was_converted", False):
-                    original_format = extracted["metadata"].get("original_format", "unknown")
-                    response += f"🔄 Converted from: {original_format.upper()} to PDF\n"
-                
-                response += f"👁️ Visual analysis: {'Enabled' if analyze_visuals else 'Disabled'}\n"
-                response += f"📊 File size: {file_size:.1f} MB\n"
-                response += f"📄 Pages: {num_pages}\n"
-                response += f"📑 Sections: {num_sections}\n"
-                response += f"🔍 Chunks: {num_chunks}\n\n"
-                response += "You can now:\n"
-                response += "• Ask questions about this document using 'ask_question'\n"
-                response += "• Generate a comprehensive summary using 'summarize_document'"
-                
-                return [TextContent(type="text", text=response)]
+            #try:
+            from docsray.scripts import pdf_extractor
+            
+            # Use global setting if not specified
+            if analyze_visuals is None:
+                analyze_visuals = visual_analysis_enabled
+            
+            # Extract content with visual analysis option
+            extracted = pdf_extractor.extract_content(
+                str(file_path),
+                analyze_visuals=analyze_visuals
+            )
+            
+            # Process extracted content
+            chunks = chunker.process_extracted_file(extracted)
+            chunk_index = build_index.build_chunk_index(chunks)
+            sections = section_rep_builder.build_section_reps(extracted["sections"], chunk_index)
+            
+            current_sections = sections
+            current_index = chunk_index
+            current_pdf_name = file_path.name
+            current_pages_text = extracted.get("pages_text", [])
+            
+            # Get file info
+            file_size = file_path.stat().st_size / (1024 * 1024)  # MB
+            num_sections = len(sections)
+            num_chunks = len(chunk_index)
+            num_pages = len(current_pages_text)
+            
+            response = f"✅ Successfully loaded: {file_path.name}\n"
+            response += f"📂 From: {file_path.parent}\n"
+            
+            if extracted["metadata"].get("was_converted", False):
+                original_format = extracted["metadata"].get("original_format", "unknown")
+                response += f"🔄 Converted from: {original_format.upper()} to PDF\n"
+            
+            response += f"👁️ Visual analysis: {'Enabled' if analyze_visuals else 'Disabled'}\n"
+            response += f"📊 File size: {file_size:.1f} MB\n"
+            response += f"📄 Pages: {num_pages}\n"
+            response += f"📑 Sections: {num_sections}\n"
+            response += f"🔍 Chunks: {num_chunks}\n\n"
+            response += "You can now:\n"
+            response += "• Ask questions about this document using 'ask_question'\n"
+            response += "• Generate a comprehensive summary using 'summarize_document'"
+            
+            return [TextContent(type="text", text=response)]
 
-            except Exception as e:
-                return [TextContent(type="text", text=f"❌ Error processing document: {str(e)}")]
+            #except Exception as e:
+            #    return [TextContent(type="text", text=f"❌ Error processing document: {str(e)}")]
         
         elif name == "set_visual_analysis":
             enabled = arguments["enabled"]
