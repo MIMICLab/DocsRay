@@ -728,16 +728,14 @@ try:
         css=CUSTOM_CSS
     ) as demo:
         if PAGE_LIMIT > 0 :
-            page_limits =f'''
-                    <p style="font-size: 13px; color: #ef4444; font-weight: 600; margin-top: 8px;">
+            page_limits =f'''<p style="font-size: 13px; color: #ef4444; font-weight: 600; margin-top: 8px;">
                         ⚠️ Demo Mode: Only first {PAGE_LIMIT} pages of each document will be processed
                     </p>
                     '''
         else:
             page_limits =""
         if PDF_PROCESS_TIMEOUT > 0:
-            timeout_limits=f'''
-                <p style="font-size: 13px; color: #f59e0b; font-weight: 600; margin-top: 4px;">
+            timeout_limits=f'''<p style="font-size: 13px; color: #f59e0b; font-weight: 600; margin-top: 4px;">
                     ⏰ Processing Timeout: {PDF_PROCESS_TIMEOUT//60} minutes per document
                 </p>
                 '''
