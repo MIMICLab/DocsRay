@@ -731,13 +731,13 @@ try:
                         ⚠️ Demo Mode: Only first {PAGE_LIMIT} pages of each document will be processed
                     </p>'''
         else:
-            page_limits ="\n"
+            page_limits =""
         if PDF_PROCESS_TIMEOUT > 0:
             timeout_limits=f'''<p style="font-size: 13px; color: #f59e0b; font-weight: 600; margin-top: 4px;">
                     ⏰ Processing Timeout: {PDF_PROCESS_TIMEOUT//60} minutes per document
                 </p>'''
         else:
-            timeout_limits = "\n"
+            timeout_limits = ""
         # Header with better styling
         gr.Markdown(
             f"""
@@ -752,7 +752,8 @@ try:
                     Upload any document (PDF, Word, Excel, PowerPoint, Images, etc.) and ask questions about it!
                     All processing happens in your session - no login required.
                 </p>
-                {page_limits}{timeout_limits}</div>
+                {page_limits}{timeout_limits}
+                </div>
             """,
             elem_classes=["header-section"]
         )
