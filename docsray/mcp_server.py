@@ -1216,12 +1216,15 @@ def search_by_content(
     
     # Get query embedding
     query_embedding = embedding_model.get_embedding(query, is_query=True)
+    pattern = f"*_summary_{detail_level}_embedding.pkl"
+    embedding_files = list(CACHE_DIR.glob(pattern))    
+
     
     # Find all summary embeddings of the specified detail level
-    pattern = f"*_summary_{detail_level}_embedding.pkl"
-    embedding_files = list(CACHE_DIR.glob(pattern))
-    
+
     if not embedding_files:
+        all_pkl_files = list(CACHE_DIR.glob("*.pkl"))
+        print(f"❓ All .pkl files in cache: {[f.name for f in all_pkl_files]}", file=sys.stderr)
         return {
             "query": query,
             "detail_level": detail_level,
@@ -1259,7 +1262,7 @@ def search_by_content(
             "results": []
         }
     
-    # Use optimized vector search
+    # First search with original query
     results_with_scores = vector_search_with_metadata(
         query_emb=query_embedding,
         embeddings=embeddings,
@@ -1267,6 +1270,60 @@ def search_by_content(
         top_k=top_k
     )
     
+    # Check if we need to improve the query
+    if results_with_scores:
+        # Get the best score
+        best_score = results_with_scores[0][1]
+        
+        # If best score is low, try to improve the query
+        if best_score < 0.7:  # Threshold for considering query improvement
+            print(f"🔄 Best score {best_score:.3f} is low, improving query...", file=sys.stderr)
+            
+            # Use local LLM to improve the query
+            improve_prompt = f"""Given the search query: "{query}"
+
+Generate 3 alternative search queries that might find relevant documents. 
+Consider synonyms, related terms, and different phrasings.
+Return only the queries, one per line.
+
+Alternative queries:"""
+            
+            try:
+                improved_queries_response = local_llm_large.generate(improve_prompt)
+                improved_queries = local_llm.strip_response(improved_queries_response).strip().split('\n')
+                improved_queries = [query + ':' +q.strip() for q in improved_queries if q.strip()][:3]
+                
+                print(f"🔍 Trying improved queries: {improved_queries}", file=sys.stderr)
+                
+                # Search with each improved query
+                all_results = list(results_with_scores)  # Keep original results
+                seen_docs = {meta["document"] for meta, _ in results_with_scores}
+                
+                for improved_query in improved_queries:
+                    # Get embedding for improved query
+                    improved_embedding = embedding_model.get_embedding(improved_query, is_query=True)
+                    
+                    # Search with improved query
+                    improved_results = vector_search_with_metadata(
+                        query_emb=improved_embedding,
+                        embeddings=embeddings,
+                        metadata=metadata,
+                        top_k=top_k
+                    )
+                    
+                    # Add new results (avoid duplicates)
+                    for meta, score in improved_results:
+                        if meta["document"] not in seen_docs:
+                            all_results.append((meta, score * 0.9))  # Slightly penalize improved query results
+                            seen_docs.add(meta["document"])
+                
+                # Re-sort all results by score
+                all_results.sort(key=lambda x: x[1], reverse=True)
+                results_with_scores = all_results[:top_k]
+                
+            except Exception as e:
+                print(f"Error improving query: {e}", file=sys.stderr)
+                # Continue with original results
     # Format results
     results = []
     for meta, score in results_with_scores:
@@ -1366,7 +1423,7 @@ def summarize_document_by_sections(sections: List, chunk_index: List,
                                    brief_mode: bool = False) -> str:
     """
     Create a comprehensive summary of the document organized by sections.
-    Process in batches of 10 sections per call.
+    Overall summary at the top, no table of contents.
     """
     
     # Use smaller model for everything in fast mode
@@ -1380,192 +1437,159 @@ def summarize_document_by_sections(sections: List, chunk_index: List,
     # Determine detail level for cache      
     if max_chunks_per_section <= 3:
         detail_level = "brief"
-        BATCH_SIZE = 20
     elif max_chunks_per_section >= 8:
         detail_level = "detailed"
-        BATCH_SIZE = 5
     else:
         detail_level = "standard"
-        BATCH_SIZE = 10
     
     summary_parts = []
     summary_parts.append(f"# 📄 Document Summary: {current_pdf_name}\n")
-    summary_parts.append("## 📑 Table of Contents\n")
     
-    # Create ToC
-    for i, section in enumerate(sections):
-        title = section.get("title", f"Section {i+1}")
-        summary_parts.append(f"{i+1}. {title}")
+    # Generate overall summary FIRST
+    overall_cache_path = CACHE_DIR / f"{current_pdf_name}_overall_{detail_level}.txt"
     
-    summary_parts.append("\n## 📊 Section Summaries\n")
+    if overall_cache_path.exists():
+        try:
+            with open(overall_cache_path, 'r', encoding='utf-8') as f:
+                overall_summary = f.read()
+            summary_parts.append("## 🎯 Overall Summary\n")
+            summary_parts.append(overall_summary)
+            summary_parts.append("\n")
+        except Exception:
+            pass
+    else:
+        # Create overall summary
+        section_titles = ', '.join([s.get('title', '') for s in sections[:10]])
+        
+        overall_prompt = f"""Based on a document with these sections: {section_titles}
+
+Provide a brief executive summary (2-3 paragraphs) highlighting the main theme and key findings."""
+        
+        try:
+            print("Generating overall summary...", file=sys.stderr)
+            start_time = time.time()
+            overall_response = overall_model.generate(overall_prompt)
+            
+            if hasattr(overall_model, 'strip_response'):
+                overall_summary = overall_model.strip_response(overall_response)
+            else:
+                if "<|im_start|>assistant" in overall_response:
+                    overall_summary = overall_response.split("<|im_start|>assistant")[1].split("<|im_end|>")[0].strip()
+                else:
+                    overall_summary = overall_response.strip()
+            
+            # Cache overall summary
+            try:
+                with open(overall_cache_path, 'w', encoding='utf-8') as f:
+                    f.write(overall_summary)
+            except Exception:
+                pass
+                
+            elapsed = time.time() - start_time
+            print(f"Overall summary generated in {elapsed:.1f}s", file=sys.stderr)
+            
+            summary_parts.append("## 🎯 Overall Summary\n")
+            summary_parts.append(overall_summary)
+            summary_parts.append("\n")
+        except Exception as e:
+            print(f"Error generating overall summary: {str(e)}", file=sys.stderr)
     
-    # Check which sections need processing
-    sections_to_process = []
-    cached_summaries = {}
+    # Section summaries
+    summary_parts.append("## 📊 Section Details\n")
     
+    # Process all sections at once
     for i, section in enumerate(sections):
         cache_path = _section_cache_path(current_pdf_name, i, detail_level)
+        
         if cache_path.exists():
             try:
                 with open(cache_path, 'r', encoding='utf-8') as f:
-                    cached_summaries[i] = f.read()
-                print(f"Section {i+1} loaded from cache", file=sys.stderr)
+                    section_summary = f.read()
+                summary_parts.append(section_summary)
+                summary_parts.append("")
+                continue
             except Exception:
-                sections_to_process.append((i, section))
-        else:
-            sections_to_process.append((i, section))
-    
-    # Process only up to N sections per call
-    processed_count = 0
-    
-    if sections_to_process:
-        print(f"Need to process {len(sections_to_process)} sections (will process up to {BATCH_SIZE})", file=sys.stderr)
+                pass
         
-        # Process sections sequentially (to avoid segfault)
-        for idx, (i, section) in enumerate(sections_to_process[:BATCH_SIZE]):
-            processed_count += 1
-            title = section.get("title", f"Section {i+1}")
-            start_page = section.get("start_page", 0)
-            end_page = section.get("end_page", start_page)
-            
-            print(f"Processing section {i+1}/{len(sections)}: {title}", file=sys.stderr)
-            
-            # Get chunks for this section
-            section_chunks = [
-                chunk for chunk in chunk_index 
-                if chunk["metadata"].get("section_title") == title
-            ]
-            
-            if not section_chunks:
-                summary_text = "*No content found for this section.*"
+        # Generate section summary
+        title = section.get("title", f"Section {i+1}")
+        start_page = section.get("start_page", 0)
+        end_page = section.get("end_page", start_page)
+        
+        print(f"Processing section {i+1}/{len(sections)}: {title}", file=sys.stderr)
+        
+        # Get chunks for this section
+        section_chunks = [
+            chunk for chunk in chunk_index 
+            if chunk["metadata"].get("section_title") == title
+        ]
+        
+        if not section_chunks:
+            summary_text = "*No content found for this section.*"
+        else:
+            # Select chunks based on mode
+            if brief_mode:
+                max_chunks = min(3, max_chunks_per_section)
             else:
-                # In fast mode, use fewer chunks
-                if brief_mode:
-                    max_chunks = min(3, max_chunks_per_section)
-                else:
-                    max_chunks = max_chunks_per_section
+                max_chunks = max_chunks_per_section
+            
+            # Select most representative chunks
+            if len(section_chunks) <= max_chunks:
+                selected_chunks = section_chunks
+            else:
+                # Take first, middle, and last chunks
+                first_idx = max_chunks // 3
+                last_idx = max_chunks // 3
+                middle_idx = max_chunks - first_idx - last_idx
                 
-                # Select most representative chunks
-                if len(section_chunks) <= max_chunks:
-                    selected_chunks = section_chunks
-                else:
-                    # Take first, middle, and last chunks
-                    first_idx = max_chunks // 3
-                    last_idx = max_chunks // 3
-                    middle_idx = max_chunks - first_idx - last_idx
-                    
-                    selected_chunks = (
-                        section_chunks[:first_idx] + 
-                        section_chunks[len(section_chunks)//2 - middle_idx//2 : len(section_chunks)//2 + middle_idx//2 + 1] +
-                        section_chunks[-last_idx:]
-                    )
-                
-                # Combine chunk contents (limit length in fast mode)
-                combined_content = "\n".join([
-                    chunk["metadata"].get("content", "")[:500 if brief_mode else 1000]
-                    for chunk in selected_chunks
-                ])
-                
-                # Simplified prompt for fast mode
-                if brief_mode:
-                    section_prompt = f"""Summarize this section "{title}" in 2-3 sentences:
+                selected_chunks = (
+                    section_chunks[:first_idx] + 
+                    section_chunks[len(section_chunks)//2 - middle_idx//2 : len(section_chunks)//2 + middle_idx//2 + 1] +
+                    section_chunks[-last_idx:]
+                )
+            
+            # Combine chunk contents
+            combined_content = "\n".join([
+                chunk["metadata"].get("content", "")[:500 if brief_mode else 1000]
+                for chunk in selected_chunks
+            ])
+            
+            # Generate summary
+            if brief_mode:
+                section_prompt = f"""Summarize this section "{title}" in 2-3 sentences:
 {combined_content[:1500]}
 
 Summary:"""
-                else:
-                    section_prompt = f"""Based on the following content from section "{title}", provide a concise summary 
+            else:
+                section_prompt = f"""Based on the following content from section "{title}", provide a concise summary 
 highlighting the main points, key arguments, and important details:
 
 {combined_content}
 
 Summary (2-3 paragraphs):"""
-                
-                try:
-                    start_time = time.time()
-                    summary_response = summary_model.generate(section_prompt)
-                    
-                    # Extract the actual summary from response
-                    summary_text = summary_model.strip_response(summary_response)
-  
-                    elapsed = time.time() - start_time
-                    print(f"Section {i+1} summarized in {elapsed:.1f}s", file=sys.stderr)
-                    
-                except Exception as e:
-                    summary_text = f"*Error generating summary: {str(e)}*"
             
-            # Save to cache
-            cache_path = _section_cache_path(current_pdf_name, i, detail_level)
             try:
-                with open(cache_path, 'w', encoding='utf-8') as f:
-                    f.write(f"### {i+1}. {title}\n*Pages {start_page}-{end_page}*\n\n{summary_text}")
-                print(f"Section {i+1} saved to cache", file=sys.stderr)
+                start_time = time.time()
+                summary_response = summary_model.generate(section_prompt)
+                summary_text = summary_model.strip_response(summary_response)
+                elapsed = time.time() - start_time
+                print(f"Section {i+1} summarized in {elapsed:.1f}s", file=sys.stderr)
             except Exception as e:
-                print(f"Failed to cache section {i+1}: {e}", file=sys.stderr)
-            
-            cached_summaries[i] = f"### {i+1}. {title}\n*Pages {start_page}-{end_page}*\n\n{summary_text}"
-    
-    # Add all section summaries in order
-    for i in range(len(sections)):
-        if i in cached_summaries:
-            summary_parts.append(cached_summaries[i])
-            summary_parts.append("")  # Empty line between sections
-    
-    # Show progress information
-    total_cached = len(cached_summaries)
-    total_sections = len(sections)
-    
-    if total_cached < total_sections:
-        remaining = total_sections - total_cached
-        summary_parts.append(f"\n---\n⏳ **Progress: {total_cached}/{total_sections} sections completed**")
-        summary_parts.append(f"📝 {remaining} sections remaining. Run 'summarize_document' again to continue.\n---\n")
-    else:
-        # Add overall document summary only when all sections are complete
-        if not brief_mode and len(sections) <= 10:
-            summary_parts.append("## 🎯 Overall Document Summary\n")
-            
-            # Check if overall summary is cached
-            overall_cache_path = CACHE_DIR / f"{current_pdf_name}_overall_{detail_level}.txt"
-            if overall_cache_path.exists():
-                try:
-                    with open(overall_cache_path, 'r', encoding='utf-8') as f:
-                        overall_summary = f.read()
-                    summary_parts.append(overall_summary)
-                except Exception:
-                    pass
-            else:
-                # Create a high-level summary using section titles and brief content
-                section_titles = ', '.join([s.get('title', '') for s in sections[:10]])
-                
-                overall_prompt = f"""Based on a document with these sections: {section_titles}
-
-Provide a brief executive summary (2-3 paragraphs) highlighting the main theme and key findings."""
-                
-                try:
-                    print("Generating overall summary...", file=sys.stderr)
-                    start_time = time.time()
-                    overall_response = overall_model.generate(overall_prompt)
-                    
-                    if hasattr(overall_model, 'strip_response'):
-                        overall_summary = overall_model.strip_response(overall_response)
-                    else:
-                        if "<|im_start|>assistant" in overall_response:
-                            overall_summary = overall_response.split("<|im_start|>assistant")[1].split("<|im_end|>")[0].strip()
-                        else:
-                            overall_summary = overall_response.strip()
-                    
-                    # Cache overall summary
-                    try:
-                        with open(overall_cache_path, 'w', encoding='utf-8') as f:
-                            f.write(overall_summary)
-                    except Exception:
-                        pass
-                        
-                    elapsed = time.time() - start_time
-                    print(f"Overall summary generated in {elapsed:.1f}s", file=sys.stderr)
-                    
-                    summary_parts.append(overall_summary)
-                except Exception as e:
-                    summary_parts.append(f"*Error generating overall summary: {str(e)}*")
+                summary_text = f"*Error generating summary: {str(e)}*"
+        
+        # Format section summary
+        section_summary = f"### {i+1}. {title}\n*Pages {start_page}-{end_page}*\n\n{summary_text}"
+        
+        # Save to cache
+        try:
+            with open(cache_path, 'w', encoding='utf-8') as f:
+                f.write(section_summary)
+            print(f"Section {i+1} saved to cache", file=sys.stderr)
+        except Exception as e:
+            print(f"Failed to cache section {i+1}: {e}", file=sys.stderr)
+        
+        summary_parts.append(section_summary)
+        summary_parts.append("")
     
     return "\n".join(summary_parts)
 
@@ -2371,7 +2395,7 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             detail_level = arguments.get("detail_level", "brief")
             top_k = arguments.get("top_k", 5)
             
-            result = search_by_content(query, folder_path, top_k)
+            result = search_by_content(query, folder_path, detail_level, top_k)
             
             response = f"🔍 **Document Search Results**\n\n"
             response += f"Query: \"{query}\"\n"
@@ -2384,7 +2408,7 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
                     response += f"   📊 Similarity: {doc['similarity']:.3f}\n"
                     
                     # Show summary preview
-                    summary_preview = doc['summary'].split('\n')[0:3]  # First 3 lines
+                    summary_preview = doc['summary'].split('\n')[0:10]  # First 3 lines
                     response += "   📝 Summary preview:\n"
                     for line in summary_preview:
                         if line.strip():
