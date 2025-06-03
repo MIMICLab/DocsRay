@@ -4,8 +4,6 @@ import json
 import sys
 import os
 import pathlib
-ROOT = pathlib.Path(__file__).resolve().parents[2]
-sys.path.append(str(ROOT))
 
 import fitz  # PyMuPDF
 from typing import Dict, Any, List, Tuple, Optional
@@ -108,22 +106,31 @@ def extract_images_from_page(page, min_width: int = 100, min_height: int = 100) 
     Returns list of (PIL Image, position rectangle) tuples.
     """
     images = []
-    image_list = page.get_images()
+    
+    try:
+        image_list = page.get_images()
+    except Exception as e:
+        print(f"⚠️  Failed to get images from page: {e}", file=sys.stderr)
+        return images
     
     for img_index, img in enumerate(image_list):
         # Get image xref
         xref = img[0]
         
-        # Extract image
-        pix = fitz.Pixmap(page.parent, xref)
-        pil_img = Image.open(io.BytesIO(pix.pil_tobytes(format="PNG")))
-        
-        # Check size
-        if pil_img.width >= min_width and pil_img.height >= min_height:
-            # Get image position on page
-            img_rects = page.get_image_rects(xref)
-            if img_rects:
-                images.append((pil_img, img_rects[0]))
+        try:
+            # Extract image
+            pix = fitz.Pixmap(page.parent, xref)
+            pil_img = Image.open(io.BytesIO(pix.pil_tobytes(format="PNG")))
+            
+            # Check size
+            if pil_img.width >= min_width and pil_img.height >= min_height:
+                # Get image position on page
+                img_rects = page.get_image_rects(xref)
+                if img_rects:
+                    images.append((pil_img, img_rects[0]))
+        except Exception as e:
+            print(f"⚠️  Failed to extract image {img_index}: {e}", file=sys.stderr)
+            continue
 
     images.sort(key=lambda x: (x[1].y0, x[1].x0))
     images = [img for img, rect in images]   
@@ -174,7 +181,13 @@ def analyze_visual_content(page, page_num: int) -> str:
     if images:
         print(f"  Found {len(images)} images on page {page_num + 1}", file=sys.stderr)
         visual_graphics += images
-    drawings = page.get_drawings()
+    
+    try:
+        drawings = page.get_drawings()
+    except Exception as e:
+        print(f"⚠️  Failed to get drawings from page {page_num + 1}: {e}", file=sys.stderr)
+        drawings = []
+    
     if drawings:
         # Count different types of drawing elements
         lines = sum(1 for d in drawings if d["type"] == "l")
@@ -191,11 +204,15 @@ def analyze_visual_content(page, page_num: int) -> str:
                 for r in all_rects[1:]:
                     bbox = bbox | r  # Union operation
                 
-                # Render the area as image
-                mat = fitz.Matrix(2, 2)  # 2x zoom for better quality
-                pix = page.get_pixmap(matrix=mat, clip=bbox)
-                vector_img = Image.open(io.BytesIO(pix.pil_tobytes(format="PNG")))
-                visual_graphics.append(vector_img)
+                try:
+                    # Render the area as image
+                    mat = fitz.Matrix(2, 2)  # 2x zoom for better quality
+                    pix = page.get_pixmap(matrix=mat, clip=bbox)
+                    vector_img = Image.open(io.BytesIO(pix.pil_tobytes(format="PNG")))
+                    visual_graphics.append(vector_img)
+                except Exception as e:
+                    print(f"⚠️  Failed to render drawings as image on page {page_num + 1}: {e}", file=sys.stderr)
+    
     if len(visual_graphics) > 0:
         visual_description += analyze_image_with_llm(visual_graphics, page_num)
     return visual_description
@@ -312,10 +329,14 @@ def ocr_page_with_llm(page, dpi: int = 350) -> str:
     Uses pytesseract if not in FULL_FEATURE_MODE.
     """
 
-    # Render page to high-quality image
-    zoom = dpi / 72
-    pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom), alpha=False)
-    img = Image.open(io.BytesIO(pix.pil_tobytes(format="PNG")))
+    try:
+        # Render page to high-quality image
+        zoom = dpi / 72
+        pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom), alpha=False)
+        img = Image.open(io.BytesIO(pix.pil_tobytes(format="PNG")))
+    except Exception as e:
+        print(f"⚠️  Failed to render page {page.number + 1} for OCR: {e}", file=sys.stderr)
+        return ""
     
     if USE_TESSERACT:
         text = pytesseract.image_to_string(img)
@@ -331,7 +352,12 @@ def extract_text_blocks_for_layout(page) -> pd.DataFrame:
     Extract text blocks with positions for layout analysis.
     Used when we have text but need to detect multi-column layout.
     """
-    words = page.get_text("words")
+    try:
+        words = page.get_text("words")
+    except Exception as e:
+        print(f"⚠️  Failed to extract text blocks from page: {e}", file=sys.stderr)
+        return pd.DataFrame(columns=["x0", "y0", "x1", "y1", "text"])
+    
     if not words:
         return pd.DataFrame(columns=["x0", "y0", "x1", "y1", "text"])
     
@@ -391,8 +417,12 @@ def extract_pdf_content(pdf_path: str,
         Path to the PDF file
     """
 
-
-    doc = fitz.open(pdf_path)
+    try:
+        doc = fitz.open(pdf_path)
+    except Exception as e:
+        print(f"❌ Failed to open PDF file: {e}", file=sys.stderr)
+        raise
+    
     if page_limit != -1:
         doc = doc[:page_limit]
     total_pages = len(doc)
@@ -403,8 +433,18 @@ def extract_pdf_content(pdf_path: str,
         print(f"Visual analysis enabled (every {visual_analysis_interval} pages)", file=sys.stderr)
 
     for i in range(total_pages):
-        page = doc[i]
-        raw_text = page.get_text("text").strip()
+        try:
+            page = doc[i]
+        except Exception as e:
+            print(f"⚠️  Failed to access page {i+1}: {e}", file=sys.stderr)
+            pages_text.append("")
+            continue
+        
+        try:
+            raw_text = page.get_text("text").strip()
+        except Exception as e:
+            print(f"⚠️  Failed to extract text from page {i+1}: {e}", file=sys.stderr)
+            raw_text = ""
 
         # Try to get text with layout information
         if raw_text:
