@@ -738,27 +738,24 @@ try:
             <p style="font-size: 14px; color: #9ca3af; max-width: 600px; margin: 8px auto;">
                 Upload any document (PDF, Word, Excel, PowerPoint, Images, etc.) and ask questions about it!
                 All processing happens in your session - no login required.
-            </p>
-        """
+            </p>"""
 
         # Add page limit warning if applicable
         if PAGE_LIMIT > 0:
             header_html += f"""
             <p style="font-size: 13px; color: #ef4444; font-weight: 600; margin-top: 8px;">
                 ⚠️ Demo Mode: Only first {PAGE_LIMIT} pages of each document will be processed
-            </p>
-        """
+            </p>"""
 
         # Add timeout warning if applicable
         if PDF_PROCESS_TIMEOUT > 0:
             header_html += f"""
             <p style="font-size: 13px; color: #f59e0b; font-weight: 600; margin-top: 4px;">
                 ⏰ Processing Timeout: {PDF_PROCESS_TIMEOUT//60} minutes per document
-            </p>
-        """
+            </p>"""
 
         # Close the div
-        header_html += "</div>"
+        header_html += "\n</div>"
 
         # Create the Markdown component
         gr.Markdown(
