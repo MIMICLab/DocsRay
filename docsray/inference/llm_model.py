@@ -80,7 +80,7 @@ class LocalLLM:
                     model_path=model_name,
                     n_gpu_layers=-1,
                     n_ctx=MAX_TOKENS,
-                    verbose=False,
+                    verbose=True,
                     flash_attn=True,
                     chat_handler=chat_handler
                 )
@@ -104,7 +104,7 @@ class LocalLLM:
                 }
             ]
             # Use chat completion API for multimodal input
-            images = images[:MAX_TOKENS // 1024] # limit number of images to use <25% of MAX_TOKENS
+            images = images[:MAX_TOKENS // 1024] # limit number of images per page to use <25% of MAX_TOKENS
             for image in images:
                 # Convert to RGB if necessary
                 if image.mode in ('RGBA', 'LA'):
@@ -132,7 +132,7 @@ class LocalLLM:
             response = self.model.create_chat_completion(
                 messages=messages,
                 stop = ['<end_of_turn>'],
-                max_tokens=MAX_TOKENS//16,
+                max_tokens=MAX_TOKENS//4, # limit visual analysis to use <25% of MAX_TOKENS
                 temperature=0.7,
                 top_p=0.95,
                 repeat_penalty=1.1
