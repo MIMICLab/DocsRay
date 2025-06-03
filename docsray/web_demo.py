@@ -730,15 +730,13 @@ try:
         if PAGE_LIMIT > 0 :
             page_limits =f'''<p style="font-size: 13px; color: #ef4444; font-weight: 600; margin-top: 8px;">
                         ⚠️ Demo Mode: Only first {PAGE_LIMIT} pages of each document will be processed
-                    </p>
-                    '''
+                    </p>'''
         else:
             page_limits =""
         if PDF_PROCESS_TIMEOUT > 0:
-            timeout_limits=f'''<p style="font-size: 13px; color: #f59e0b; font-weight: 600; margin-top: 4px;">
+            timeout_limits=f'''\n<p style="font-size: 13px; color: #f59e0b; font-weight: 600; margin-top: 4px;">
                     ⏰ Processing Timeout: {PDF_PROCESS_TIMEOUT//60} minutes per document
-                </p>
-                '''
+                </p>'''
         else:
             timeout_limits = ""
         # Header with better styling
@@ -755,7 +753,8 @@ try:
                     Upload any document (PDF, Word, Excel, PowerPoint, Images, etc.) and ask questions about it!
                     All processing happens in your session - no login required.
                 </p>
-                {page_limits}{timeout_limits}</div>
+                {page_limits}{timeout_limits}
+                </div>
             """,
             elem_classes=["header-section"]
         )
