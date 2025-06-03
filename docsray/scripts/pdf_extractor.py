@@ -147,7 +147,7 @@ Start immediately with "Figure 1: ". No introduction needed."""
     # Use the large model for better image understanding
     response = local_llm_large.generate(prompt, images=images)
     
-    return f"\n\n[{page_num + 1}]\n\n{response}\n\n"
+    return f"\n\n[Page: {page_num + 1}]\n{response}\n\n"
 
 def ocr_with_llm(image: Image.Image, page_num: int) -> str:
     """
