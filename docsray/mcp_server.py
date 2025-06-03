@@ -269,7 +269,7 @@ def analyze_path_for_search(path: str) -> Dict[str, Any]:
     except Exception as e:
         return {"error": str(e)}
 
-def search_documents_in_path(
+def search_files_in_path(
     start_path: str = None,
     extensions: List[str] = None,
     exclude_dirs: List[str] = None,
@@ -884,6 +884,373 @@ def _section_cache_path(pdf_name: str, section_idx: int, detail_level: str) -> P
     """Return cache path for individual section summary."""
     return CACHE_DIR / f"{pdf_name}_section_{section_idx}_{detail_level}.txt"
 
+# Unified summary system - replace the existing functions
+
+def generate_and_save_summary(
+    sections: List, 
+    chunk_index: List, 
+    doc_name: str,
+    detail_level: str = "brief"
+) -> Tuple[str, Optional[np.ndarray]]:
+    """
+    Generate summary using existing summarize_document_by_sections logic
+    and save with embedding
+    
+    Returns:
+        (summary_text, embedding_vector)
+    """
+    # Use existing summary generation logic
+    if detail_level == "brief":
+        max_chunks = 3
+        brief_mode = True
+    elif detail_level == "detailed":
+        max_chunks = 8
+        brief_mode = False
+    else:  # standard
+        max_chunks = 5
+        brief_mode = False
+    
+    # Generate summary using existing function
+    summary = summarize_document_by_sections(
+        sections, 
+        chunk_index,
+        max_chunks_per_section=max_chunks,
+        brief_mode=brief_mode
+    )
+    
+    # Generate embedding for the summary
+    from docsray.inference.embedding_model import embedding_model
+    summary_embedding = embedding_model.get_embedding(summary, is_query=False)
+    
+    # Save summary
+    summary_cache_path = CACHE_DIR / f"{Path(doc_name).stem}_summary_{detail_level}.txt"
+    with open(summary_cache_path, 'w', encoding='utf-8') as f:
+        f.write(summary)
+    
+    # Save embedding
+    embedding_cache_path = CACHE_DIR / f"{Path(doc_name).stem}_summary_{detail_level}_embedding.pkl"
+    with open(embedding_cache_path, 'wb') as f:
+        pickle.dump({
+            "summary": summary,
+            "embedding": summary_embedding.tolist(),
+            "detail_level": detail_level,
+            "doc_name": doc_name
+        }, f)
+    
+    return summary, summary_embedding
+
+def process_all_documents(
+    folder_path: Optional[str] = None,
+    analyze_visuals: Optional[bool] = None,
+    generate_summaries: bool = True,
+    detail_level: str = "brief",
+    extensions: Optional[List[str]] = None,
+    max_files: Optional[int] = None
+) -> Dict[str, Any]:
+    """
+    Process all documents in a directory with unified summary generation
+    
+    Args:
+        folder_path: Directory path to process (default: current folder)
+        analyze_visuals: Whether to analyze visual content (default: global setting)
+        generate_summaries: Whether to generate summaries
+        detail_level: Summary detail level ("brief", "standard", "detailed")
+        extensions: List of file extensions to process (default: all supported)
+        max_files: Maximum number of files to process
+    
+    Returns:
+        Processing results
+    """
+    global current_sections, current_index, current_pdf_name, current_pages_text
+    
+    # Set target directory
+    if folder_path:
+        target_dir = Path(folder_path).expanduser().resolve()
+    else:
+        target_dir = current_pdf_folder
+    
+    if not target_dir.exists() or not target_dir.is_dir():
+        return {"error": f"Invalid directory: {target_dir}"}
+    
+    # Visual analysis setting
+    if analyze_visuals is None:
+        analyze_visuals = visual_analysis_enabled
+    
+    # File extension setup
+    converter = FileConverter()
+    if extensions:
+        valid_extensions = []
+        for ext in extensions:
+            ext = ext.lower()
+            if not ext.startswith('.'):
+                ext = '.' + ext
+            if ext in converter.SUPPORTED_FORMATS or ext == '.pdf':
+                valid_extensions.append(ext)
+    else:
+        valid_extensions = list(converter.SUPPORTED_FORMATS.keys()) + ['.pdf']
+    
+    # Find documents
+    documents = []
+    for file_path in sorted(target_dir.iterdir()):
+        if file_path.is_file() and file_path.suffix.lower() in valid_extensions:
+            documents.append({
+                "path": str(file_path),
+                "name": file_path.name,
+                "type": converter.SUPPORTED_FORMATS.get(
+                    file_path.suffix.lower(),
+                    "PDF" if file_path.suffix.lower() == '.pdf' else "Unknown"
+                ),
+                "size_mb": file_path.stat().st_size / (1024 * 1024)
+            })
+    
+    # Limit file count
+    if max_files and len(documents) > max_files:
+        documents = documents[:max_files]
+    
+    # Process documents
+    processed = []
+    failed = []
+    start_time = time.time()
+    
+    print(f"🚀 Starting batch processing of {len(documents)} documents...", file=sys.stderr)
+    print(f"📊 Summary detail level: {detail_level}", file=sys.stderr)
+    
+    for i, doc in enumerate(documents):
+        doc_path = doc["path"]
+        doc_name = doc["name"]
+        doc_stem = Path(doc_name).stem
+        
+        print(f"📄 [{i+1}/{len(documents)}] Processing {doc_name}...", file=sys.stderr)
+        
+        try:
+            # Check if already processed with same detail level
+            summary_cache_path = CACHE_DIR / f"{doc_stem}_summary_{detail_level}.txt"
+            embedding_cache_path = CACHE_DIR / f"{doc_stem}_summary_{detail_level}_embedding.pkl"
+            
+            if summary_cache_path.exists() and embedding_cache_path.exists():
+                print(f"⏭️  Using cached summary for {doc_name}", file=sys.stderr)
+                processed.append({
+                    "name": doc_name,
+                    "sections": "cached",
+                    "chunks": "cached",
+                    "has_summary": True,
+                    "cached": True
+                })
+                continue
+            
+            # Process document
+            sections, chunk_index, pages_text = process_pdf(
+                doc_path,
+                analyze_visuals=analyze_visuals
+            )
+            
+            # Store in global state temporarily for summary generation
+            temp_current_pdf_name = current_pdf_name
+            current_pdf_name = doc_stem
+            
+            # Generate summary if requested
+            if generate_summaries:
+                print(f"📝 Generating {detail_level} summary for {doc_name}...", file=sys.stderr)
+                summary, embedding = generate_and_save_summary(
+                    sections, 
+                    chunk_index, 
+                    doc_name,
+                    detail_level
+                )
+            
+            # Restore global state
+            current_pdf_name = temp_current_pdf_name
+            
+            processed.append({
+                "name": doc_name,
+                "sections": len(sections),
+                "chunks": len(chunk_index),
+                "has_summary": generate_summaries,
+                "cached": False
+            })
+            
+            print(f"✅ Successfully processed {doc_name}", file=sys.stderr)
+            
+        except Exception as e:
+            print(f"❌ Failed to process {doc_name}: {str(e)}", file=sys.stderr)
+            failed.append({
+                "name": doc_name,
+                "error": str(e)
+            })
+    
+    elapsed_time = time.time() - start_time
+    
+    # Set last processed document as current
+    if processed and documents:
+        last_doc = documents[-1]
+        try:
+            sections, chunk_index, pages_text = process_pdf(
+                last_doc["path"],
+                analyze_visuals=False  # Fast load
+            )
+            current_sections = sections
+            current_index = chunk_index
+            current_pdf_name = last_doc["name"]
+            current_pages_text = pages_text
+        except:
+            pass
+    
+    return {
+        "status": "completed",
+        "folder": str(target_dir),
+        "total_files": len(documents),
+        "processed": len(processed),
+        "failed": len(failed),
+        "elapsed_time": elapsed_time,
+        "processed_files": processed,
+        "failed_files": failed,
+        "current_document": current_pdf_name,
+        "summaries_generated": generate_summaries,
+        "detail_level": detail_level
+    }
+
+def search_by_content(
+    query: str,
+    folder_path: Optional[str] = None,
+    detail_level: str = "brief",
+    top_k: int = 5
+) -> Dict[str, Any]:
+    """
+    Search documents based on their summary embeddings
+    
+    Args:
+        query: Search query
+        folder_path: Directory to search (default: current folder)
+        detail_level: Which summary level to search ("brief", "standard", "detailed")
+        top_k: Number of top results to return
+    
+    Returns:
+        Search results with similarity scores
+    """
+    # Set target directory
+    if folder_path:
+        target_dir = Path(folder_path).expanduser().resolve()
+    else:
+        target_dir = current_pdf_folder
+    
+    # Get query embedding
+    from docsray.inference.embedding_model import embedding_model
+    query_embedding = embedding_model.get_embedding(query, is_query=True)
+    
+    # Find all summary embeddings of the specified detail level
+    results = []
+    pattern = f"*_summary_{detail_level}_embedding.pkl"
+    
+    for embedding_file in CACHE_DIR.glob(pattern):
+        try:
+            with open(embedding_file, 'rb') as f:
+                data = pickle.load(f)
+            
+            # Calculate cosine similarity
+            doc_embedding = np.array(data["embedding"])
+            similarity = np.dot(query_embedding, doc_embedding)
+            
+            # Extract document name
+            doc_name = embedding_file.stem.replace(f"_summary_{detail_level}_embedding", "")
+            
+            results.append({
+                "document": doc_name,
+                "similarity": float(similarity),
+                "summary": data["summary"],
+                "detail_level": data.get("detail_level", detail_level)
+            })
+        except Exception as e:
+            print(f"Error reading embedding for {embedding_file.name}: {e}", file=sys.stderr)
+            continue
+    
+    # Sort by similarity
+    results.sort(key=lambda x: x["similarity"], reverse=True)
+    
+    # Return top k results
+    return {
+        "query": query,
+        "detail_level": detail_level,
+        "total_documents": len(results),
+        "results": results[:top_k]
+    }
+
+def get_document_summaries(
+    folder_path: Optional[str] = None,
+    detail_level: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Get all document summaries in a directory
+    
+    Args:
+        folder_path: Directory path (default: current folder)
+        detail_level: Filter by detail level (optional)
+    
+    Returns:
+        Dictionary with all summaries
+    """
+    # Set target directory
+    if folder_path:
+        target_dir = Path(folder_path).expanduser().resolve()
+    else:
+        target_dir = current_pdf_folder
+    
+    summaries = []
+    
+    # Find all summary files
+    if detail_level:
+        pattern = f"*_summary_{detail_level}.txt"
+    else:
+        pattern = "*_summary_*.txt"
+    
+    for summary_file in CACHE_DIR.glob(pattern):
+        try:
+            # Extract info from filename
+            stem = summary_file.stem
+            parts = stem.split("_summary_")
+            if len(parts) == 2:
+                doc_name = parts[0]
+                file_detail_level = parts[1]
+            else:
+                continue
+            
+            # Skip section summaries
+            if "section_" in summary_file.name:
+                continue
+            
+            # Read summary
+            with open(summary_file, 'r', encoding='utf-8') as f:
+                summary_text = f.read()
+            
+            # Check if embedding exists
+            embedding_path = CACHE_DIR / f"{doc_name}_summary_{file_detail_level}_embedding.pkl"
+            has_embedding = embedding_path.exists()
+            
+            summaries.append({
+                "document": doc_name,
+                "summary": summary_text,
+                "detail_level": file_detail_level,
+                "has_embedding": has_embedding
+            })
+            
+        except Exception as e:
+            print(f"Error reading summary for {summary_file.name}: {e}", file=sys.stderr)
+            continue
+    
+    # Group by document
+    docs_summary = {}
+    for s in summaries:
+        doc = s["document"]
+        if doc not in docs_summary:
+            docs_summary[doc] = {}
+        docs_summary[doc][s["detail_level"]] = s
+    
+    return {
+        "folder": str(target_dir),
+        "total_documents": len(docs_summary),
+        "summaries_by_document": docs_summary,
+        "detail_level_filter": detail_level
+    }
+
 def summarize_document_by_sections(sections: List, chunk_index: List, 
                                    max_chunks_per_section: int = 5,
                                    brief_mode: bool = False) -> str:
@@ -1398,6 +1765,94 @@ async def list_tools() -> List[Tool]:
             }
         ),
         Tool(
+            name="process_all_documents",
+            description="Process all documents in the current or specified directory at once, with optional summary generation",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "folder_path": {
+                        "type": "string", 
+                        "description": "Directory path to process (optional, uses current if not specified)"
+                    },
+                    "analyze_visuals": {
+                        "type": "boolean",
+                        "description": "Whether to analyze visual content (default: uses global setting)"
+                    },
+                    "generate_summaries": {
+                        "type": "boolean",
+                        "description": "Whether to generate summaries with embeddings for each document",
+                        "default": True
+                    },
+                    "extensions": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "File extensions to process (e.g., ['pdf', 'docx'])"
+                    },
+                    "max_files": {
+                        "type": "integer",
+                        "description": "Maximum number of files to process"
+                    }
+                }
+            }
+        ),
+
+        Tool(
+            name="search_by_content",
+            description="Search for documents using their summary embeddings",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Search query to find relevant documents"
+                    },
+                    "folder_path": {
+                        "type": "string",
+                        "description": "Directory to search (optional, uses current if not specified)"
+                    },
+                    "top_k": {
+                        "type": "integer",
+                        "description": "Number of top results to return",
+                        "default": 5
+                    }
+                },
+                "required": ["query"]
+            }
+        ),
+
+        Tool(
+            name="load_document_by_summary_search",
+            description="Search for a document by query and automatically load the best match",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Search query to find and load the most relevant document"
+                    },
+                    "folder_path": {
+                        "type": "string",
+                        "description": "Directory to search (optional, uses current if not specified)"
+                    }
+                },
+                "required": ["query"]
+            }
+        ),
+
+        Tool(
+            name="get_document_summaries",
+            description="Get all document summaries in the current or specified directory",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "folder_path": {
+                        "type": "string",
+                        "description": "Directory path (optional, uses current if not specified)"
+                    }
+                }
+            }
+        ),        
+        Tool(
             name="stop_search",
             description="Stop an ongoing document search",
             inputSchema={
@@ -1680,71 +2135,164 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             
             detail_level = arguments.get("detail_level", "standard")
             
-
-            if detail_level == "brief":
-                max_chunks = 3
-                brief_mode = True
-
-            elif detail_level == "detailed":
-                max_chunks = 8
-                brief_mode = False
-
-            else:  # standard
-                max_chunks = 5
-                brief_mode = False
-
-            # Check for cached summary first
-            cache_key = f"{current_pdf_name}_summary_{detail_level}.txt"
-            cache_path = CACHE_DIR / cache_key
-            
-            if cache_path.exists():
-                try:
-                    with open(cache_path, 'r', encoding='utf-8') as f:
-                        cached_summary = f.read()
-                    response = f"📄 **Cached {detail_level} summary for:** {current_pdf_name}\n\n"
-                    response += cached_summary
-                    return [TextContent(type="text", text=response)]
-                except Exception:
-                    pass  # If cache read fails, regenerate
-            
-            # Generate summary
+            # Generate and save summary with embedding
             response = f"📄 **Generating {detail_level} summary for:** {current_pdf_name}\n"
-            
-            # Show estimated time based on sections
-            num_sections = len(current_sections)
-            if detail_level == "brief":
-                estimated_time = num_sections * 2  # ~2 seconds per section in fast mode
-            else:
-                estimated_time = num_sections * 5  # ~5 seconds per section in normal mode
-            
-            response += f"⏳ Estimated time: ~{estimated_time} seconds for {num_sections} sections...\n\n"
             
             try:
                 start_time = time.time()
                 
-                summary = summarize_document_by_sections(
-                    current_sections, 
+                summary, embedding = generate_and_save_summary(
+                    current_sections,
                     current_index,
-                    max_chunks_per_section=max_chunks,
-                    brief_mode=brief_mode
+                    current_pdf_name,
+                    detail_level
                 )
                 
                 elapsed = time.time() - start_time
                 
-                # Save to cache
-                try:
-                    with open(cache_path, 'w', encoding='utf-8') as f:
-                        f.write(summary)
-                except Exception:
-                    pass  # Ignore cache write errors
-                
+                response += f"⏱️ Generated in {elapsed:.1f} seconds\n"
+                response += f"✅ Summary saved with embedding\n\n"
                 response += summary
-                response += f"\n\n⏱️ Summary generated in {elapsed:.1f} seconds"
                 
             except Exception as e:
                 response += f"❌ Error generating summary: {str(e)}"
             
             return [TextContent(type="text", text=response)]
+        elif name == "process_all_documents":
+            folder_path = arguments.get("folder_path")
+            analyze_visuals = arguments.get("analyze_visuals")
+            generate_summaries = arguments.get("generate_summaries", True)
+            extensions = arguments.get("extensions")
+            max_files = arguments.get("max_files")
+            
+            response = "🚀 **Batch Processing Documents**\n\n"
+            
+            # Process all documents
+            result = process_all_documents(
+                folder_path=folder_path,
+                analyze_visuals=analyze_visuals,
+                generate_summaries=generate_summaries,
+                extensions=extensions,
+                max_files=max_files
+            )
+            
+            if "error" in result:
+                return [TextContent(type="text", text=f"❌ Error: {result['error']}")]
+            
+            # Format results
+            response += f"📁 Directory: {result['folder']}\n"
+            response += f"📊 Total files found: {result['total_files']}\n"
+            response += f"✅ Successfully processed: {result['processed']}\n"
+            
+            if result['failed'] > 0:
+                response += f"❌ Failed: {result['failed']}\n"
+            
+            response += f"⏱️ Processing time: {result['elapsed_time']:.1f} seconds\n"
+            
+            if generate_summaries:
+                response += f"📝 Summaries generated: Yes\n"
+            
+            # Show processed files
+            if result['processed_files']:
+                response += "\n**Processed Files:**\n"
+                for doc in result['processed_files'][:10]:  # Show first 10
+                    response += f"• {doc['name']} "
+                    response += f"({doc['sections']} sections, {doc['chunks']} chunks)"
+                    if doc['has_summary']:
+                        response += " 📝"
+                    response += "\n"
+                
+                if len(result['processed_files']) > 10:
+                    response += f"... and {len(result['processed_files']) - 10} more files\n"
+            
+            # Show failed files
+            if result['failed_files']:
+                response += "\n**Failed Files:**\n"
+                for doc in result['failed_files'][:5]:
+                    response += f"• {doc['name']}: {doc['error']}\n"
+            
+            if result['current_document']:
+                response += f"\n📄 Current document set to: {result['current_document']}"
+            
+            response += "\n\n💡 You can now:\n"
+            response += "• Use 'search_by_content' to find documents by content\n"
+            response += "• Use 'load_document_by_summary_search' to quickly switch documents\n"
+            response += "• Use 'ask_question' to query the current document"
+            
+            return [TextContent(type="text", text=response)]
+
+        elif name == "search_by_content":
+            query = arguments["query"]
+            folder_path = arguments.get("folder_path")
+            top_k = arguments.get("top_k", 5)
+            
+            result = search_by_content(query, folder_path, top_k)
+            
+            response = f"🔍 **Document Search Results**\n\n"
+            response += f"Query: \"{query}\"\n"
+            response += f"Found: {result['total_documents']} documents with summaries\n\n"
+            
+            if result['results']:
+                response += "**Top Results:**\n"
+                for i, doc in enumerate(result['results'], 1):
+                    response += f"\n{i}. **{doc['document']}**\n"
+                    response += f"   📊 Similarity: {doc['similarity']:.3f}\n"
+                    
+                    # Show summary preview
+                    summary_preview = doc['summary'].split('\n')[0:3]  # First 3 lines
+                    response += "   📝 Summary preview:\n"
+                    for line in summary_preview:
+                        if line.strip():
+                            response += f"      {line.strip()}\n"
+                    response += "\n"
+            else:
+                response += "No documents found with summaries.\n"
+                response += "💡 Run 'process_all_documents' first to generate summaries."
+            
+            return [TextContent(type="text", text=response)]
+
+        elif name == "load_document_by_summary_search":
+            query = arguments["query"]
+            folder_path = arguments.get("folder_path")
+            
+            success, message = load_document_by_summary_search(query, folder_path)
+            
+            if success:
+                response = f"🎯 **Document Loaded by Search**\n\n{message}"
+            else:
+                response = f"❌ **Search Failed**\n\n{message}"
+            
+            return [TextContent(type="text", text=response)]
+
+        elif name == "get_document_summaries":
+            folder_path = arguments.get("folder_path")
+            
+            result = get_document_summaries(folder_path)
+            
+            response = f"📚 **Document Summaries**\n\n"
+            response += f"📁 Directory: {result['folder']}\n"
+            response += f"📝 Total summaries: {result['total_summaries']}\n\n"
+            
+            if result['summaries']:
+                for summary_info in result['summaries']:
+                    response += f"**{summary_info['document']}**"
+                    if summary_info['has_embedding']:
+                        response += " ✅"
+                    else:
+                        response += " ⚠️ (no embedding)"
+                    response += "\n"
+                    
+                    # Show first few lines of summary
+                    summary_lines = summary_info['summary'].split('\n')[:3]
+                    for line in summary_lines:
+                        if line.strip():
+                            response += f"  {line.strip()}\n"
+                    response += "\n"
+            else:
+                response += "No summaries found.\n"
+                response += "💡 Run 'process_all_documents' with generate_summaries=True"
+            
+            return [TextContent(type="text", text=response)]        
         elif name == "clear_all_cache":
             # Get cache info before clearing
             cache_info = get_cache_info()
@@ -1911,7 +2459,7 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             response += "⏳ This may take a while depending on the directory size...\n\n"
             
             # Run search
-            search_result = search_documents_in_path(
+            search_result = search_files_in_path(
                 start_path=arguments.get("start_path"),
                 extensions=arguments.get("extensions"),
                 exclude_dirs=arguments.get("exclude_dirs"),
