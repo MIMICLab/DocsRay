@@ -540,7 +540,7 @@ with gr.Blocks(
                 analyze_visuals_checkbox = gr.Checkbox(
                     label="👁️ Analyze Visual Content",
                     value=True,
-                    info="Extract and analyze images, charts, and figures (slower but more comprehensive)",
+                    info="Extract and analyze images, charts, and figures",
                 )
             
             upload_btn = gr.Button("📤 Process Document", variant="primary", size="lg")
@@ -588,7 +588,6 @@ with gr.Blocks(
                 use_coarse = gr.Checkbox(
                     label="Use Coarse-to-Fine Search",
                     value=True,
-                    info="Recommended for better accuracy"
                 )
                 ask_btn = gr.Button("🔍 Ask Question", variant="primary", size="lg")
             

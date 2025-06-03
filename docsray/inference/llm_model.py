@@ -109,8 +109,8 @@ class LocalLLM:
             # Use chat completion API for multimodal input
             response = self.model.create_chat_completion(
                 messages=messages,
-                stop = ['<end_of_turn>'],
-                max_tokens=MAX_TOKENS,
+                stop = ['<end_of_turn>', '<eos>'],
+                max_tokens=MAX_TOKENS//8,
                 temperature=0.7,
                 top_p=0.95,
                 repeat_penalty=1.1
@@ -124,7 +124,7 @@ class LocalLLM:
             
             answer = self.model(
                 formatted_prompt,
-                stop=['<end_of_turn>'],
+                stop=['<end_of_turn>', '<eos>'],
                 max_tokens=MAX_TOKENS,
                 echo=True,
                 temperature=0.7,
