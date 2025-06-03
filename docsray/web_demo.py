@@ -946,7 +946,7 @@ def main():
     parser.add_argument("--port", type=int, default=44665, help="Port number")
     parser.add_argument("--host", type=str, default="0.0.0.0", help="Host address")
     parser.add_argument("--timeout", type=int, default=300, help="PDF processing timeout in seconds")
-    parser.add_argument("--pages", type=int, default=0, help="Maximum pages to process") 
+    parser.add_argument("--pages", type=int, default=5, help="Maximum pages to process") 
     args = parser.parse_args()
     
     # Update global timeout if specified
