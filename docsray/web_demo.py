@@ -755,7 +755,7 @@ try:
             </p>"""
 
         # Close the div
-        header_html += "\n</div>"
+        header_html += "</div>"
 
         # Create the Markdown component
         gr.Markdown(
