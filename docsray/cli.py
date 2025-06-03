@@ -13,9 +13,7 @@ from pathlib import Path
 from docsray.config import FAST_MODE
 from docsray.post_install import hotfix_check
 
-# PDF Processing timeout (5 minutes)
-PDF_PROCESS_TIMEOUT = 300
-PAGE_LIMIT = 5
+
 class ProcessingTimeoutError(Exception):
     """Exception raised when document processing takes too long"""
     pass
