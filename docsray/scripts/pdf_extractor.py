@@ -29,7 +29,7 @@ def extract_content(file_path: str,
                    analyze_visuals: bool = True,
                    visual_analysis_interval: int = 1,
                    auto_convert: bool = True,
-                   page_limit: int=-1) -> Dict[str, Any]:
+                   page_limit: int=0) -> Dict[str, Any]:
     """
     Extract text from a document file with optional visual content analysis using LLM.
     Automatically converts non-PDF files to PDF if auto_convert is True.
@@ -407,7 +407,7 @@ def rebuild_text_from_columns(df: pd.DataFrame, line_tol: int = 8) -> str:
 def extract_pdf_content(pdf_path: str,
                        analyze_visuals: bool = True,
                        visual_analysis_interval: int = 1,
-                       page_limit: int=-1) -> Dict[str, Any]:
+                       page_limit: int=0) -> Dict[str, Any]:
     """
     Extract text from a PDF with optional visual content analysis using LLM.
     
@@ -423,7 +423,7 @@ def extract_pdf_content(pdf_path: str,
         print(f"❌ Failed to open PDF file: {e}", file=sys.stderr)
         raise
     
-    if page_limit != -1:
+    if page_limit >0:
         doc = doc[:page_limit]
     total_pages = len(doc)
     pages_text: List[str] = []
