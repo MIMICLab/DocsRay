@@ -44,18 +44,10 @@ def get_device_memory_gb():
         return get_available_ram_gb(), 'cpu'
 
 
-has_gpu = False
+has_gpu = torch.cuda.is_available() or torch.backends.mps.is_available()
 device_type = 'cpu'
-try:
-    has_gpu = torch.cuda.is_available() or torch.backends.mps.is_available()
-    if torch.cuda.is_available():
-        device_type = 'cuda'
-    elif torch.backends.mps.is_available():
-        device_type = 'mps'
-except ImportError:
-    pass
 
-available_gb, detected_device = get_device_memory_gb()
+available_gb, device_type = get_device_memory_gb()
 
 
 FAST_MODE = False
@@ -66,17 +58,16 @@ min_available_gb = 8
 
 if not has_gpu:
     FAST_MODE = True
-    MAX_TOKENS = MAX_TOKENS // 4
+    MAX_TOKENS = MAX_TOKENS // 2
 else:
     if available_gb < min_available_gb * 2:
         FAST_MODE = True
-        MAX_TOKENS = MAX_TOKENS // 4
+        MAX_TOKENS = MAX_TOKENS // 2
     elif available_gb < min_available_gb * 3:
         STANDARD_MODE = True
-        MAX_TOKENS = MAX_TOKENS // 2        
+        MAX_TOKENS = MAX_TOKENS         
     else:
         FULL_FEATURE_MODE = True
-
 
 FAST_MODELS = []
 STANDARD_MODELS = []
@@ -162,7 +153,7 @@ for model in ALL_MODELS:
 DISABLE_VISUAL_ANALYSIS = os.environ.get("DOCSRAY_DISABLE_VISUALS", "0") == "1"
 
 if os.environ.get("DOCSRAY_DEBUG", "0") == "1":
-    print(f"Current Device: {detected_device}")
+    print(f"Current Device: {device_type}")
     print(f"Available Memory: {available_gb:.2f} GB")
     print(f"FAST_MODE: {FAST_MODE}")
     print(f"MAX_TOKENS: {MAX_TOKENS}")

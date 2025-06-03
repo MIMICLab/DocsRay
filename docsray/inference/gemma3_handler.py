@@ -1,5 +1,8 @@
 #borrowed from https://github.com/kossum/llama-cpp-python/blob/main/llama_cpp/llama_chat_format.py
 from __future__ import annotations
+from PIL import Image
+import math
+import io
 
 import ctypes
 from typing import (
@@ -142,3 +145,116 @@ class Gemma3ChatHandler(Llava15ChatHandler):
         # Required to avoid issues with hf tokenizer
         llama.input_ids[llama.n_tokens : llama.n_tokens + n_tokens] = -1
         llama.n_tokens += n_tokens
+
+def merge_images_to_grid(pil_images, padding=10, bg_color=(255, 255, 255)):
+    """
+    Merge multiple PIL Image objects into a single grid
+    
+    Args:
+        pil_images: List of PIL Image objects
+        padding: Padding between images (pixels)
+        bg_color: Background color (RGB tuple)
+    
+    Returns:
+        PIL Image object
+    """
+    if not pil_images:
+        print("No images provided.")
+        return None
+    
+    # Convert image mode if necessary
+    images = []
+    for img in pil_images:
+        if img.mode != 'RGB':
+            img = img.convert('RGB')
+        images.append(img)
+    
+    num_images = len(images)
+    
+    # Calculate optimal grid size (close to square or 4:3 ratio)
+    cols, rows = calculate_optimal_grid(num_images)
+    
+    # Find maximum dimensions among all images
+    max_width = max(img.width for img in images)
+    max_height = max(img.height for img in images)
+    
+    # Calculate total canvas size
+    canvas_width = cols * max_width + (cols - 1) * padding
+    canvas_height = rows * max_height + (rows - 1) * padding
+    
+    # Create new image
+    merged_image = Image.new('RGB', (canvas_width, canvas_height), bg_color)
+    
+    # Place images on grid
+    for idx, img in enumerate(images):
+        row = idx // cols
+        col = idx % cols
+        
+        # Calculate image position (center aligned)
+        x = col * (max_width + padding) + (max_width - img.width) // 2
+        y = row * (max_height + padding) + (max_height - img.height) // 2
+        
+        merged_image.paste(img, (x, y))
+
+    return merged_image
+
+def calculate_optimal_grid(num_images):
+    """
+    Calculate grid size closest to square or 4:3 aspect ratio
+    """
+    # Grid close to square
+    sqrt_n = math.sqrt(num_images)
+    cols_square = math.ceil(sqrt_n)
+    rows_square = math.ceil(num_images / cols_square)
+    
+    # Grid with 4:3 aspect ratio
+    # cols : rows = 4 : 3, so cols = 4k, rows = 3k
+    # Find minimum k where cols * rows >= num_images
+    k = math.ceil(math.sqrt(num_images / 12))
+    cols_ratio = 4 * k
+    rows_ratio = 3 * k
+    
+    # Adjust actual number of rows needed
+    while cols_ratio * rows_ratio < num_images:
+        if cols_ratio * (rows_ratio + 1) >= num_images:
+            rows_ratio += 1
+        else:
+            k += 1
+            cols_ratio = 4 * k
+            rows_ratio = 3 * k
+    
+    # Choose better ratio (less empty space)
+    empty_square = cols_square * rows_square - num_images
+    empty_ratio = cols_ratio * rows_ratio - num_images
+    
+    if empty_square <= empty_ratio:
+        return cols_square, rows_square
+    else:
+        return cols_ratio, rows_ratio
+
+def resize_images_uniform(pil_images, target_size=(800, 600)):
+    """
+    Resize all images to uniform size
+    
+    Args:
+        pil_images: List of PIL Image objects
+        target_size: Target size (width, height)
+    
+    Returns:
+        List of resized PIL Image objects
+    """
+    resized_images = []
+    for img in pil_images:
+        # Resize maintaining aspect ratio
+        img_copy = img.copy()
+        img_copy.thumbnail(target_size, Image.Resampling.LANCZOS)
+        
+        # Add padding to match exact target_size
+        new_img = Image.new('RGB', target_size, (255, 255, 255))
+        x = (target_size[0] - img_copy.width) // 2
+        y = (target_size[1] - img_copy.height) // 2
+        new_img.paste(img_copy, (x, y))
+        
+        resized_images.append(new_img)
+    
+    return resized_images

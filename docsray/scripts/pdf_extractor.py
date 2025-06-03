@@ -123,7 +123,7 @@ def extract_images_from_page(page, min_width: int = 100, min_height: int = 100) 
             img_rects = page.get_image_rects(xref)
             if img_rects:
                 images.append((pil_img, img_rects[0]))
-        pix = None  # Free memory
+
     images.sort(key=lambda x: (x[1].y0, x[1].x0))
     images = [img for img, rect in images]   
 
@@ -136,13 +136,13 @@ def analyze_image_with_llm(images: list, page_num: int) -> str:
     """
     
     # Prepare multimodal prompt
-    prompt = """Write one sentence per image using this exact format:
+    prompt = """Describe all images in left-to-right, top-to-bottom order:
 
     Figure 1: [description]
     Figure 2: [description]
-    Figure 3: [description]
+    Figure N: [description]
 
-    Start immediately with Figure 1. No introduction needed."""
+Start immediately with "Figure 1: ". No introduction needed."""
     # Use the large model for better image understanding
     response = local_llm_large.generate(prompt, images=images)
     

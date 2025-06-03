@@ -50,7 +50,7 @@ docsray web  # Launch Web UI
 - **Universal Document Support**: Automatically converts 30+ file formats to PDF for processing
 - **Smart File Conversion**: Handles Office documents, images, HTML, Markdown, and more
 
-## 🎯 What's New in v1.2.6
+## 🎯 What's New in v1.2.9
 ### Universal Document Support
 DocsRay now automatically converts various document formats to PDF for processing:
 
@@ -112,11 +112,13 @@ brew install tesseract-ocr-kor
 ### Adaptive Performance Optimization
 Automatically detects system resources and optimizes performance:
 
-| System Memory |    Mode   | OCR | Visual Analysis | Max Tokens | Images / Page|
-|--------------|------------|--------------|--------------|------------|------------|
-| < 16GB | FAST_MODE(Q4) | ✅ | ✅ | 8K | <= 8 |
-| 16-24GB | STANDARD (Q8) | ✅ | ✅ | 16K | <= 16 |
-| > 24GB | FULL_FEATURE (F16) | ✅ | ✅  | 32K |  <= 32 |
+| System Memory |    Mode   | OCR | Visual Analysis | Max Tokens |
+|--------------|------------|--------------|--------------|------------|
+|  CPU  | FAST (Q4) | ❌ | ❌ | 8K | 
+| < 16GB | FAST (Q4) | ✅ | ✅ | 16K |
+| 16-24GB | STANDARD (Q8) | ✅ | ✅ | 32K |
+| > 24GB | FULL_FEATURE (F16) | ✅ | ✅  | 32K |
+
 
 ### Enhanced MCP Commands
 - **Cache Management**: `clear_all_cache`, `get_cache_info`

@@ -13,8 +13,7 @@ import base64
 import io
 from PIL import Image
 from contextlib import redirect_stderr
-from docsray.inference.gemma3_handler import Gemma3ChatHandler
-
+from docsray.inference.gemma3_handler import Gemma3ChatHandler, merge_images_to_grid
 def get_gemma_model_paths(mode_models):
     small_model_path = None
     large_model_path = None
@@ -80,7 +79,7 @@ class LocalLLM:
                     model_path=model_name,
                     n_gpu_layers=-1,
                     n_ctx=MAX_TOKENS,
-                    verbose=True,
+                    verbose=False,
                     flash_attn=True,
                     chat_handler=chat_handler
                 )
@@ -95,49 +94,29 @@ class LocalLLM:
             image: PIL Image object (optional)
         """
         if images is not None and self.is_multimodal:
+            image = merge_images_to_grid(images)
+            # Convert image to data URI
+            image_uri = image_to_base64_data_uri(image, format="PNG")
             messages = [
                 {
                     "role": "user",
                     "content": [
                                 {'type': 'text', 'text': prompt},
+                                {'type': 'image_url', 'image_url': image_uri}
                     ]
                 }
             ]
             # Use chat completion API for multimodal input
-            images = images[:MAX_TOKENS // 1024] # limit number of images per page to use <25% of MAX_TOKENS
-            for image in images:
-                # Convert to RGB if necessary
-                if image.mode in ('RGBA', 'LA'):
-                    rgb_image = Image.new('RGB', image.size, (255, 255, 255))
-                    rgb_image.paste(image, mask=image.split()[-1] if image.mode == 'RGBA' else None)
-                    image = rgb_image
-                elif image.mode != 'RGB':
-                    pass
-
-                if FAST_MODE:
-                    resized = image.resize((896, 896), Image.LANCZOS)
-                else:
-                    w, h = image.size
-                    if w < h:
-                        new_w = 896
-                        new_h = int(h * (896 / w))
-                    else:
-                        new_h = 896
-                        new_w = int(w * (896 / h))
-                    resized = image.resize((new_w, new_h), Image.LANCZOS)
-                # Convert image to data URI
-                image_uri = image_to_base64_data_uri(resized, format="PNG")
-                messages[0]['content'].append({'type': 'image_url', 'image_url': image_uri})
-
             response = self.model.create_chat_completion(
                 messages=messages,
                 stop = ['<end_of_turn>'],
-                max_tokens=MAX_TOKENS//4, # limit visual analysis to use <25% of MAX_TOKENS
+                max_tokens=0,
                 temperature=0.7,
                 top_p=0.95,
                 repeat_penalty=1.1
             )
             result = response['choices'][0]['message']['content']  
+            print(result)
             return result.strip()
         
         else:

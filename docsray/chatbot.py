@@ -7,6 +7,7 @@ from docsray.search.section_coarse_search import coarse_search_sections
 from docsray.search.fine_search import fine_search_chunks
 from docsray.inference.embedding_model import embedding_model
 from docsray.inference.llm_model import local_llm, local_llm_large
+from docsray.config import FAST_MODE, STANDARD_MODE, FULL_FEATURE_MODE
 
 DEFAULT_SYSTEM_PROMPT = (
     "You are a document-grounded assistant.\n"
@@ -62,7 +63,7 @@ class PDFChatBot:
         return prompt.strip()
 
         
-    def answer(self, query: str, beta: float = 0.5, max_iterations = 2, top_sections: int = 3, top_chunks: int = 10, fine_only=False):
+    def answer(self, query: str, beta: float = 0.5, max_iterations = 2, fine_only=False):
         """
         End‑to‑end answer generation pipeline.
 
@@ -94,6 +95,16 @@ class PDFChatBot:
         sections = self.sections
 
         augmented_query = query
+
+        if FAST_MODE:
+            top_sections = 3
+            top_chunks = 5
+        elif STANDARD_MODE:
+            top_sections = 5
+            top_chunks = 10
+        else:
+            top_sections = 7
+            top_chunks = 15
 
         for iter in range(max_iterations):
             query_emb = embedding_model.get_embedding(augmented_query, is_query=True)
