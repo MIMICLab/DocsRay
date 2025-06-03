@@ -406,11 +406,11 @@ def extract_pdf_content(pdf_path: str,
     pdf_path : str
         Path to the PDF file
     """
-
-    success, doc, error = run_safe(fitz.open(pdf_path))
-    if not success:
-        print(error)
-        raise RuntimeError(f"Failed to open file: {pdf_path}.")
+    doc = fitz.open(pdf_path)
+    #success, doc, error = run_safe(fitz.open(pdf_path))
+    #if not success:
+    #    print(error)
+    #    raise RuntimeError(f"Failed to open file: {pdf_path}.")
     if page_limit != -1:
         doc = doc[:page_limit]
     total_pages = len(doc)

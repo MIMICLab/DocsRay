@@ -97,7 +97,7 @@ def _execute_in_safehouse(
        'traceback': None
    }
 
-def run_safe(func: Callable, *args, timeout: int = 30, **kwargs) -> Tuple[bool, Any, Optional[Dict]]:
+def run_safe(func: Callable, *args, timeout: int = 10, **kwargs) -> Tuple[bool, Any, Optional[Dict]]:
    """
    Execute a function once in a safe isolated environment.
    
