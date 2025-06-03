@@ -15,7 +15,7 @@ from docsray.post_install import hotfix_check
 
 # PDF Processing timeout (5 minutes)
 PDF_PROCESS_TIMEOUT = 300
-
+PAGE_LIMIT = 5
 class ProcessingTimeoutError(Exception):
     """Exception raised when document processing takes too long"""
     pass
@@ -81,6 +81,8 @@ Examples:
     web_parser.add_argument("--host", default="0.0.0.0", help="Host address")
     web_parser.add_argument("--timeout", type=int, default=300, 
                            help="PDF processing timeout in seconds (default: 300)")
+    web_parser.add_argument("--pages", type=int, default=0, 
+                           help="Maximum pages to process per PDF (default: 0)")
     web_parser.add_argument("--auto-restart", action="store_true", 
                            help="Enable auto-restart on errors")
     web_parser.add_argument("--max-retries", type=int, default=5,
@@ -157,6 +159,8 @@ Examples:
                 service_args.extend(["--host", args.host])
             if args.timeout != 300:
                 service_args.extend(["--timeout", str(args.timeout)])
+            if args.pages != 0:
+                service_args.extend(["--pages", str(args.pages)])                
             if args.share:
                 service_args.append("--share")
                 

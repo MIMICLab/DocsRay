@@ -48,6 +48,7 @@ TEMP_DIR.mkdir(exist_ok=True)
 # Session timeout (24 hours)
 SESSION_TIMEOUT = 86400
 PDF_PROCESS_TIMEOUT = 300  # 5 minutes timeout for PDF processing
+PAGE_LIMIT = 5
 # Error recovery settings
 MAX_MEMORY_PERCENT = 85  # Restart if memory usage exceeds this
 ERROR_THRESHOLD = 5  # Number of errors before restart
@@ -451,7 +452,7 @@ def _do_process_document(file_path: str, session_dir: Path, analyze_visuals: boo
         extracted = pdf_extractor.extract_content(
             file_path,
             analyze_visuals=analyze_visuals,
-            page_limit=5
+            page_limit=PAGE_LIMIT
         )
         
         # Create chunks
@@ -726,9 +727,25 @@ try:
         ),
         css=CUSTOM_CSS
     ) as demo:
+        if PAGE_LIMIT > 0 :
+            page_limits =f'''
+                    <p style="font-size: 13px; color: #ef4444; font-weight: 600; margin-top: 8px;">
+                        ⚠️ Demo Mode: Only first {PAGE_LIMIT} pages of each document will be processed
+                    </p>
+                    '''
+        else:
+            page_limits =""
+        if PDF_PROCESS_TIMEOUT > 0:
+            timeout_limits=f'''
+                <p style="font-size: 13px; color: #f59e0b; font-weight: 600; margin-top: 4px;">
+                    ⏰ Processing Timeout: {PDF_PROCESS_TIMEOUT//60} minutes per document
+                </p>
+                '''
+        else:
+            timeout_limits = ""
         # Header with better styling
         gr.Markdown(
-            """
+            f"""
             <div style="text-align: center; padding: 20px 0;">
                 <h1 style="font-size: 32px; font-weight: 700; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 8px;">
                     🚀 DocsRay
@@ -740,13 +757,7 @@ try:
                     Upload any document (PDF, Word, Excel, PowerPoint, Images, etc.) and ask questions about it!
                     All processing happens in your session - no login required.
                 </p>
-                <p style="font-size: 13px; color: #ef4444; font-weight: 600; margin-top: 8px;">
-                    ⚠️ Demo Mode: Only first 5 pages of each document will be processed
-                </p>
-                <p style="font-size: 13px; color: #f59e0b; font-weight: 600; margin-top: 4px;">
-                    ⏰ Processing Timeout: 5 minutes per document
-                </p>
-            </div>
+                {page_limits}{timeout_limits}</div>
             """,
             elem_classes=["header-section"]
         )
@@ -934,13 +945,14 @@ def main():
     parser.add_argument("--port", type=int, default=44665, help="Port number")
     parser.add_argument("--host", type=str, default="0.0.0.0", help="Host address")
     parser.add_argument("--timeout", type=int, default=300, help="PDF processing timeout in seconds")
-    
+    parser.add_argument("--pages", type=int, default=0, help="Maximum pages to process") 
     args = parser.parse_args()
     
     # Update global timeout if specified
     global PDF_PROCESS_TIMEOUT
     PDF_PROCESS_TIMEOUT = args.timeout
-    
+    global PAGE_LIMIT
+    PAGE_LIMIT = args.pages
     # Set wrapper environment variable if running under wrapper
     if '--wrapper' in sys.argv:
         os.environ['DOCSRAY_WRAPPER'] = '1'
