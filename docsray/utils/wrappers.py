@@ -29,7 +29,7 @@ def _execute_in_safehouse(
    args: tuple, 
    kwargs: dict, 
    timeout: int,
-   memory_limit_gb: float
+   memory_limit_gb: float = 4,
 ) -> Tuple[bool, Any, Optional[Dict]]:
    """Core isolation execution logic"""
    
