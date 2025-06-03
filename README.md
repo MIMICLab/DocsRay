@@ -112,11 +112,11 @@ brew install tesseract-ocr-kor
 ### Adaptive Performance Optimization
 Automatically detects system resources and optimizes performance:
 
-| System Memory |    Mode   | OCR | Visual Analysis | Max Tokens | Max Images / Page|
+| System Memory |    Mode   | OCR | Visual Analysis | Max Tokens | Images / Page|
 |--------------|------------|--------------|--------------|------------|------------|
-| < 16GB | FAST_MODE(Q4) | ✅ | ✅ | 8K | 4 |
-| 16-24GB | STANDARD (Q8) | ✅ | ✅ | 16K | 8 |
-| > 24GB | FULL_FEATURE (F16) | ✅ | ✅  | 32K | 16 |
+| < 16GB | FAST_MODE(Q4) | ✅ | ✅ | 8K | <= 8 |
+| 16-24GB | STANDARD (Q8) | ✅ | ✅ | 16K | <= 16 |
+| > 24GB | FULL_FEATURE (F16) | ✅ | ✅  | 32K |  <= 32 |
 
 ### Enhanced MCP Commands
 - **Cache Management**: `clear_all_cache`, `get_cache_info`
