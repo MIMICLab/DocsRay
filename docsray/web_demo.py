@@ -24,6 +24,219 @@ TEMP_DIR.mkdir(exist_ok=True)
 # Session timeout (24 hours)
 SESSION_TIMEOUT = 86400
 
+CUSTOM_CSS = """
+/* Global font settings - 한글 가독성을 위한 폰트 설정 */
+.gradio-container {
+    max-width: 1400px !important;
+    font-family: 'Pretendard', 'Noto Sans KR', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif !important;
+}
+
+/* Increase base font size */
+.gr-text-input, .gr-box, .gr-button, .gr-dropdown {
+    font-size: 16px !important;
+}
+
+/* Textbox improvements */
+.gr-textbox textarea {
+    font-size: 16px !important;
+    line-height: 1.8 !important;
+    color: #2c3e50 !important;
+    font-family: 'Pretendard', 'Noto Sans KR', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif !important;
+    letter-spacing: -0.02em !important;
+}
+
+/* Label improvements */
+label, .gr-input-label, .gr-checkbox label {
+    font-size: 16px !important;
+    font-weight: 600 !important;
+    color: #34495e !important;
+    margin-bottom: 8px !important;
+}
+
+/* Button improvements */
+.gr-button {
+    font-size: 16px !important;
+    font-weight: 600 !important;
+    padding: 12px 24px !important;
+    border-radius: 8px !important;
+    transition: all 0.3s ease !important;
+}
+
+.gr-button-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+}
+
+.gr-button-primary:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.2) !important;
+}
+
+/* Headers */
+h1, h2, h3 {
+    color: #2c3e50 !important;
+    font-weight: 700 !important;
+}
+
+h1 { font-size: 32px !important; }
+h2 { font-size: 24px !important; }
+h3 { font-size: 20px !important; }
+
+/* Markdown improvements */
+.markdown-text {
+    font-size: 16px !important;
+    line-height: 1.6 !important;
+    color: #34495e !important;
+}
+
+/* Status textbox */
+#status-box textarea {
+    background-color: #f8f9fa !important;
+    border: 2px solid #e9ecef !important;
+    border-radius: 8px !important;
+    padding: 16px !important;
+    font-family: 'D2Coding', 'Consolas', 'Monaco', 'Courier New', monospace !important;
+    font-size: 14px !important;
+}
+
+/* Answer output styling */
+#answer-output textarea, #reference-output textarea {
+    background-color: #ffffff !important;
+    border: 2px solid #e3e6f0 !important;
+    border-radius: 8px !important;
+    padding: 20px !important;
+    line-height: 1.9 !important;
+    font-size: 16px !important;
+    color: #2c3e50 !important;
+    font-family: 'Pretendard', 'Noto Sans KR', 'Spoqa Han Sans Neo', sans-serif !important;
+    letter-spacing: -0.02em !important;
+}
+
+/* Dropdown styling */
+#doc-dropdown {
+    background-color: #f8f9fa !important;
+    border: 2px solid #dee2e6 !important;
+    border-radius: 8px !important;
+    font-size: 16px !important;
+}
+
+/* Tab improvements */
+.gr-tab-item {
+    font-size: 16px !important;
+    font-weight: 600 !important;
+    padding: 12px 24px !important;
+}
+
+/* Accordion improvements */
+.gr-accordion {
+    border: 2px solid #e9ecef !important;
+    border-radius: 8px !important;
+    margin: 16px 0 !important;
+}
+
+.gr-accordion-header {
+    font-size: 16px !important;
+    font-weight: 600 !important;
+    padding: 16px !important;
+    background-color: #f8f9fa !important;
+}
+
+/* Example box styling */
+.gr-examples {
+    background-color: #f8f9fa !important;
+    border-radius: 8px !important;
+    padding: 16px !important;
+    margin-top: 20px !important;
+}
+
+.gr-sample-textbox {
+    font-size: 15px !important;
+    padding: 10px !important;
+    border-radius: 6px !important;
+    background-color: #ffffff !important;
+    border: 1px solid #dee2e6 !important;
+    margin: 4px !important;
+    cursor: pointer !important;
+    transition: all 0.2s ease !important;
+}
+
+.gr-sample-textbox:hover {
+    background-color: #e9ecef !important;
+    transform: translateY(-1px) !important;
+}
+
+/* File upload area */
+.gr-file {
+    border: 3px dashed #dee2e6 !important;
+    border-radius: 12px !important;
+    padding: 24px !important;
+    background-color: #f8f9fa !important;
+    font-size: 16px !important;
+}
+
+.gr-file:hover {
+    border-color: #667eea !important;
+    background-color: #f1f3f5 !important;
+}
+
+/* Checkbox styling */
+.gr-checkbox {
+    margin: 12px 0 !important;
+}
+
+.gr-checkbox input[type="checkbox"] {
+    width: 20px !important;
+    height: 20px !important;
+    margin-right: 8px !important;
+}
+
+/* Progress bar styling */
+.gr-progress-bar {
+    height: 8px !important;
+    border-radius: 4px !important;
+    background-color: #e9ecef !important;
+}
+
+.gr-progress-bar > div {
+    background: linear-gradient(90deg, #667eea 0%, #764ba2 100%) !important;
+    border-radius: 4px !important;
+}
+
+/* Info text */
+.gr-info {
+    font-size: 14px !important;
+    color: #6c757d !important;
+    font-style: italic !important;
+}
+
+/* Row and column spacing */
+.gr-row {
+    gap: 20px !important;
+}
+
+.gr-column {
+    padding: 16px !important;
+}
+
+/* Box shadows for depth */
+.gr-box {
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08) !important;
+    border-radius: 8px !important;
+    padding: 20px !important;
+}
+
+/* Responsive improvements */
+@media (max-width: 768px) {
+    .gr-button {
+        font-size: 14px !important;
+        padding: 10px 16px !important;
+    }
+    
+    .gr-textbox textarea, .gr-text-input {
+        font-size: 14px !important;
+    }
+}
+"""
+
 def create_session_dir() -> Path:
     """Create a unique session directory"""
     session_id = str(uuid.uuid4())
@@ -265,29 +478,36 @@ def get_supported_formats() -> str:
     
     return info
 
-# Create Gradio interface
 with gr.Blocks(
     title="DocsRay - Universal Document Q&A",
-    theme=gr.themes.Soft(),
-    css="""
-    .gradio-container {
-        max-width: 1200px !important;
-    }
-    #doc-dropdown {
-        background-color: #f8f9fa;
-    }
-    """
+    theme=gr.themes.Soft(
+        primary_hue="indigo",
+        secondary_hue="purple",
+        neutral_hue="slate",
+        font=[gr.themes.GoogleFont("Noto Sans KR"), gr.themes.GoogleFont("Inter")]
+    ),
+    css=CUSTOM_CSS
 ) as demo:
-    # Header
+    # Header with better styling
     gr.Markdown(
         """
-        # 🚀 DocsRay - Universal Document Q&A System
-        
-        Upload any document (PDF, Word, Excel, PowerPoint, Images, etc.) and ask questions about it!
-        All processing happens in your session - no login required.
-
-        This demo only processes first 5 pages of each uploaded document.
-        """
+        <div style="text-align: center; padding: 20px 0;">
+            <h1 style="font-size: 42px; font-weight: 800; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 10px;">
+                🚀 DocsRay
+            </h1>
+            <p style="font-size: 20px; color: #6b7280; font-weight: 500;">
+                Universal Document Q&A System
+            </p>
+            <p style="font-size: 16px; color: #9ca3af; max-width: 600px; margin: 10px auto;">
+                Upload any document (PDF, Word, Excel, PowerPoint, Images, etc.) and ask questions about it!
+                All processing happens in your session - no login required.
+            </p>
+            <p style="font-size: 14px; color: #ef4444; font-weight: 600; margin-top: 10px;">
+                ⚠️ Demo Mode: Only first 5 pages of each document will be processed
+            </p>
+        </div>
+        """,
+        elem_classes=["header-section"]
     )
     
     # Session state
@@ -314,7 +534,7 @@ with gr.Blocks(
                     ],
                     type="filepath",
                   )
-            
+
             # Visual analysis toggle
             with gr.Row():
                 analyze_visuals_checkbox = gr.Checkbox(
