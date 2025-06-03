@@ -40,6 +40,9 @@ python-docx>=0.8.11  # For reading DOCX files
 docx2pdf>=0.1.8  # Direct DOCX to PDF conversion (Windows/Mac)
 openpyxl>=3.0.10  # For reading Excel files
 python-pptx>=0.6.21  # For reading PowerPoint files
+reportlab
+Pandoc
+wkhtmltopdf
 
 # HTML/Web to PDF
 pdfkit>=1.0.0  # HTML to PDF conversion (requires wkhtmltopdf)
@@ -56,6 +59,5 @@ olefile # Required by pyhwp
 # Optional but recommended system dependencies (install separately):
 # - LibreOffice (for reliable Office document conversion)
 # - wkhtmltopdf (for pdfkit)
-# - Pandoc (for pypandoc)
 # - weasyprint  # Alternative HTML to PDF converter
 # - hwp5  # Alternative HWP library (optional)

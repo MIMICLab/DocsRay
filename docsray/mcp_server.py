@@ -11,6 +11,7 @@ import sys
 import time
 from typing import Any, Dict, List, Optional, Tuple
 from pathlib import Path
+import numpy as np
 
 # MCP imports
 from mcp.server import Server
@@ -21,11 +22,12 @@ from mcp.types import Tool, TextContent
 from docsray.chatbot import PDFChatBot, DEFAULT_SYSTEM_PROMPT
 from docsray.scripts import pdf_extractor, chunker, build_index, section_rep_builder
 from docsray.inference.llm_model import local_llm, local_llm_large
-
+from docsray.inference.embedding_model import embedding_model
 from docsray.scripts.file_converter import FileConverter
 from docsray.config import FAST_MODE, DISABLE_VISUAL_ANALYSIS
 from docsray.config import MODEL_DIR, FAST_MODE, STANDARD_MODE, FULL_FEATURE_MODE
 from docsray.download_models import check_models
+from docsray.search.vector_search import vector_search_with_metadata
 
 SCRIPT_DIR = Path(__file__).parent.absolute()
 base_dir = SCRIPT_DIR / "data"
@@ -42,7 +44,7 @@ DATA_DIR = base_dir / "mcp_data"
 CACHE_DIR = DATA_DIR / "cache"
 CONFIG_FILE = DATA_DIR / "config.json"
 DEFAULT_PDF_FOLDER = base_dir / "original"  # Default folder to scan for PDFs
-
+   
 # Create directories
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 DEFAULT_PDF_FOLDER.mkdir(parents=True, exist_ok=True)
@@ -532,6 +534,7 @@ def search_files_in_path(
         
     finally:
         search_in_progress = False
+
 def stop_document_search() -> Dict[str, str]:
     """Stop an ongoing document search."""
     global search_stop_flag
@@ -919,7 +922,7 @@ def generate_and_save_summary(
     )
     
     # Generate embedding for the summary
-    from docsray.inference.embedding_model import embedding_model
+
     summary_embedding = embedding_model.get_embedding(summary, is_query=False)
     
     # Save summary
@@ -938,7 +941,66 @@ def generate_and_save_summary(
         }, f)
     
     return summary, summary_embedding
-
+def load_document_by_summary_search(
+    query: str,
+    folder_path: Optional[str] = None
+) -> Tuple[bool, str]:
+    """
+    Search for a document by query and load the best match
+    
+    Args:
+        query: Search query
+        folder_path: Directory to search (default: current folder)
+    
+    Returns:
+        (success, message)
+    """
+    global current_sections, current_index, current_pdf_name, current_pages_text
+    
+    # Search documents
+    search_results = search_by_content(query, folder_path, detail_level="brief", top_k=1)
+    
+    if not search_results["results"]:
+        return False, "No documents found matching the query"
+    
+    # Get best match
+    best_match = search_results["results"][0]
+    doc_name = best_match["document"]
+    similarity = best_match["similarity"]
+    
+    # Find the document file
+    if folder_path:
+        target_dir = Path(folder_path).expanduser().resolve()
+    else:
+        target_dir = current_pdf_folder
+    
+    # Look for the document
+    converter = FileConverter()
+    doc_path = None
+    
+    for file_path in target_dir.iterdir():
+        if file_path.is_file() and file_path.stem == doc_name:
+            if converter.is_supported(str(file_path)):
+                doc_path = file_path
+                break
+    
+    if not doc_path:
+        return False, f"Document file not found: {doc_name}"
+    
+    # Load the document
+    try:
+        sections, chunk_index, pages_text = process_pdf(str(doc_path), analyze_visuals=False)
+        
+        current_sections = sections
+        current_index = chunk_index
+        current_pdf_name = doc_path.name
+        current_pages_text = pages_text
+        
+        return True, f"✅ Loaded best matching document: {doc_path.name}\n📊 Similarity score: {similarity:.3f}\n📄 Summary preview: {best_match['summary'][:200]}..."
+        
+    except Exception as e:
+        return False, f"Failed to load document: {str(e)}"
+    
 def process_all_documents(
     folder_path: Optional[str] = None,
     analyze_visuals: Optional[bool] = None,
@@ -989,10 +1051,29 @@ def process_all_documents(
     else:
         valid_extensions = list(converter.SUPPORTED_FORMATS.keys()) + ['.pdf']
     
+    # Define patterns for files to skip
+    SKIP_PATTERNS = [
+        'recovery-codes', 
+        'recovery_codes',
+        'password',
+        'secret',
+        'private-key',
+        'private_key',
+        'credentials',
+        'api-key',
+        'api_key',
+        'token'
+    ]
     # Find documents
     documents = []
+    skipped_sensitive = []
     for file_path in sorted(target_dir.iterdir()):
         if file_path.is_file() and file_path.suffix.lower() in valid_extensions:
+            file_name_lower = file_path.name.lower()
+            if any(pattern in file_name_lower for pattern in SKIP_PATTERNS):
+                print(f"⏭️  Skipping sensitive file: {file_path.name}", file=sys.stderr)
+                skipped_sensitive.append(file_path.name)
+                continue
             documents.append({
                 "path": str(file_path),
                 "name": file_path.name,
@@ -1116,7 +1197,7 @@ def search_by_content(
     top_k: int = 5
 ) -> Dict[str, Any]:
     """
-    Search documents based on their summary embeddings
+    Search documents based on their summary embeddings using optimized vector search
     
     Args:
         query: Search query
@@ -1134,28 +1215,35 @@ def search_by_content(
         target_dir = current_pdf_folder
     
     # Get query embedding
-    from docsray.inference.embedding_model import embedding_model
     query_embedding = embedding_model.get_embedding(query, is_query=True)
     
     # Find all summary embeddings of the specified detail level
-    results = []
     pattern = f"*_summary_{detail_level}_embedding.pkl"
+    embedding_files = list(CACHE_DIR.glob(pattern))
     
-    for embedding_file in CACHE_DIR.glob(pattern):
+    if not embedding_files:
+        return {
+            "query": query,
+            "detail_level": detail_level,
+            "total_documents": 0,
+            "results": []
+        }
+    
+    # Load all embeddings and metadata
+    embeddings = []
+    metadata = []
+    
+    for embedding_file in embedding_files:
         try:
             with open(embedding_file, 'rb') as f:
                 data = pickle.load(f)
             
-            # Calculate cosine similarity
-            doc_embedding = np.array(data["embedding"])
-            similarity = np.dot(query_embedding, doc_embedding)
-            
             # Extract document name
             doc_name = embedding_file.stem.replace(f"_summary_{detail_level}_embedding", "")
             
-            results.append({
+            embeddings.append(data["embedding"])
+            metadata.append({
                 "document": doc_name,
-                "similarity": float(similarity),
                 "summary": data["summary"],
                 "detail_level": data.get("detail_level", detail_level)
             })
@@ -1163,15 +1251,37 @@ def search_by_content(
             print(f"Error reading embedding for {embedding_file.name}: {e}", file=sys.stderr)
             continue
     
-    # Sort by similarity
-    results.sort(key=lambda x: x["similarity"], reverse=True)
+    if not embeddings:
+        return {
+            "query": query,
+            "detail_level": detail_level,
+            "total_documents": 0,
+            "results": []
+        }
     
-    # Return top k results
+    # Use optimized vector search
+    results_with_scores = vector_search_with_metadata(
+        query_emb=query_embedding,
+        embeddings=embeddings,
+        metadata=metadata,
+        top_k=top_k
+    )
+    
+    # Format results
+    results = []
+    for meta, score in results_with_scores:
+        results.append({
+            "document": meta["document"],
+            "similarity": score,
+            "summary": meta["summary"],
+            "detail_level": meta["detail_level"]
+        })
+    
     return {
         "query": query,
         "detail_level": detail_level,
-        "total_documents": len(results),
-        "results": results[:top_k]
+        "total_documents": len(embeddings),
+        "results": results
     }
 
 def get_document_summaries(
@@ -1774,6 +1884,12 @@ async def list_tools() -> List[Tool]:
                         "type": "string", 
                         "description": "Directory path to process (optional, uses current if not specified)"
                     },
+                                "detail_level": {
+                "type": "string",
+                "description": "Summary detail level: 'brief', 'standard', or 'detailed'",
+                "enum": ["brief", "standard", "detailed"],
+                "default": "brief"
+            },
                     "analyze_visuals": {
                         "type": "boolean",
                         "description": "Whether to analyze visual content (default: uses global setting)"
@@ -1809,6 +1925,12 @@ async def list_tools() -> List[Tool]:
                     "folder_path": {
                         "type": "string",
                         "description": "Directory to search (optional, uses current if not specified)"
+                    },
+                    "detail_level": {
+                        "type": "string",
+                        "description": "Which summary level to search",
+                        "enum": ["brief", "standard", "detailed"],
+                        "default": "brief"
                     },
                     "top_k": {
                         "type": "integer",
@@ -1848,7 +1970,12 @@ async def list_tools() -> List[Tool]:
                     "folder_path": {
                         "type": "string",
                         "description": "Directory path (optional, uses current if not specified)"
-                    }
+                    },
+                    "detail_level": {
+                "type": "string",
+                "description": "Filter by detail level (optional)",
+                "enum": ["brief", "standard", "detailed"]
+            }
                 }
             }
         ),        
@@ -2158,10 +2285,12 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
                 response += f"❌ Error generating summary: {str(e)}"
             
             return [TextContent(type="text", text=response)]
+
         elif name == "process_all_documents":
             folder_path = arguments.get("folder_path")
             analyze_visuals = arguments.get("analyze_visuals")
             generate_summaries = arguments.get("generate_summaries", True)
+            detail_level = arguments.get("detail_level", "brief")
             extensions = arguments.get("extensions")
             max_files = arguments.get("max_files")
             
@@ -2172,6 +2301,7 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
                 folder_path=folder_path,
                 analyze_visuals=analyze_visuals,
                 generate_summaries=generate_summaries,
+                detail_level=detail_level,
                 extensions=extensions,
                 max_files=max_files
             )
@@ -2184,26 +2314,40 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             response += f"📊 Total files found: {result['total_files']}\n"
             response += f"✅ Successfully processed: {result['processed']}\n"
             
+            if result.get('skipped_sensitive', 0) > 0:
+                response += f"⏭️  Skipped (sensitive): {result['skipped_sensitive']}\n"
+            
             if result['failed'] > 0:
                 response += f"❌ Failed: {result['failed']}\n"
             
             response += f"⏱️ Processing time: {result['elapsed_time']:.1f} seconds\n"
             
             if generate_summaries:
-                response += f"📝 Summaries generated: Yes\n"
+                response += f"📝 Summary level: {detail_level}\n"
             
             # Show processed files
             if result['processed_files']:
                 response += "\n**Processed Files:**\n"
                 for doc in result['processed_files'][:10]:  # Show first 10
                     response += f"• {doc['name']} "
-                    response += f"({doc['sections']} sections, {doc['chunks']} chunks)"
+                    if doc.get('cached'):
+                        response += "(cached) "
+                    else:
+                        response += f"({doc['sections']} sections, {doc['chunks']} chunks) "
                     if doc['has_summary']:
-                        response += " 📝"
+                        response += "📝"
                     response += "\n"
                 
                 if len(result['processed_files']) > 10:
                     response += f"... and {len(result['processed_files']) - 10} more files\n"
+            
+            # Show skipped sensitive files
+            if result.get('skipped_files'):
+                response += "\n**Skipped Sensitive Files:**\n"
+                for filename in result['skipped_files'][:5]:
+                    response += f"• {filename} (contains sensitive keywords)\n"
+                if len(result['skipped_files']) > 5:
+                    response += f"... and {len(result['skipped_files']) - 5} more files\n"
             
             # Show failed files
             if result['failed_files']:
@@ -2224,6 +2368,7 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
         elif name == "search_by_content":
             query = arguments["query"]
             folder_path = arguments.get("folder_path")
+            detail_level = arguments.get("detail_level", "brief")
             top_k = arguments.get("top_k", 5)
             
             result = search_by_content(query, folder_path, top_k)
@@ -2263,36 +2408,85 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
                 response = f"❌ **Search Failed**\n\n{message}"
             
             return [TextContent(type="text", text=response)]
-
+        
         elif name == "get_document_summaries":
             folder_path = arguments.get("folder_path")
+            detail_level = arguments.get("detail_level")
             
-            result = get_document_summaries(folder_path)
+            result = get_document_summaries(folder_path, detail_level)
             
             response = f"📚 **Document Summaries**\n\n"
             response += f"📁 Directory: {result['folder']}\n"
-            response += f"📝 Total summaries: {result['total_summaries']}\n\n"
             
-            if result['summaries']:
-                for summary_info in result['summaries']:
-                    response += f"**{summary_info['document']}**"
-                    if summary_info['has_embedding']:
-                        response += " ✅"
-                    else:
-                        response += " ⚠️ (no embedding)"
-                    response += "\n"
-                    
-                    # Show first few lines of summary
-                    summary_lines = summary_info['summary'].split('\n')[:3]
-                    for line in summary_lines:
-                        if line.strip():
-                            response += f"  {line.strip()}\n"
-                    response += "\n"
-            else:
-                response += "No summaries found.\n"
-                response += "💡 Run 'process_all_documents' with generate_summaries=True"
+            # Handle the new return format
+            if "summaries_by_document" in result:
+                docs_summary = result["summaries_by_document"]
+                response += f"📝 Total documents with summaries: {result['total_documents']}\n"
+                
+                if result.get("detail_level_filter"):
+                    response += f"🔍 Filtered by: {result['detail_level_filter']} level\n"
+                
+                response += "\n"
+                
+                if docs_summary:
+                    for doc_name, levels in docs_summary.items():
+                        response += f"**{doc_name}**\n"
+                        
+                        # Show available summary levels
+                        available_levels = []
+                        for level in ["brief", "standard", "detailed"]:
+                            if level in levels:
+                                if levels[level].get("has_embedding"):
+                                    available_levels.append(f"{level} ✅")
+                                else:
+                                    available_levels.append(f"{level} ⚠️")
+                        
+                        if available_levels:
+                            response += f"  Available: {', '.join(available_levels)}\n"
+                        
+                        # Show preview of the first available summary
+                        preview_shown = False
+                        for level in ["brief", "standard", "detailed"]:
+                            if level in levels and not preview_shown:
+                                summary_text = levels[level].get("summary", "")
+                                summary_lines = summary_text.split('\n')[:3]
+                                response += "  Preview:\n"
+                                for line in summary_lines:
+                                    if line.strip():
+                                        response += f"    {line.strip()}\n"
+                                preview_shown = True
+                                break
+                        
+                        response += "\n"
+                else:
+                    response += "📭 No summaries found.\n"
+                    response += "💡 Run 'process_all_documents' with generate_summaries=True"
             
-            return [TextContent(type="text", text=response)]        
+            # Handle old format (backward compatibility)
+            elif "summaries" in result:
+                summaries = result["summaries"]
+                response += f"📝 Total summaries: {len(summaries)}\n\n"
+                
+                if summaries:
+                    for summary_info in summaries:
+                        response += f"**{summary_info['document']}**"
+                        if summary_info['has_embedding']:
+                            response += " ✅"
+                        else:
+                            response += " ⚠️ (no embedding)"
+                        response += f" [{summary_info.get('detail_level', 'unknown')}]\n"
+                        
+                        # Show first few lines of summary
+                        summary_lines = summary_info['summary'].split('\n')[:3]
+                        for line in summary_lines:
+                            if line.strip():
+                                response += f"  {line.strip()}\n"
+                        response += "\n"
+                else:
+                    response += "No summaries found.\n"
+                    response += "💡 Run 'process_all_documents' with generate_summaries=True"
+            
+            return [TextContent(type="text", text=response)]      
         elif name == "clear_all_cache":
             # Get cache info before clearing
             cache_info = get_cache_info()

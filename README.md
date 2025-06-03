@@ -308,24 +308,122 @@ answer, references = chatbot.answer("What are the key trends shown in the graphs
 
 ### MCP Commands in Claude
 
-#### Directory Management
+#### 📁 Directory Management
 - `What's my current PDF directory?` - Show current working directory
 - `Set my PDF directory to /path/to/documents` - Change working directory
 - `Show me information about /path/to/pdfs` - Get directory details
+- `Get recommended search paths` - Show common document locations for your OS
 
-#### Document Operations (Updated)
+#### 📄 Document Operations
 - `List all documents in my current directory` - List all supported files (not just PDFs)
 - `Load the document named "report.docx"` - Load any supported file type
 - `What file types are supported?` - Show list of supported formats
+- `Process all documents in current directory` - Batch process with summaries
 
-#### Visual Content Queries
+#### 🔍 Search and Retrieval
+- `Search for documents about machine learning` - Content-based semantic search
+- `Find and load the quarterly report` - Search and auto-load best match
+- `Search for PDF files in my home directory` - File system search
+- `Find all Excel files modified this month` - Advanced file search with filters
+
+#### 👁️ Visual Content
 - `What charts or figures are in this document?` - List visual elements
 - `Describe the diagram on page 10` - Get specific visual descriptions
 - `What data is shown in the graphs?` - Analyze data visualizations
+- `Enable/disable visual analysis` - Toggle visual content processing
 
-#### Cache Management (New)
+#### 💬 Q&A and Summarization
+- `What is the main topic of this document?` - Ask questions about loaded document
+- `Summarize this document briefly` - Generate brief summary with embeddings
+- `Create a detailed summary` - Comprehensive section-by-section summary
+- `Show all document summaries` - View all generated summaries
+
+#### 💾 Cache Management
 - `Clear all cache` - Remove all cached files
 - `Show cache info` - Display cache statistics and details
+- `How much cache space is being used?` - Check cache storage
+
+### Enhanced MCP Features (v1.3.0)
+
+#### 🚀 Batch Processing
+```
+Process all documents in /path/to/folder with brief summaries
+```
+- Processes multiple documents at once
+- Generates summaries with embeddings for semantic search
+- Supports brief/standard/detailed summary levels
+- Caches results for faster access
+
+#### 🔎 Dual Search Modes
+1. **File System Search** (`search_files`)
+   - Recursively search directories
+   - Filter by file type, size, date
+   - Exclude system directories
+   - Returns file paths and metadata
+
+2. **Content Search** (`search_by_content`)
+   - Semantic search using summary embeddings
+   - GPU-accelerated similarity computation
+   - Returns relevance scores
+   - Works only on processed documents
+
+#### 📊 Smart Directory Analysis
+```
+Analyze the path /Users/john/Documents for search complexity
+```
+- Estimates document count
+- Predicts search time
+- Provides complexity assessment
+- Recommends search strategies
+
+### Example Workflows
+
+#### Quick Document Discovery
+```
+1. "Get recommended search paths"
+2. "Search for all PDF files in Documents folder"
+3. "Process all documents with brief summaries"
+4. "Search by content for budget analysis"
+5. "Load the best match"
+```
+
+#### Research Assistant
+```
+1. "Set directory to my research papers"
+2. "Process all documents"
+3. "Search for papers about neural networks"
+4. "Generate detailed summary of current document"
+5. "What methodology was used in this paper?"
+```
+
+#### Visual Content Analysis
+```
+1. "Enable visual analysis"
+2. "Load presentation.pptx"
+3. "What charts are in this presentation?"
+4. "Describe the diagram on slide 5"
+```
+
+### Advanced MCP Commands
+
+#### Filtering and Options
+- `Process only PDF and DOCX files`
+- `Search documents modified after 2024-01-01`
+- `Find files larger than 10MB`
+- `Generate standard summaries for all documents`
+
+#### Performance Control
+- `Process documents without visual analysis`
+- `Use coarse search for faster results`
+- `Limit processing to 50 files`
+
+### Tips for Claude Desktop Integration
+
+1. **First Time Setup**: Claude will automatically find your Documents folder
+2. **Batch Processing**: Process entire directories before starting research
+3. **Smart Search**: Use content search for processed docs, file search for discovery
+4. **Cache Management**: Clear cache periodically to free space
+5. **Visual Analysis**: Disable for faster processing of text-only documents
 
 ## ⚙️ Configuration
 

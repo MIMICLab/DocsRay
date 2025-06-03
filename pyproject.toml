@@ -33,6 +33,9 @@ dependencies = [
     "markdown>=3.4.1",
     "pyhwp",
     "olefile",
+    "reportlab",
+    "Pandoc",
+    "wkhtmltopdf"
 ]
 
 [project.scripts]

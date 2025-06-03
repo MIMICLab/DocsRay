@@ -156,7 +156,7 @@ def ocr_with_llm(image: Image.Image, page_num: int) -> str:
     # OCR-specific prompt
     prompt = """Extract text from this image and present it as readable paragraphs. Start directly with the content."""
 
-    response = local_llm_large.generate(prompt, image=image)
+    response = local_llm_large.generate(prompt, images=[image])
     extracted_text = local_llm_large.strip_response(response)
     return extracted_text.strip()
 

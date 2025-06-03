@@ -60,6 +60,15 @@ try:
 except ImportError:
     HAS_HWP5 = False
 
+try:
+    from reportlab.lib.pagesizes import letter, A4
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+    HAS_REPORTLAB = True
+except ImportError:
+    HAS_REPORTLAB = False
+
 class FileConverter:
     """Convert various file formats to PDF"""
     
@@ -352,6 +361,7 @@ class FileConverter:
             print(f"hwp5 conversion failed: {e}", file=sys.stderr)
         
         return False, "HWP conversion failed"
+
     def _convert_text_to_pdf(self, input_file: Path, output_file: Path) -> Tuple[bool, str]:
         """Convert plain text to PDF"""
         try:
@@ -359,7 +369,56 @@ class FileConverter:
             with open(input_file, 'r', encoding='utf-8') as f:
                 text = f.read()
             
-            # Create simple HTML
+            # First try: reportlab (most reliable for text)
+            if HAS_REPORTLAB:
+                try:
+                    doc = SimpleDocTemplate(str(output_file), pagesize=A4)
+                    styles = getSampleStyleSheet()
+                    story = []
+                    
+                    # Title
+                    title_style = ParagraphStyle(
+                        'CustomTitle',
+                        parent=styles['Heading1'],
+                        fontSize=24,
+                        spaceAfter=30
+                    )
+                    story.append(Paragraph(input_file.name, title_style))
+                    story.append(Spacer(1, 0.2*inch))
+                    
+                    # Content
+                    text_style = ParagraphStyle(
+                        'CustomText',
+                        parent=styles['Normal'],
+                        fontSize=11,
+                        leading=14
+                    )
+                    
+                    # Split text into paragraphs
+                    for paragraph in text.split('\n\n'):
+                        if paragraph.strip():
+                            # Escape special characters for reportlab
+                            safe_text = paragraph.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+                            story.append(Paragraph(safe_text, text_style))
+                            story.append(Spacer(1, 0.1*inch))
+                    
+                    doc.build(story)
+                    return True, str(output_file)
+                    
+                except Exception as e:
+                    print(f"Reportlab conversion failed: {e}", file=sys.stderr)
+            
+            # Second try: Direct PDF creation using pure Python
+            try:
+                # Simple PDF creation without external dependencies
+                pdf_content = self._create_simple_pdf(text, input_file.name)
+                with open(output_file, 'wb') as f:
+                    f.write(pdf_content)
+                return True, str(output_file)
+            except Exception as e:
+                print(f"Simple PDF creation failed: {e}", file=sys.stderr)
+            
+            # Third try: Create HTML and convert
             html_content = f"""
             <html>
             <head>
@@ -371,6 +430,17 @@ class FileConverter:
                         line-height: 1.6;
                         white-space: pre-wrap;
                     }}
+                    h1 {{
+                        color: #333;
+                        border-bottom: 2px solid #333;
+                        padding-bottom: 10px;
+                    }}
+                    pre {{
+                        background: #f4f4f4;
+                        padding: 15px;
+                        border-radius: 5px;
+                        overflow-x: auto;
+                    }}
                 </style>
             </head>
             <body>
@@ -380,31 +450,108 @@ class FileConverter:
             </html>
             """
             
-            # Convert HTML to PDF
-            if HAS_MARKDOWN and HAS_PIL:
-                html_doc = weasyprint.HTML(string=html_content)
-                html_doc.write_pdf(str(output_file))
-                return True, str(output_file)
-            elif HAS_PDFKIT:
-                pdfkit.from_string(html_content, str(output_file))
-                return True, str(output_file)
-            else:
-                # Fallback: Save as temporary HTML and try pandoc
-                temp_html = output_file.with_suffix('.html')
-                with open(temp_html, 'w', encoding='utf-8') as f:
-                    f.write(html_content)
-                
-                if HAS_PANDOC:
+            # Try various HTML to PDF converters
+            converters_tried = []
+            
+            # Try weasyprint
+            if HAS_MARKDOWN:
+                try:
+                    import weasyprint
+                    html_doc = weasyprint.HTML(string=html_content)
+                    html_doc.write_pdf(str(output_file))
+                    return True, str(output_file)
+                except Exception as e:
+                    converters_tried.append("weasyprint")
+            
+            # Try pdfkit
+            if HAS_PDFKIT:
+                try:
+                    import pdfkit
+                    pdfkit.from_string(html_content, str(output_file))
+                    return True, str(output_file)
+                except Exception as e:
+                    converters_tried.append("pdfkit")
+            
+            # Try pandoc
+            if HAS_PANDOC:
+                try:
+                    temp_html = output_file.with_suffix('.html')
+                    with open(temp_html, 'w', encoding='utf-8') as f:
+                        f.write(html_content)
+                    
                     pypandoc.convert_file(str(temp_html), 'pdf', outputfile=str(output_file))
                     temp_html.unlink()
                     return True, str(output_file)
-                
-                temp_html.unlink()
+                except Exception as e:
+                    converters_tried.append("pandoc")
+                    
         except Exception as e:
-            print(f"Text to PDF conversion failed: {e}", file=sys.stderr)
+            print(f"Text to PDF conversion error: {e}", file=sys.stderr)
         
-        return False, "Text conversion failed. Install weasyprint, pdfkit, or pandoc."
-    
+        # Provide helpful error message
+        error_msg = "Text conversion failed. "
+        if not HAS_REPORTLAB:
+            error_msg += "Install reportlab for best results: pip install reportlab"
+        elif converters_tried:
+            error_msg += f"Tried: {', '.join(converters_tried)}. "
+            error_msg += "Install one of: reportlab, weasyprint, pdfkit+wkhtmltopdf, or pandoc"
+        else:
+            error_msg += "No PDF converters available. Install: pip install reportlab"
+        
+        return False, error_msg
+
+    def _create_simple_pdf(self, text: str, title: str) -> bytes:
+        """Create a very simple PDF without external dependencies"""
+        # This is a minimal PDF creator - for production use reportlab is recommended
+        lines = text.split('\n')
+        
+        # Basic PDF structure
+        pdf = b"%PDF-1.4\n"
+        
+        # Catalog and Pages
+        pdf += b"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n"
+        pdf += b"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n"
+        
+        # Page
+        pdf += b"3 0 obj\n<< /Type /Page /Parent 2 0 R /Resources 4 0 R /MediaBox [0 0 612 792] /Contents 5 0 R >>\nendobj\n"
+        
+        # Resources
+        pdf += b"4 0 obj\n<< /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> >> >>\nendobj\n"
+        
+        # Content stream
+        content = f"BT /F1 12 Tf 50 750 Td ({title}) Tj ET\n"
+        y_pos = 720
+        for line in lines[:50]:  # Limit to first 50 lines for simplicity
+            if line.strip():
+                # Escape special characters
+                safe_line = line.replace('\\', '\\\\').replace('(', '\\(').replace(')', '\\)')
+                content += f"BT /F1 10 Tf 50 {y_pos} Td ({safe_line[:80]}) Tj ET\n"
+                y_pos -= 15
+                if y_pos < 50:
+                    break
+        
+        content_bytes = content.encode('latin-1', errors='replace')
+        pdf += f"5 0 obj\n<< /Length {len(content_bytes)} >>\nstream\n".encode()
+        pdf += content_bytes
+        pdf += b"\nendstream\nendobj\n"
+        
+        # xref table
+        xref_pos = len(pdf)
+        pdf += b"xref\n0 6\n"
+        pdf += b"0000000000 65535 f \n"
+        pdf += b"0000000009 00000 n \n"
+        pdf += b"0000000058 00000 n \n"
+        pdf += b"0000000115 00000 n \n"
+        pdf += b"0000000229 00000 n \n"
+        pdf += b"0000000328 00000 n \n"
+        
+        # Trailer
+        pdf += b"trailer\n<< /Size 6 /Root 1 0 R >>\n"
+        pdf += f"startxref\n{xref_pos}\n".encode()
+        pdf += b"%%EOF"
+        
+        return pdf
+
     def _convert_markdown_to_pdf(self, input_file: Path, output_file: Path) -> Tuple[bool, str]:
         """Convert Markdown to PDF"""
         if HAS_PANDOC:
