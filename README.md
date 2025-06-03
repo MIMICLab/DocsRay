@@ -15,19 +15,8 @@ A powerful PDF Question-Answering System that uses advanced embedding models and
 # 1. Install DocsRay
 pip install docsray
 
-# 1-1. Hotfix (Temporary)
-# Hotfix: Use the forked version of llama-cpp-python for Gemma3 Support
-# Note: This is a temporary fix until the official library supports Gemma3
 
-pip install git+https://github.com/kossum/llama-cpp-python.git@main
-
-# For Metal (Apple Silicon)
-CMAKE_ARGS=-DLLAMA_METAL=on FORCE_CMAKE=1 pip install git+https://github.com/kossum/llama-cpp-python.git@main --force-reinstall --upgrade --no-cache-dir
-
-# For CUDA (NVIDIA)
-CMAKE_ARGS=-DGGML_CUDA=on FORCE_CMAKE=1 pip install git+https://github.com/kossum/llama-cpp-python.git@main --force-reinstall --upgrade --no-cache-dir
-
-# 1-2. Tesseract OCR
+# 1-1. Tesseract OCR (optional)
 # For faster OCR, install Tesseract with appropriate language pack.
 
 pip install pytesseract
@@ -123,17 +112,16 @@ brew install tesseract-ocr-kor
 ### Adaptive Performance Optimization
 Automatically detects system resources and optimizes performance:
 
-| System Memory |    Mode   | OCR | Visual Analysis | Max Tokens |
-|--------------|------------|--------------|--------------|------------|
-| < 8GB | FAST_MODE(Q4) | ✅ | ✅ |16K |
-| 8-16GB | FAST_MODE (Q4) | ✅ | ✅ | 32K |
-| 16-24GB | STANDARD (Q8) | ✅ | ✅ | 32K |
-| > 24GB | FULL_FEATURE (F16) | ✅ | ✅  | 32K |
+| System Memory |    Mode   | OCR | Visual Analysis | Max Tokens | Max Images / Page|
+|--------------|------------|--------------|--------------|------------|------------|
+| < 16GB | FAST_MODE(Q4) | ✅ | ✅ | 8K | 4 |
+| 16-24GB | STANDARD (Q8) | ✅ | ✅ | 16K | 8 |
+| > 24GB | FULL_FEATURE (F16) | ✅ | ✅  | 32K | 16 |
 
 ### Enhanced MCP Commands
 - **Cache Management**: `clear_all_cache`, `get_cache_info`
 - **Improved Summarization**: Batch processing with section-by-section caching
-- **Detail Levels**: Adjustable summary detail (brief/standard/detailed
+- **Detail Levels**: Adjustable summary detail (brief/standard/detailed)
 
 ## 📁 Project Structure
 
@@ -149,6 +137,7 @@ DocsRay/
 │   ├── cli.py                 # Command-line interface
 │   ├── inference/
 │   │   ├── embedding_model.py # Embedding model implementations
+│   │   ├── gemma3_handler.py  # Handler for Gemma3 vision input
 │   │   └── llm_model.py       # LLM implementations (including multimodal)
 │   ├── scripts/
 │   │   ├── pdf_extractor.py   # Enhanced PDF extraction with visual analysis

@@ -10,9 +10,9 @@ from docsray.config import FAST_MODE
 from docsray.post_install import hotfix_check
 
 def main():
-    hotfix_installed = hotfix_check()
-    if not hotfix_installed:
-        return
+    #hotfix_installed = hotfix_check()
+    #if not hotfix_installed:
+    #    return
     
     parser = argparse.ArgumentParser(
         description="DocsRay - PDF Question-Answering System",
