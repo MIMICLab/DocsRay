@@ -751,7 +751,8 @@ try:
                 <p style="font-size: 14px; color: #9ca3af; max-width: 600px; margin: 8px auto;">
                     Upload any document (PDF, Word, Excel, PowerPoint, Images, etc.) and ask questions about it!
                     All processing happens in your session - no login required.
-                </p>{page_limits}{timeout_limits}</div>
+                </p>
+                {page_limits}{timeout_limits}</div>
             """,
             elem_classes=["header-section"]
         )
