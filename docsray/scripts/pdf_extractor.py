@@ -26,7 +26,6 @@ from docsray.inference.llm_model import local_llm, local_llm_large
 
 from docsray.scripts.file_converter import FileConverter
 from pathlib import Path
-from docsray.utils.wrappers import safehouse, run_safe
 
 def extract_content(file_path: str,
                    analyze_visuals: bool = True,
@@ -109,10 +108,7 @@ def extract_images_from_page(page, min_width: int = 100, min_height: int = 100) 
     Returns list of (PIL Image, position rectangle) tuples.
     """
     images = []
-    success, image_list, error = run_safe(page.get_images())
-    if not success:
-        print("Failed to extract images from page. Returning None.")
-        return None
+    image_list = page.get_images()
     
     for img_index, img in enumerate(image_list):
         # Get image xref
@@ -178,32 +174,28 @@ def analyze_visual_content(page, page_num: int) -> str:
     if images:
         print(f"  Found {len(images)} images on page {page_num + 1}", file=sys.stderr)
         visual_graphics += images
-
-    success, drawings, error = run_safe(page.get_drawings())
-    if not success:
-        print("Failed to extract vector graphis from page. Returning empty list.")
-    else:
-        if drawings:
-            # Count different types of drawing elements
-            lines = sum(1 for d in drawings if d["type"] == "l")
-            curves = sum(1 for d in drawings if d["type"] == "c")
-            rects = sum(1 for d in drawings if d["type"] == "r")
-            
-            if lines > 10 or curves > 5 or rects > 5:
-                # For complex vector graphics, render the page area as image and analyze
-                # Get the bounding box of all drawings
-                all_rects = [fitz.Rect(d["rect"]) for d in drawings]
-                if all_rects:
-                    # Union of all drawing rectangles
-                    bbox = all_rects[0]
-                    for r in all_rects[1:]:
-                        bbox = bbox | r  # Union operation
-                    
-                    # Render the area as image
-                    mat = fitz.Matrix(2, 2)  # 2x zoom for better quality
-                    pix = page.get_pixmap(matrix=mat, clip=bbox)
-                    vector_img = Image.open(io.BytesIO(pix.pil_tobytes(format="PNG")))
-                    visual_graphics.append(vector_img)
+    drawings = page.get_drawings()
+    if drawings:
+        # Count different types of drawing elements
+        lines = sum(1 for d in drawings if d["type"] == "l")
+        curves = sum(1 for d in drawings if d["type"] == "c")
+        rects = sum(1 for d in drawings if d["type"] == "r")
+        
+        if lines > 10 or curves > 5 or rects > 5:
+            # For complex vector graphics, render the page area as image and analyze
+            # Get the bounding box of all drawings
+            all_rects = [fitz.Rect(d["rect"]) for d in drawings]
+            if all_rects:
+                # Union of all drawing rectangles
+                bbox = all_rects[0]
+                for r in all_rects[1:]:
+                    bbox = bbox | r  # Union operation
+                
+                # Render the area as image
+                mat = fitz.Matrix(2, 2)  # 2x zoom for better quality
+                pix = page.get_pixmap(matrix=mat, clip=bbox)
+                vector_img = Image.open(io.BytesIO(pix.pil_tobytes(format="PNG")))
+                visual_graphics.append(vector_img)
     if len(visual_graphics) > 0:
         visual_description += analyze_image_with_llm(visual_graphics, page_num)
     return visual_description
@@ -253,12 +245,8 @@ Returns a list of dicts identical in structure to build_sections_from_toc.
             f"[Page B]\n{pages_text[a_idx+1][:(MAX_TOKENS - 100)//2]}\n\n"
         )
         try:
-            if FAST_MODE:
-                resp = local_llm.generate(prompt).strip()
-                resp = local_llm.strip_response(resp)
-            else:
-                resp = local_llm_large.generate(prompt).strip()
-                resp = local_llm_large.strip_response(resp)
+            resp = local_llm.generate(prompt).strip()
+            resp = local_llm.strip_response(resp)
 
             if "0" in resp:
                 same_topic = True 
@@ -326,17 +314,16 @@ def ocr_page_with_llm(page, dpi: int = 350) -> str:
 
     # Render page to high-quality image
     zoom = dpi / 72
-    success, pix, error = run_safe(page.get_pixmap(matrix=fitz.Matrix(zoom, zoom), alpha=False))
-    if success:
-        img = Image.open(io.BytesIO(pix.pil_tobytes(format="PNG")))
-        
-        if USE_TESSERACT:
-            text = pytesseract.image_to_string(img)
-        else:
-            text = ocr_with_llm(img, page.number)        
-        return text.strip()
+    pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom), alpha=False)
+    img = Image.open(io.BytesIO(pix.pil_tobytes(format="PNG")))
+    
+    if USE_TESSERACT:
+        text = pytesseract.image_to_string(img)
     else:
-        return ""
+        text = ocr_with_llm(img, page.number)         
+     
+
+    return text.strip()
       
     
 def extract_text_blocks_for_layout(page) -> pd.DataFrame:
@@ -344,18 +331,15 @@ def extract_text_blocks_for_layout(page) -> pd.DataFrame:
     Extract text blocks with positions for layout analysis.
     Used when we have text but need to detect multi-column layout.
     """
-    success, words, error = run_safe(page.get_text("words"))
-    if success:
-        if not words:
-            return pd.DataFrame(columns=["x0", "y0", "x1", "y1", "text"])
-        
-        df = pd.DataFrame(
-            words,
-            columns=["x0", "y0", "x1", "y1", "text", "_b", "_l", "_w"]
-        )[["x0", "y0", "x1", "y1", "text"]]
-        return df
-    else:
+    words = page.get_text("words")
+    if not words:
         return pd.DataFrame(columns=["x0", "y0", "x1", "y1", "text"])
+    
+    df = pd.DataFrame(
+        words,
+        columns=["x0", "y0", "x1", "y1", "text", "_b", "_l", "_w"]
+    )[["x0", "y0", "x1", "y1", "text"]]
+    return df
 
 def is_multicol(df: pd.DataFrame, page_width: float, gap_ratio_thr: float = 0.15) -> bool:
     """Return True if the page likely has multiple text columns."""
@@ -406,11 +390,9 @@ def extract_pdf_content(pdf_path: str,
     pdf_path : str
         Path to the PDF file
     """
+
+
     doc = fitz.open(pdf_path)
-    success, doc, error = run_safe(fitz.open(pdf_path))
-    if not success:
-        print(error)
-        raise RuntimeError(f"Failed to open file: {pdf_path}.")
     if page_limit != -1:
         doc = doc[:page_limit]
     total_pages = len(doc)
