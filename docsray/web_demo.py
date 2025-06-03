@@ -1,4 +1,4 @@
-# web_demo.py - Simplified version without login
+# web_demo.py - Enhanced version with auto-recovery and PDF timeout
 
 import os
 import shutil
@@ -11,11 +11,35 @@ import pickle
 import time
 import pathlib
 import gradio as gr
-
+import traceback
+import logging
+import gc
+import psutil
+from datetime import datetime
+import threading
+import queue
+import sys
+import concurrent.futures
+import signal
 
 from docsray.chatbot import PDFChatBot, DEFAULT_SYSTEM_PROMPT
 from docsray.scripts import pdf_extractor, chunker, build_index, section_rep_builder
 from docsray.scripts.file_converter import FileConverter
+
+# Setup logging
+log_dir = Path.home() / ".docsray" / "logs"
+log_dir.mkdir(parents=True, exist_ok=True)
+log_file = log_dir / f"web_demo_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(log_file),
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+logger = logging.getLogger(__name__)
 
 # Create a temporary directory for this session
 TEMP_DIR = Path(tempfile.gettempdir()) / "docsray_web"
@@ -23,7 +47,137 @@ TEMP_DIR.mkdir(exist_ok=True)
 
 # Session timeout (24 hours)
 SESSION_TIMEOUT = 86400
+PDF_PROCESS_TIMEOUT = 300  # 5 minutes timeout for PDF processing
+# Error recovery settings
+MAX_MEMORY_PERCENT = 85  # Restart if memory usage exceeds this
+ERROR_THRESHOLD = 5  # Number of errors before restart
+ERROR_WINDOW = 300  # Time window for error counting (5 minutes)
 
+# Global error tracking
+error_queue = queue.Queue()
+error_times = []
+
+class ProcessingTimeoutError(Exception):
+    """Exception raised when document processing takes too long"""
+    pass
+
+class ErrorRecoveryMixin:
+    """Mixin class for error recovery functionality"""
+    
+    @staticmethod
+    def safe_execute(func, *args, **kwargs):
+        """Execute function with error handling and recovery"""
+        global error_times
+        
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            # Log error
+            error_msg = f"Error in {func.__name__}: {str(e)}\n{traceback.format_exc()}"
+            logger.error(error_msg)
+            
+            # Track error
+            current_time = time.time()
+            error_times.append(current_time)
+            
+            # Clean old errors
+            error_times = [t for t in error_times if current_time - t < ERROR_WINDOW]
+            
+            # Check if we need to trigger recovery
+            if len(error_times) >= ERROR_THRESHOLD:
+                logger.critical(f"Error threshold reached ({len(error_times)} errors in {ERROR_WINDOW}s)")
+                ErrorRecoveryMixin.trigger_recovery("error_threshold")
+            
+            # Return safe default
+            if func.__name__ == "load_document":
+                return args[2], f"❌ Error processing document: {str(e)}", gr.update()
+            elif func.__name__ == "ask_question":
+                return f"❌ Error: {str(e)}", ""
+            else:
+                raise
+    
+    @staticmethod
+    def check_memory():
+        """Check memory usage and trigger recovery if needed"""
+        try:
+            memory_percent = psutil.virtual_memory().percent
+            if memory_percent > MAX_MEMORY_PERCENT:
+                logger.warning(f"High memory usage: {memory_percent}%")
+                
+                # Try garbage collection first
+                gc.collect()
+                
+                # Check again
+                memory_percent = psutil.virtual_memory().percent
+                if memory_percent > MAX_MEMORY_PERCENT:
+                    ErrorRecoveryMixin.trigger_recovery("high_memory")
+                    
+        except Exception as e:
+            logger.error(f"Error checking memory: {e}")
+    
+    @staticmethod
+    def trigger_recovery(reason):
+        """Trigger recovery action"""
+        logger.critical(f"Triggering recovery due to: {reason}")
+        
+        try:
+            # Clean up temporary files
+            ErrorRecoveryMixin.cleanup_temp_files()
+            
+            # Force garbage collection
+            gc.collect()
+            
+            # Log recovery
+            with open(log_dir / "recovery_log.txt", "a") as f:
+                f.write(f"{datetime.now()}: Recovery triggered - {reason}\n")
+            
+            # For Gradio app, we'll reload the interface
+            if hasattr(gr, 'close_all'):
+                gr.close_all()
+            
+            # Request restart from wrapper if available
+            if os.environ.get('DOCSRAY_WRAPPER'):
+                sys.exit(42)  # Special exit code for restart
+                
+        except Exception as e:
+            logger.error(f"Error during recovery: {e}")
+    
+    @staticmethod
+    def cleanup_temp_files():
+        """Clean up old temporary files"""
+        try:
+            current_time = time.time()
+            cleaned = 0
+            
+            for session_dir in TEMP_DIR.iterdir():
+                if session_dir.is_dir():
+                    dir_age = current_time - session_dir.stat().st_mtime
+                    if dir_age > SESSION_TIMEOUT:
+                        shutil.rmtree(session_dir, ignore_errors=True)
+                        cleaned += 1
+            
+            if cleaned > 0:
+                logger.info(f"Cleaned up {cleaned} old sessions")
+                
+        except Exception as e:
+            logger.error(f"Error cleaning temp files: {e}")
+
+# Memory monitoring thread
+def memory_monitor():
+    """Background thread to monitor memory usage"""
+    while True:
+        try:
+            ErrorRecoveryMixin.check_memory()
+            time.sleep(30)  # Check every 30 seconds
+        except Exception as e:
+            logger.error(f"Memory monitor error: {e}")
+            time.sleep(60)
+
+# Start memory monitor
+monitor_thread = threading.Thread(target=memory_monitor, daemon=True)
+monitor_thread.start()
+
+# [Previous CSS code remains the same]
 CUSTOM_CSS = """
 /* Global font settings - 한글 가독성을 위한 폰트 설정 */
 .gradio-container {
@@ -244,139 +398,215 @@ def create_session_dir() -> Path:
     session_dir.mkdir(exist_ok=True)
     return session_dir
 
-def process_document(file_path: str, session_dir: Path, analyze_visuals: bool = True, progress_callback=None) -> Tuple[list, list, str]:
-    """
-    Process a document file and return sections, chunk index, and status message.
-    Supports all file formats through auto-conversion.
+def process_document_with_timeout(file_path: str, session_dir: Path, analyze_visuals: bool = True, progress_callback=None) -> Tuple[list, list, str]:
+    """Process a document file with timeout handling"""
+    def _process_with_timeout():
+        start_time = time.time()
+        file_name = Path(file_path).name
+        
+        # Progress: Starting
+        if progress_callback is not None:
+            progress_callback(0.1, f"📄 Starting to process: {file_name}")
+        
+        # Create a thread pool for timeout handling
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            # Submit the processing task
+            future = executor.submit(_do_process_document, file_path, session_dir, analyze_visuals, progress_callback)
+            
+            try:
+                # Wait for completion with timeout
+                return future.result(timeout=PDF_PROCESS_TIMEOUT)
+            except concurrent.futures.TimeoutError:
+                # Cancel the future if possible
+                future.cancel()
+                
+                elapsed_time = time.time() - start_time
+                error_msg = f"⏰ Processing timeout: {file_name}\n"
+                error_msg += f"⚠️ Document processing exceeded {PDF_PROCESS_TIMEOUT//60} minutes limit\n"
+                error_msg += f"📊 Elapsed time: {elapsed_time:.1f} seconds\n"
+                error_msg += f"💡 Try with a smaller document or disable visual analysis"
+                
+                logger.error(f"PDF processing timeout for {file_name} after {elapsed_time:.1f}s")
+                
+                # Force cleanup
+                gc.collect()
+                
+                raise ProcessingTimeoutError(error_msg)
     
-    Args:
-        file_path: Path to the document file
-        session_dir: Session directory for caching
-        progress_callback: Optional progress callback function
-    """
+    return _process_with_timeout()
+
+def _do_process_document(file_path: str, session_dir: Path, analyze_visuals: bool = True, progress_callback=None) -> Tuple[list, list, str]:
+    """Actual document processing function (runs in thread with timeout)"""
     start_time = time.time()
     file_name = Path(file_path).name
     
-    # Progress: Starting
-    if progress_callback is not None:
-        progress_callback(0.1, f"📄 Starting to process: {file_name}")
-    
-    # Extract content with visual analysis option
-    if progress_callback is not None:
-        status_msg = f"📖 Extracting content from {file_name}..."
-        if analyze_visuals:
-            status_msg += " (with visual analysis)"
-        progress_callback(0.2, status_msg)
-    
-    extracted = pdf_extractor.extract_content(
-        file_path,
-        analyze_visuals=analyze_visuals,
-        page_limit=5
-    )
-    # Create chunks
-    if progress_callback is not None:
-        progress_callback(0.4, "✂️ Creating text chunks...")
-    
-    chunks = chunker.process_extracted_file(extracted)
-    
-    # Build search index
-    if progress_callback is not None:
-        progress_callback(0.6, "🔍 Building search index...")
-    
-    chunk_index = build_index.build_chunk_index(chunks)
-    
-    # Build section representations
-    if progress_callback is not None:
-        progress_callback(0.8, "📊 Building section representations...")
-    
-    sections = section_rep_builder.build_section_reps(extracted["sections"], chunk_index)
-    
-    # Save to session cache
-    if progress_callback is not None:
-        progress_callback(0.9, "💾 Saving to cache...")
-    
-    cache_data = {
-        "sections": sections,
-        "chunk_index": chunk_index,
-        "filename": file_name,
-        "metadata": extracted.get("metadata", {})
-    }
-    
-    # Save with pickle for better performance
-    cache_file = session_dir / f"{Path(file_path).stem}_cache.pkl"
-    with open(cache_file, "wb") as f:
-        pickle.dump(cache_data, f)
-    
-    # Calculate processing time
-    elapsed_time = time.time() - start_time
-    
-    # Create status message
-    was_converted = extracted.get("metadata", {}).get("was_converted", False)
-    original_format = extracted.get("metadata", {}).get("original_format", "")
-    
-    msg = f"✅ Successfully processed: {file_name}\n"
-    if was_converted:
-        msg += f"🔄 Converted from {original_format.upper()} to PDF\n"
-    msg += f"📑 Sections: {len(sections)}\n"
-    msg += f"🔍 Chunks: {len(chunks)}\n"
-    msg += f"⏱️ Processing time: {elapsed_time:.1f} seconds"
-    
-    if progress_callback is not None:
-        progress_callback(1.0, "✅ Processing complete!")
-    
-    return sections, chunk_index, msg
-
-    
-def load_document(file, analyze_visuals: bool, session_state: Dict, progress=gr.Progress()) -> Tuple[Dict, str, gr.update]:
-    """Load and process uploaded document with progress tracking"""
-    if file is None:
-        return session_state, "Please upload a document", gr.update()
-    
-    # Initialize session if needed
-    if "session_dir" not in session_state:
-        session_state["session_dir"] = str(create_session_dir())
-        session_state["documents"] = {}
-    
-    session_dir = Path(session_state["session_dir"])
-    
-    # Copy file to session directory
-    file_name = Path(file.name).name
-    dest_path = session_dir / file_name
-    
-    progress(0.05, f"📁 Copying {file_name} to session...")
-    shutil.copy(file.name, dest_path)
-    
-    # Process document with visual analysis option
-    sections, chunk_index, msg = process_document(
-        str(dest_path), 
-        session_dir,
-        analyze_visuals=analyze_visuals,
-        progress_callback=progress
-    )
-    
-    if sections is not None:
-        # Store in session
-        doc_id = Path(file_name).stem
-        session_state["documents"][doc_id] = {
-            "filename": file_name,
+    try:
+        # Extract content with visual analysis option
+        if progress_callback is not None:
+            status_msg = f"📖 Extracting content from {file_name}..."
+            if analyze_visuals:
+                status_msg += " (with visual analysis)"
+            progress_callback(0.2, status_msg)
+        
+        extracted = pdf_extractor.extract_content(
+            file_path,
+            analyze_visuals=analyze_visuals,
+            page_limit=5
+        )
+        
+        # Create chunks
+        if progress_callback is not None:
+            progress_callback(0.4, "✂️ Creating text chunks...")
+        
+        chunks = chunker.process_extracted_file(extracted)
+        
+        # Build search index
+        if progress_callback is not None:
+            progress_callback(0.6, "🔍 Building search index...")
+        
+        chunk_index = build_index.build_chunk_index(chunks)
+        
+        # Build section representations
+        if progress_callback is not None:
+            progress_callback(0.8, "📊 Building section representations...")
+        
+        sections = section_rep_builder.build_section_reps(extracted["sections"], chunk_index)
+        
+        # Save to session cache
+        if progress_callback is not None:
+            progress_callback(0.9, "💾 Saving to cache...")
+        
+        cache_data = {
             "sections": sections,
             "chunk_index": chunk_index,
-            "path": str(dest_path)
+            "filename": file_name,
+            "metadata": extracted.get("metadata", {})
         }
-        session_state["current_doc"] = doc_id
         
-        # Update dropdown
-        choices = [doc["filename"] for doc in session_state["documents"].values()]
-        dropdown_update = gr.update(
-            choices=choices, 
-            value=file_name, 
-            visible=True,
-            label=f"Loaded Documents ({len(choices)})"
+        # Save with pickle for better performance
+        cache_file = session_dir / f"{Path(file_path).stem}_cache.pkl"
+        with open(cache_file, "wb") as f:
+            pickle.dump(cache_data, f)
+        
+        # Calculate processing time
+        elapsed_time = time.time() - start_time
+        
+        # Create status message
+        was_converted = extracted.get("metadata", {}).get("was_converted", False)
+        original_format = extracted.get("metadata", {}).get("original_format", "")
+        
+        msg = f"✅ Successfully processed: {file_name}\n"
+        if was_converted:
+            msg += f"🔄 Converted from {original_format.upper()} to PDF\n"
+        msg += f"📑 Sections: {len(sections)}\n"
+        msg += f"🔍 Chunks: {len(chunks)}\n"
+        msg += f"⏱️ Processing time: {elapsed_time:.1f} seconds"
+        
+        if progress_callback is not None:
+            progress_callback(1.0, "✅ Processing complete!")
+        
+        return sections, chunk_index, msg
+        
+    except Exception as e:
+        elapsed_time = time.time() - start_time
+        logger.error(f"Error processing {file_name} after {elapsed_time:.1f}s: {str(e)}")
+        raise
+
+# Wrap all main functions with error recovery
+def process_document(file_path: str, session_dir: Path, analyze_visuals: bool = True, progress_callback=None) -> Tuple[list, list, str]:
+    """Process a document file with error recovery and timeout"""
+    return ErrorRecoveryMixin.safe_execute(process_document_with_timeout, file_path, session_dir, analyze_visuals, progress_callback)
+
+def load_document(file, analyze_visuals: bool, session_state: Dict, progress=gr.Progress()) -> Tuple[Dict, str, gr.update]:
+    """Load and process uploaded document with error recovery"""
+    def _load():
+        if file is None:
+            return session_state, "Please upload a document", gr.update()
+        
+        # Initialize session if needed
+        if "session_dir" not in session_state:
+            session_state["session_dir"] = str(create_session_dir())
+            session_state["documents"] = {}
+        
+        session_dir = Path(session_state["session_dir"])
+        
+        # Copy file to session directory
+        file_name = Path(file.name).name
+        dest_path = session_dir / file_name
+        
+        progress(0.05, f"📁 Copying {file_name} to session...")
+        shutil.copy(file.name, dest_path)
+        
+        # Process document with visual analysis option and timeout
+        sections, chunk_index, msg = process_document(
+            str(dest_path), 
+            session_dir,
+            analyze_visuals=analyze_visuals,
+            progress_callback=progress
         )
-    else:
-        dropdown_update = gr.update()
+        
+        if sections is not None:
+            # Store in session
+            doc_id = Path(file_name).stem
+            session_state["documents"][doc_id] = {
+                "filename": file_name,
+                "sections": sections,
+                "chunk_index": chunk_index,
+                "path": str(dest_path)
+            }
+            session_state["current_doc"] = doc_id
+            
+            # Update dropdown
+            choices = [doc["filename"] for doc in session_state["documents"].values()]
+            dropdown_update = gr.update(
+                choices=choices, 
+                value=file_name, 
+                visible=True,
+                label=f"Loaded Documents ({len(choices)})"
+            )
+        else:
+            dropdown_update = gr.update()
+        
+        return session_state, msg, dropdown_update
     
-    return session_state, msg, dropdown_update
+    return ErrorRecoveryMixin.safe_execute(_load, file, analyze_visuals, session_state, progress)
+
+def ask_question(question: str, session_state: Dict, system_prompt: str, use_coarse: bool, progress=gr.Progress()) -> Tuple[str, str]:
+    """Process a question with error recovery"""
+    def _ask():
+        if not question.strip():
+            return "Please enter a question", ""
+        
+        if "current_doc" not in session_state or not session_state.get("documents"):
+            return "Please upload a document first", ""
+        
+        # Get current document
+        current_doc = session_state["documents"][session_state["current_doc"]]
+        sections = current_doc["sections"]
+        chunk_index = current_doc["chunk_index"]
+        
+        if progress is not None:
+            progress(0.2, "🤔 Thinking about your question...")
+        
+        # Create chatbot and get answer
+        prompt = system_prompt or DEFAULT_SYSTEM_PROMPT
+        chatbot = PDFChatBot(sections, chunk_index, system_prompt=prompt)
+        
+        if progress is not None:
+            progress(0.5, "🔍 Searching relevant sections...")
+        
+        # Get answer
+        answer_output, reference_output = chatbot.answer(
+            question, 
+            fine_only=not use_coarse
+        )
+        
+        if progress is not None:
+            progress(1.0, "✅ Answer ready!")
+        
+        return answer_output, reference_output
+    
+    return ErrorRecoveryMixin.safe_execute(_ask, question, session_state, system_prompt, use_coarse, progress)
 
 def switch_document(selected_file: str, session_state: Dict) -> Tuple[Dict, str]:
     """Switch to a different loaded document"""
@@ -399,41 +629,6 @@ def switch_document(selected_file: str, session_state: Dict) -> Tuple[Dict, str]
             return session_state, msg
     
     return session_state, "Document not found"
-
-def ask_question(question: str, session_state: Dict, system_prompt: str, use_coarse: bool, progress=gr.Progress()) -> Tuple[str, str]:
-    """Process a question about the current document with progress tracking"""
-    if not question.strip():
-        return "Please enter a question", ""
-    
-    if "current_doc" not in session_state or not session_state.get("documents"):
-        return "Please upload a document first", ""
-    
-    # Get current document
-    current_doc = session_state["documents"][session_state["current_doc"]]
-    sections = current_doc["sections"]
-    chunk_index = current_doc["chunk_index"]
-    
-    if progress is not None:
-        progress(0.2, "🤔 Thinking about your question...")
-    
-    # Create chatbot and get answer
-    prompt = system_prompt or DEFAULT_SYSTEM_PROMPT
-    chatbot = PDFChatBot(sections, chunk_index, system_prompt=prompt)
-    
-    if progress is not None:
-        progress(0.5, "🔍 Searching relevant sections...")
-    
-    # Get answer
-    answer_output, reference_output = chatbot.answer(
-        question, 
-        fine_only=not use_coarse
-    )
-    
-    if progress is not None:
-        progress(1.0, "✅ Answer ready!")
-    
-    return answer_output, reference_output
-        
 
 def clear_session(session_state: Dict) -> Tuple[Dict, str, gr.update, gr.update, gr.update]:
     """Clear all documents and reset session"""
@@ -475,249 +670,262 @@ def get_supported_formats() -> str:
         if supported_exts:
             info += f"**{category}:** {', '.join(supported_exts)}\n"
 
+    info += f"\n⏰ **Processing Timeout:** {PDF_PROCESS_TIMEOUT//60} minutes per document\n"
+    info += "💡 **Tip:** Disable visual analysis for faster processing of large documents"
     
     return info
 
-with gr.Blocks(
-    title="DocsRay - Universal Document Q&A",
-    theme=gr.themes.Soft(
-        primary_hue="indigo",
-        secondary_hue="purple",
-        neutral_hue="slate",
-        font=[gr.themes.GoogleFont("Noto Sans KR"), gr.themes.GoogleFont("Inter")]
-    ),
-    css=CUSTOM_CSS
-) as demo:
-    # Header with better styling
-    gr.Markdown(
-        """
-        <div style="text-align: center; padding: 20px 0;">
-            <h1 style="font-size: 32px; font-weight: 700; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 8px;">
-                🚀 DocsRay
-            </h1>
-            <p style="font-size: 18px; color: #6b7280; font-weight: 500;">
-                Universal Document Q&A System
-            </p>
-            <p style="font-size: 14px; color: #9ca3af; max-width: 600px; margin: 8px auto;">
-                Upload any document (PDF, Word, Excel, PowerPoint, Images, etc.) and ask questions about it!
-                All processing happens in your session - no login required.
-            </p>
-            <p style="font-size: 13px; color: #ef4444; font-weight: 600; margin-top: 8px;">
-                ⚠️ Demo Mode: Only first 5 pages of each document will be processed
-            </p>
-        </div>
-        """,
-        elem_classes=["header-section"]
-    )
-    
-    # Session state
-    session_state = gr.State({})
-    
-    # Main layout
-    with gr.Row():
-        # Left column - Document management
-        with gr.Column(scale=1):
-            gr.Markdown("### 📁 Document Management")
-            
-            # File upload
-            file_input = gr.File(
-                    label="Upload Document",
-                    file_types=[
-                        ".pdf", 
-                        ".docx", ".doc", 
-                        ".xlsx", ".xls", 
-                        ".pptx", ".ppt",
-                        ".txt", ".md", ".rtf", ".rst",
-                        ".html", ".htm", ".xml",
-                        ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tiff", ".tif", ".webp",
-                        ".epub", ".mobi",
-                    ],
-                    type="filepath",
-                  )
-
-            # Visual analysis toggle
-            with gr.Row():
-                analyze_visuals_checkbox = gr.Checkbox(
-                    label="👁️ Analyze Visual Content",
-                    value=True,
-                    info="Extract and analyze images, charts, and figures",
-                )
-            
-            upload_btn = gr.Button("📤 Process Document", variant="primary", size="lg")
-            
-            # Document selector (hidden initially)
-            doc_dropdown = gr.Dropdown(
-                label="Loaded Documents",
-                choices=[],
-                visible=False,
-                interactive=True,
-                elem_id="doc-dropdown"
-            )
-            
-            # Status with better styling
-            status = gr.Textbox(
-                label="Status", 
-                lines=5, 
-                interactive=False,
-                show_label=True
-            )
-            
-            # Action buttons in a row
-            with gr.Row():
-                clear_btn = gr.Button("🗑️ Clear Session", variant="stop", size="sm")
-                refresh_btn = gr.Button("🔄 Refresh", variant="secondary", size="sm")
-            
-            # Supported formats in accordion
-            with gr.Accordion("📋 Supported Formats", open=False):
-                gr.Markdown(get_supported_formats())
+# Create Gradio interface with error handling
+try:
+    with gr.Blocks(
+        title="DocsRay - Universal Document Q&A",
+        theme=gr.themes.Soft(
+            primary_hue="indigo",
+            secondary_hue="purple",
+            neutral_hue="slate",
+            font=[gr.themes.GoogleFont("Noto Sans KR"), gr.themes.GoogleFont("Inter")]
+        ),
+        css=CUSTOM_CSS
+    ) as demo:
+        # Header with better styling
+        gr.Markdown(
+            """
+            <div style="text-align: center; padding: 20px 0;">
+                <h1 style="font-size: 32px; font-weight: 700; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 8px;">
+                    🚀 DocsRay
+                </h1>
+                <p style="font-size: 18px; color: #6b7280; font-weight: 500;">
+                    Universal Document Q&A System
+                </p>
+                <p style="font-size: 14px; color: #9ca3af; max-width: 600px; margin: 8px auto;">
+                    Upload any document (PDF, Word, Excel, PowerPoint, Images, etc.) and ask questions about it!
+                    All processing happens in your session - no login required.
+                </p>
+                <p style="font-size: 13px; color: #ef4444; font-weight: 600; margin-top: 8px;">
+                    ⚠️ Demo Mode: Only first 5 pages of each document will be processed
+                </p>
+                <p style="font-size: 13px; color: #f59e0b; font-weight: 600; margin-top: 4px;">
+                    ⏰ Processing Timeout: 5 minutes per document
+                </p>
+            </div>
+            """,
+            elem_classes=["header-section"]
+        )
         
-        # Right column - Q&A interface
-        with gr.Column(scale=2):
-            gr.Markdown("### 💬 Ask Questions")
-            
-            # Question input
-            question_input = gr.Textbox(
-                label="Your Question",
-                placeholder="What would you like to know about the document?",
-                lines=2,
-                autofocus=True
-            )
-            
-            # Search options in a row
-            with gr.Row():
-                use_coarse = gr.Checkbox(
-                    label="Use Coarse-to-Fine Search",
-                    value=True,
-                )
-                ask_btn = gr.Button("🔍 Ask Question", variant="primary", size="lg")
-            
-            # Results in tabs
-            with gr.Tabs():
-                with gr.TabItem("💡 Answer"):
-                    answer_output = gr.Textbox(
-                        label="",
-                        lines=12,
-                        interactive=False
+        # Session state
+        session_state = gr.State({})
+        
+        # Main layout
+        with gr.Row():
+            # Left column - Document management
+            with gr.Column(scale=1):
+                gr.Markdown("### 📁 Document Management")
+                
+                # File upload
+                file_input = gr.File(
+                        label="Upload Document",
+                        file_types=[
+                            ".pdf", 
+                            ".docx", ".doc", 
+                            ".xlsx", ".xls", 
+                            ".pptx", ".ppt",
+                            ".txt", ".md", ".rtf", ".rst",
+                            ".html", ".htm", ".xml",
+                            ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tiff", ".tif", ".webp",
+                            ".epub", ".mobi",
+                        ],
+                        type="filepath",
+                      )
+
+                # Visual analysis toggle
+                with gr.Row():
+                    analyze_visuals_checkbox = gr.Checkbox(
+                        label="👁️ Analyze Visual Content",
+                        value=True,
+                        info="Extract and analyze images, charts, and figures (slower processing)",
                     )
                 
-                with gr.TabItem("📚 References"):
-                    reference_output = gr.Textbox(
-                        label="",
-                        lines=10,
-                        interactive=False
-                    )
-            
-            # System prompt in accordion
-            with gr.Accordion("⚙️ Advanced Settings", open=False):
-                prompt_input = gr.Textbox(
-                    label="System Prompt",
-                    lines=5,
-                    value=DEFAULT_SYSTEM_PROMPT,
-                    info="Customize how the AI responds"
+                upload_btn = gr.Button("📤 Process Document", variant="primary", size="lg")
+                
+                # Document selector (hidden initially)
+                doc_dropdown = gr.Dropdown(
+                    label="Loaded Documents",
+                    choices=[],
+                    visible=False,
+                    interactive=True,
+                    elem_id="doc-dropdown"
                 )
-    
-    # Examples section
-    with gr.Row():
-        gr.Examples(
-            examples=[
-                ["What is the main topic of this document?"],
-                ["Summarize the key findings in bullet points"],
-                ["What data or statistics are mentioned?"],
-                ["What are the conclusions or recommendations?"],
-                ["Explain the methodology used"],
-                ["What charts or figures are in this document?"],
-                ["List all the important dates mentioned"],
-                ["What are the limitations discussed?"],
-            ],
-            inputs=question_input,
-            label="Example Questions"
+                
+                # Status with better styling
+                status = gr.Textbox(
+                    label="Status", 
+                    lines=5, 
+                    interactive=False,
+                    show_label=True
+                )
+                
+                # Action buttons in a row
+                with gr.Row():
+                    clear_btn = gr.Button("🗑️ Clear Session", variant="stop", size="sm")
+                    refresh_btn = gr.Button("🔄 Refresh", variant="secondary", size="sm")
+                
+                # Supported formats in accordion
+                with gr.Accordion("📋 Supported Formats", open=False):
+                    gr.Markdown(get_supported_formats())
+            
+            # Right column - Q&A interface
+            with gr.Column(scale=2):
+                gr.Markdown("### 💬 Ask Questions")
+                
+                # Question input
+                question_input = gr.Textbox(
+                    label="Your Question",
+                    placeholder="What would you like to know about the document?",
+                    lines=2,
+                    autofocus=True
+                )
+                
+                # Search options in a row
+                with gr.Row():
+                    use_coarse = gr.Checkbox(
+                        label="Use Coarse-to-Fine Search",
+                        value=True,
+                    )
+                    ask_btn = gr.Button("🔍 Ask Question", variant="primary", size="lg")
+                
+                # Results in tabs
+                with gr.Tabs():
+                    with gr.TabItem("💡 Answer"):
+                        answer_output = gr.Textbox(
+                            label="",
+                            lines=12,
+                            interactive=False
+                        )
+                    
+                    with gr.TabItem("📚 References"):
+                        reference_output = gr.Textbox(
+                            label="",
+                            lines=10,
+                            interactive=False
+                        )
+                
+                # System prompt in accordion
+                with gr.Accordion("⚙️ Advanced Settings", open=False):
+                    prompt_input = gr.Textbox(
+                        label="System Prompt",
+                        lines=5,
+                        value=DEFAULT_SYSTEM_PROMPT,
+                        info="Customize how the AI responds"
+                    )
+        
+        # Examples section
+        with gr.Row():
+            gr.Examples(
+                examples=[
+                    ["What is the main topic of this document?"],
+                    ["Summarize the key findings in bullet points"],
+                    ["What data or statistics are mentioned?"],
+                    ["What are the conclusions or recommendations?"],
+                    ["Explain the methodology used"],
+                    ["What charts or figures are in this document?"],
+                    ["List all the important dates mentioned"],
+                    ["What are the limitations discussed?"],
+                ],
+                inputs=question_input,
+                label="Example Questions"
+            )
+        
+        # Update event handlers
+        upload_btn.click(
+            load_document,
+            inputs=[file_input, analyze_visuals_checkbox, session_state],
+            outputs=[session_state, status, doc_dropdown],
+            show_progress=True
+        ).then(
+            lambda: gr.update(value=None),
+            outputs=[file_input]
         )
-    
-    # Update event handlers
-    upload_btn.click(
-        load_document,
-        inputs=[file_input, analyze_visuals_checkbox, session_state],
-        outputs=[session_state, status, doc_dropdown],
-        show_progress=True
-    ).then(
-        lambda: gr.update(value=None),
-        outputs=[file_input]
-    )
 
-    doc_dropdown.change(
-        switch_document,
-        inputs=[doc_dropdown, session_state],
-        outputs=[session_state, status]
-    )
-    
-    ask_btn.click(
-        ask_question,
-        inputs=[question_input, session_state, prompt_input, use_coarse],
-        outputs=[answer_output, reference_output],
-        show_progress=True
-    )
-    
-    question_input.submit(
-        ask_question,
-        inputs=[question_input, session_state, prompt_input, use_coarse],
-        outputs=[answer_output, reference_output],
-        show_progress=True
-    )
-    
-    clear_btn.click(
-        clear_session,
-        inputs=[session_state],
-        outputs=[session_state, status, doc_dropdown, answer_output, reference_output]
-    )
-    
-    refresh_btn.click(
-        lambda s: (s, "🔄 Refreshed", gr.update()),
-        inputs=[session_state],
-        outputs=[session_state, status, doc_dropdown]
-    )
+        doc_dropdown.change(
+            switch_document,
+            inputs=[doc_dropdown, session_state],
+            outputs=[session_state, status]
+        )
+        
+        ask_btn.click(
+            ask_question,
+            inputs=[question_input, session_state, prompt_input, use_coarse],
+            outputs=[answer_output, reference_output],
+            show_progress=True
+        )
+        
+        question_input.submit(
+            ask_question,
+            inputs=[question_input, session_state, prompt_input, use_coarse],
+            outputs=[answer_output, reference_output],
+            show_progress=True
+        )
+        
+        clear_btn.click(
+            clear_session,
+            inputs=[session_state],
+            outputs=[session_state, status, doc_dropdown, answer_output, reference_output]
+        )
+        
+        refresh_btn.click(
+            lambda s: (s, "🔄 Refreshed", gr.update()),
+            inputs=[session_state],
+            outputs=[session_state, status, doc_dropdown]
+        )
+
+except Exception as e:
+    logger.critical(f"Failed to create Gradio interface: {e}")
+    ErrorRecoveryMixin.trigger_recovery("interface_creation_failed")
 
 def cleanup_old_sessions():
     """Clean up old session directories (called periodically)"""
-    import time
-    current_time = time.time()
-    cleaned = 0
-    
-    for session_dir in TEMP_DIR.iterdir():
-        if session_dir.is_dir():
-            # Check if directory is older than SESSION_TIMEOUT
-            dir_age = current_time - session_dir.stat().st_mtime
-            if dir_age > SESSION_TIMEOUT:
-                shutil.rmtree(session_dir, ignore_errors=True)
-                cleaned += 1
-    
-    if cleaned > 0:
-        print(f"🧹 Cleaned up {cleaned} old sessions")
+    ErrorRecoveryMixin.cleanup_temp_files()
 
 def main():
-    """Entry point for docsray-web command"""
+    """Entry point for docsray-web command with error recovery"""
     import argparse
     
     parser = argparse.ArgumentParser(description="Launch DocsRay web interface")
     parser.add_argument("--share", action="store_true", help="Create public link")
     parser.add_argument("--port", type=int, default=44665, help="Port number")
     parser.add_argument("--host", type=str, default="0.0.0.0", help="Host address")
+    parser.add_argument("--timeout", type=int, default=300, help="PDF processing timeout in seconds")
     
     args = parser.parse_args()
+    
+    # Update global timeout if specified
+    global PDF_PROCESS_TIMEOUT
+    PDF_PROCESS_TIMEOUT = args.timeout
+    
+    # Set wrapper environment variable if running under wrapper
+    if '--wrapper' in sys.argv:
+        os.environ['DOCSRAY_WRAPPER'] = '1'
     
     # Clean up old sessions before starting
     cleanup_old_sessions()
     
-    print(f"🚀 Starting DocsRay Web Interface")
-    print(f"📍 Local URL: http://localhost:{args.port}")
-    print(f"🌐 Network URL: http://{args.host}:{args.port}")
+    logger.info(f"🚀 Starting DocsRay Web Interface")
+    logger.info(f"📍 Local URL: http://localhost:{args.port}")
+    logger.info(f"🌐 Network URL: http://{args.host}:{args.port}")
+    logger.info(f"⏰ PDF Processing Timeout: {PDF_PROCESS_TIMEOUT} seconds")
     
-    demo.queue(max_size=10).launch(
-        server_name=args.host,
-        server_port=args.port,
-        share=args.share,
-        favicon_path=None,
-        show_error=True
-    )
+    try:
+        demo.queue(max_size=10).launch(
+            server_name=args.host,
+            server_port=args.port,
+            share=args.share,
+            favicon_path=None,
+            show_error=True,
+            max_threads=40,  # Limit concurrent threads
+        )
+    except Exception as e:
+        logger.critical(f"Server crashed: {e}")
+        sys.exit(42)  # Special exit code for restart
 
 if __name__ == "__main__":
     main()
