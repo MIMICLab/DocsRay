@@ -517,26 +517,28 @@ def process_document(file_path: str, session_dir: Path, analyze_visuals: bool = 
     """Process a document file with error recovery and timeout"""
     return ErrorRecoveryMixin.safe_execute(process_document_with_timeout, file_path, session_dir, analyze_visuals, progress_callback)
 
+# Fixed load_document function - web_demo.py (partial)
+
 def load_document(file, analyze_visuals: bool, session_state: Dict, progress=gr.Progress()) -> Tuple[Dict, str, gr.update]:
     """Load and process uploaded document with error recovery"""
-    def _load():
-        if file is None:
-            return session_state, "Please upload a document", gr.update()
-        
-        # Initialize session if needed
-        if "session_dir" not in session_state:
-            session_state["session_dir"] = str(create_session_dir())
-            session_state["documents"] = {}
-        
-        session_dir = Path(session_state["session_dir"])
-        
-        # Copy file to session directory
-        file_name = Path(file.name).name
-        dest_path = session_dir / file_name
-        
-        progress(0.05, f"📁 Copying {file_name} to session...")
-        shutil.copy(file.name, dest_path)
-        
+    if file is None:
+        return session_state, "Please upload a document", gr.update()
+    
+    # Initialize session if needed
+    if "session_dir" not in session_state:
+        session_state["session_dir"] = str(create_session_dir())
+        session_state["documents"] = {}
+    
+    session_dir = Path(session_state["session_dir"])
+    
+    # Copy file to session directory
+    file_name = Path(file.name).name
+    dest_path = session_dir / file_name
+    
+    progress(0.05, f"📁 Copying {file_name} to session...")
+    shutil.copy(file.name, dest_path)
+    
+    try:
         # Process document with visual analysis option and timeout
         sections, chunk_index, msg = process_document(
             str(dest_path), 
@@ -568,18 +570,37 @@ def load_document(file, analyze_visuals: bool, session_state: Dict, progress=gr.
             dropdown_update = gr.update()
         
         return session_state, msg, dropdown_update
-    
-    return ErrorRecoveryMixin.safe_execute(_load, file, analyze_visuals, session_state, progress)
+        
+    except Exception as e:
+        # Log error
+        error_msg = f"Error in load_document: {str(e)}\n{traceback.format_exc()}"
+        logger.error(error_msg)
+        
+        # Track error
+        current_time = time.time()
+        error_times.append(current_time)
+        
+        # Clean old errors
+        error_times[:] = [t for t in error_times if current_time - t < ERROR_WINDOW]
+        
+        # Check if we need to trigger recovery
+        if len(error_times) >= ERROR_THRESHOLD:
+            logger.critical(f"Error threshold reached ({len(error_times)} errors in {ERROR_WINDOW}s)")
+            ErrorRecoveryMixin.trigger_recovery("error_threshold")
+        
+        # Return safe default
+        return session_state, f"❌ Error processing document: {str(e)}", gr.update()
+
 
 def ask_question(question: str, session_state: Dict, system_prompt: str, use_coarse: bool, progress=gr.Progress()) -> Tuple[str, str]:
     """Process a question with error recovery"""
-    def _ask():
-        if not question.strip():
-            return "Please enter a question", ""
-        
-        if "current_doc" not in session_state or not session_state.get("documents"):
-            return "Please upload a document first", ""
-        
+    if not question.strip():
+        return "Please enter a question", ""
+    
+    if "current_doc" not in session_state or not session_state.get("documents"):
+        return "Please upload a document first", ""
+    
+    try:
         # Get current document
         current_doc = session_state["documents"][session_state["current_doc"]]
         sections = current_doc["sections"]
@@ -605,9 +626,27 @@ def ask_question(question: str, session_state: Dict, system_prompt: str, use_coa
             progress(1.0, "✅ Answer ready!")
         
         return answer_output, reference_output
+        
+    except Exception as e:
+        # Log error
+        error_msg = f"Error in ask_question: {str(e)}\n{traceback.format_exc()}"
+        logger.error(error_msg)
+        
+        # Track error
+        current_time = time.time()
+        error_times.append(current_time)
+        
+        # Clean old errors
+        error_times[:] = [t for t in error_times if current_time - t < ERROR_WINDOW]
+        
+        # Check if we need to trigger recovery
+        if len(error_times) >= ERROR_THRESHOLD:
+            logger.critical(f"Error threshold reached ({len(error_times)} errors in {ERROR_WINDOW}s)")
+            ErrorRecoveryMixin.trigger_recovery("error_threshold")
+        
+        # Return safe default
+        return f"❌ Error: {str(e)}", ""
     
-    return ErrorRecoveryMixin.safe_execute(_ask, question, session_state, system_prompt, use_coarse, progress)
-
 def switch_document(selected_file: str, session_state: Dict) -> Tuple[Dict, str]:
     """Switch to a different loaded document"""
     if not selected_file or "documents" not in session_state:
