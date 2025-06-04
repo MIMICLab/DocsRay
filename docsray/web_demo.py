@@ -1046,7 +1046,6 @@ def main():
             share=args.share,
             favicon_path=None,
             show_error=True,
-            reuse_port=True,
             max_threads=40,  # Limit concurrent threads
         )
     except Exception as e:
