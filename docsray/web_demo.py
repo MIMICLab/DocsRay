@@ -72,7 +72,7 @@ SESSION_TIMEOUT = 86400
 PAGE_LIMIT = 5
 PDF_PROCESS_TIMEOUT = 120 
 # Error recovery settings
-MAX_MEMORY_PERCENT = 75  # Restart if memory usage exceeds this
+MAX_MEMORY_PERCENT = 90  # Restart if memory usage exceeds this
 ERROR_THRESHOLD = 1  # Number of errors before restart
 ERROR_WINDOW = 10 # Time window for error counting 
 
@@ -789,9 +789,8 @@ def get_supported_formats() -> str:
     
     # Group by category
     categories = {
-        "Office Documents": ['.docx', '.doc', '.xlsx', '.xls', '.pptx', '.ppt', '.odt', '.ods', '.odp', 'hwp', 'hwpx'],
-        "Text Files": ['.txt', '.md', '.rst', '.rtf'],
-        "Web Files": ['.html', '.htm', '.xml'],
+        "Office Documents": ['.docx', '.doc', '.xlsx', '.xls', '.pptx', '.ppt', 'hwp', 'hwpx'],
+        "Text Files": ['.txt'],
         "Images": ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.tif', '.webp'],
         "PDF": ['.pdf']
     }
@@ -853,8 +852,7 @@ try:
                             ".hwpx", ".hwp",
                             ".xlsx", ".xls", 
                             ".pptx", ".ppt",
-                            ".txt", ".md", ".rtf", ".rst",
-                            ".html", ".htm", ".xml",
+                            ".txt", 
                             ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tiff", ".tif", ".webp",
                         ],
                         type="filepath",

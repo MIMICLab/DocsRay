@@ -25,17 +25,10 @@ dependencies = [
     "llama-cpp-python",
     "gradio",
     "pypandoc>=1.11",
-    "python-docx>=0.8.11",
     "docx2pdf>=0.1.8",
-    "openpyxl>=3.0.10",
     "python-pptx>=0.6.21",
-    "pdfkit>=1.0.0",
-    "markdown>=3.4.1",
-    "pyhwp",
-    "olefile",
     "reportlab",
     "Pandoc",
-    "wkhtmltopdf",
     "llama_index"
 ]
 

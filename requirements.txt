@@ -36,20 +36,10 @@ psutil
 
 # Office document conversion
 pypandoc>=1.11  # General document conversion
-python-docx>=0.8.11  # For reading DOCX files
 openpyxl>=3.0.10  # For reading Excel files
 python-pptx>=0.6.21  # For reading PowerPoint files
 reportlab
 Pandoc
-wkhtmltopdf
 llama_index
 
-# HTML/Web to PDF
-pdfkit>=1.0.0  # HTML to PDF conversion (requires wkhtmltopdf)
 
-
-# Markdown support
-markdown>=3.4.1  # Markdown to HTML conversion
-
-# HWP support
-olefile # Required by pyhwp

@@ -9,7 +9,6 @@ import os
 import sys
 from pathlib import Path
 from typing import Optional, Tuple
-import subprocess
 
 import pypandoc
 from PIL import Image
@@ -35,17 +34,17 @@ from typing import List, Tuple
 from pathlib import Path
 from docsray.config import CACHE_DIR
 import pandas as pd
-                
+
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.lib.utils import ImageReader
+import os
+
 def _save_text_images_to_pdf_korean(text: str, image_paths: List[str], output_file: Path) -> bool:
     """Save text and images to PDF with Korean font support"""
-    try:
-        from reportlab.pdfgen import canvas
-        from reportlab.lib.pagesizes import A4
-        from reportlab.pdfbase import pdfmetrics
-        from reportlab.pdfbase.ttfonts import TTFont
-        from reportlab.lib.utils import ImageReader
-        import os
-        
+    try:          
         # Register Korean fonts
         # Try to find Korean fonts on the system
         korean_fonts = [
@@ -130,7 +129,7 @@ def _save_text_images_to_pdf_korean(text: str, image_paths: List[str], output_fi
     except Exception as e:
         print(f"PDF creation error: {e}")
         return False
-
+            
 class FileConverter:
     """Convert various file formats to PDF"""
     
@@ -149,17 +148,8 @@ class FileConverter:
         '.hwp': 'Hancom Word Processor',
         '.hwpx': 'Hancom Word Processor (OOXML)',
 
-
         # Text formats
         '.txt': 'Plain Text',
-        '.md': 'Markdown',
-        '.rst': 'reStructuredText',
-        '.rtf': 'Rich Text Format',
-        
-        # Web formats
-        '.html': 'HTML',
-        '.htm': 'HTML',
-        '.xml': 'XML',
         
         # Image formats
         '.jpg': 'JPEG Image',
@@ -228,8 +218,6 @@ class FileConverter:
             return self._convert_hwp_to_pdf(input_file, output_path)
         elif file_ext == '.hwpx':
             return self._convert_hwpx_to_pdf(input_file, output_path)
-        elif file_ext in ['.odt', '.ods', '.odp']:
-            return self._convert_with_pandoc(input_file, output_path)
         
         elif file_ext in ['.pdf']:
             # If already PDF, just return the path
@@ -238,10 +226,6 @@ class FileConverter:
         # Text formats
         elif file_ext == '.txt':
             return self._convert_text_to_pdf(input_file, output_path)
-        elif file_ext == '.md':
-            return self._convert_markdown_to_pdf(input_file, output_path)
-        elif file_ext in ['.html', '.htm']:
-            return self._convert_html_to_pdf(input_file, output_path)
         
         # Image formats
         elif file_ext in ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.tif', '.webp']:
@@ -391,101 +375,6 @@ class FileConverter:
             print(f"[Error] {error_msg}", file=sys.stderr)
             return False, error_msg
 
-    def _save_text_images_to_pdf_korean(text: str, image_paths: List[str], output_file: Path) -> bool:
-        """Save text and images to PDF with Korean font support"""
-        try:
-            from reportlab.pdfgen import canvas
-            from reportlab.lib.pagesizes import A4
-            from reportlab.pdfbase import pdfmetrics
-            from reportlab.pdfbase.ttfonts import TTFont
-            from reportlab.lib.utils import ImageReader
-            import os
-            
-            # Register Korean fonts
-            # Try to find Korean fonts on the system
-            korean_fonts = [
-                # Windows
-                "C:/Windows/Fonts/malgun.ttf",  # Malgun Gothic
-                "C:/Windows/Fonts/gulim.ttc",   # Gulim
-                "C:/Windows/Fonts/batang.ttc",  # Batang
-                # macOS
-                "/System/Library/Fonts/AppleSDGothicNeo.ttc",
-                "/Library/Fonts/NanumGothic.ttf",
-                # Linux
-                "/usr/share/fonts/truetype/nanum/NanumGothic.ttf",
-                "/usr/share/fonts/truetype/fonts-nanum/NanumGothic.ttf",
-            ]
-            
-            font_registered = False
-            font_name = "NanumGothic"
-            
-            for font_path in korean_fonts:
-                if os.path.exists(font_path):
-                    try:
-                        pdfmetrics.registerFont(TTFont(font_name, font_path))
-                        font_registered = True
-                        break
-                    except:
-                        continue
-            
-            if not font_registered:
-                # Fallback: download and use a free Korean font
-                import urllib.request
-                font_url = "https://github.com/google/fonts/raw/main/ofl/nanumgothic/NanumGothic-Regular.ttf"
-                font_path = output_file.parent / "NanumGothic.ttf"
-                urllib.request.urlretrieve(font_url, font_path)
-                pdfmetrics.registerFont(TTFont(font_name, str(font_path)))
-            
-            # Create PDF
-            c = canvas.Canvas(str(output_file), pagesize=A4)
-            width, height = A4
-            
-            # Set font with Korean support
-            c.setFont(font_name, 12)
-            
-            # Add text
-            y = height - 50
-            for line in text.split('\n'):
-                if y < 50:  # New page if needed
-                    c.showPage()
-                    c.setFont(font_name, 12)
-                    y = height - 50
-                
-                # Handle long lines
-                if len(line) > 80:
-                    words = line.split()
-                    current_line = ""
-                    for word in words:
-                        if len(current_line + word) < 80:
-                            current_line += word + " "
-                        else:
-                            c.drawString(50, y, current_line.strip())
-                            y -= 20
-                            current_line = word + " "
-                    if current_line:
-                        c.drawString(50, y, current_line.strip())
-                        y -= 20
-                else:
-                    c.drawString(50, y, line)
-                    y -= 20
-            
-            # Add images
-            for img_path in image_paths:
-                if os.path.exists(img_path):
-                    try:
-                        c.showPage()
-                        img = ImageReader(img_path)
-                        c.drawImage(img, 50, 50, width=width-100, height=height-100, preserveAspectRatio=True)
-                    except:
-                        pass
-            
-            c.save()
-            return True
-            
-        except Exception as e:
-            print(f"PDF creation error: {e}")
-            return False
-
        
     def _convert_docx_to_pdf(self, input_file: Path, output_file: Path) -> Tuple[bool, str]:
         """Convert DOCX to PDF"""
@@ -540,64 +429,188 @@ class FileConverter:
             except Exception as e2:
                 return False, f"Excel conversion error: {str(e)} / {str(e2)}"
 
-    def _convert_ppt_to_pdf(self, input_file: Path, output_file: Path) -> Tuple[bool, str]:
-        """Convert PowerPoint to PDF using pypandoc"""
+    def _convert_excel_to_pdf(self, input_file: Path, output_file: Path) -> Tuple[bool, str]:
+        """Convert Excel to PDF using openpyxl and reportlab"""
         try:
-            import pypandoc
+            import openpyxl
+            from reportlab.lib import colors
+            from reportlab.lib.pagesizes import A4, landscape
+            from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+            from reportlab.lib.styles import getSampleStyleSheet
+            from reportlab.lib.units import inch
             
-            # Direct conversion from PPTX to PDF
-            pypandoc.convert_file(
-                str(input_file),
-                'pdf',
-                outputfile=str(output_file),
-                extra_args=['--pdf-engine=xelatex']
-            )
+            # Load Excel file
+            wb = openpyxl.load_workbook(input_file, data_only=True)
+            
+            # Create PDF
+            doc = SimpleDocTemplate(str(output_file), pagesize=landscape(A4))
+            story = []
+            styles = getSampleStyleSheet()
+            
+            # Process each sheet
+            for sheet_name in wb.sheetnames:
+                sheet = wb[sheet_name]
+                
+                # Add sheet title
+                story.append(Paragraph(f"Sheet: {sheet_name}", styles['Heading1']))
+                story.append(Spacer(1, 0.2*inch))
+                
+                # Extract data from sheet
+                data = []
+                max_row = min(sheet.max_row, 1000)  # Limit rows to prevent memory issues
+                max_col = min(sheet.max_column, 20)  # Limit columns
+                
+                for row in sheet.iter_rows(min_row=1, max_row=max_row, max_col=max_col, values_only=True):
+                    # Convert None to empty string and everything to string
+                    row_data = [str(cell) if cell is not None else '' for cell in row]
+                    if any(row_data):  # Skip completely empty rows
+                        data.append(row_data)
+                
+                if data:
+                    # Create table
+                    try:
+                        # Calculate column widths dynamically
+                        col_widths = [1.5*inch] * len(data[0]) if data else []
+                        
+                        table = Table(data, colWidths=col_widths)
+                        
+                        # Add style to table
+                        table_style = TableStyle([
+                            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                            ('FONTSIZE', (0, 0), (-1, 0), 10),
+                            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+                            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+                        ])
+                        
+                        table.setStyle(table_style)
+                        story.append(table)
+                        story.append(Spacer(1, 0.5*inch))
+                    except Exception as e:
+                        # If table creation fails, add data as text
+                        for row in data[:100]:  # Limit to first 100 rows
+                            text = ' | '.join(row)
+                            story.append(Paragraph(text, styles['Normal']))
+                        story.append(Spacer(1, 0.2*inch))
+            
+            # Build PDF
+            doc.build(story)
             return True, str(output_file)
             
         except ImportError:
-            return False, "Please install pypandoc: pip install pypandoc"
+            return False, "Please install openpyxl and reportlab: pip install openpyxl reportlab"
         except Exception as e:
-            # Pypandoc might not support PPTX directly, try alternative approach
-            try:
-                from pptx import Presentation
-                import pypandoc
+            return False, f"Excel conversion error: {str(e)}"
+    
+    def _convert_ppt_to_pdf(self, input_file: Path, output_file: Path) -> Tuple[bool, str]:
+        """Convert PowerPoint to PDF using python-pptx and reportlab"""
+        try:
+            from pptx import Presentation
+            from reportlab.pdfgen import canvas
+            from reportlab.lib.pagesizes import A4, landscape
+            from PIL import Image
+            import io
+            
+            # Load PowerPoint file
+            prs = Presentation(str(input_file))
+            
+            # Create PDF
+            c = canvas.Canvas(str(output_file), pagesize=landscape(A4))
+            width, height = landscape(A4)
+            
+            for slide_num, slide in enumerate(prs.slides):
+                if slide_num > 0:
+                    c.showPage()
                 
-                # Extract text from PowerPoint
-                prs = Presentation(str(input_file))
-                markdown_content = ""
+                # Add slide number
+                c.setFont("Helvetica-Bold", 16)
+                c.drawString(50, height - 50, f"Slide {slide_num + 1}")
                 
-                for slide_num, slide in enumerate(prs.slides):
-                    markdown_content += f"# Slide {slide_num + 1}\n\n"
-                    
-                    # Extract all text from slide
-                    for shape in slide.shapes:
-                        if hasattr(shape, "text") and shape.text:
-                            text = shape.text.strip()
-                            if text:
-                                markdown_content += f"{text}\n\n"
+                y_position = height - 100
+                
+                # Extract text from slide
+                for shape in slide.shapes:
+                    if hasattr(shape, "text") and shape.text:
+                        c.setFont("Helvetica", 12)
                         
-                        # Note tables
-                        if shape.has_table:
-                            markdown_content += "[Table content]\n\n"
+                        # Handle text that might be too long
+                        text = shape.text.strip()
+                        lines = text.split('\n')
+                        
+                        for line in lines:
+                            if y_position < 50:
+                                break
+                                
+                            # Wrap long lines
+                            if len(line) > 80:
+                                words = line.split()
+                                current_line = ""
+                                for word in words:
+                                    if len(current_line + word) < 80:
+                                        current_line += word + " "
+                                    else:
+                                        c.drawString(50, y_position, current_line.strip())
+                                        y_position -= 20
+                                        current_line = word + " "
+                                if current_line:
+                                    c.drawString(50, y_position, current_line.strip())
+                                    y_position -= 20
+                            else:
+                                c.drawString(50, y_position, line)
+                                y_position -= 20
+                        
+                        y_position -= 10  # Extra space between shapes
                     
-                    markdown_content += "---\n\n"  # Slide separator
+                    # Handle images (basic support)
+                    if shape.shape_type == 13:  # Picture
+                        try:
+                            image = shape.image
+                            image_bytes = image.blob
+                            img = Image.open(io.BytesIO(image_bytes))
+                            
+                            # Save temporary image
+                            temp_img = output_file.parent / f"temp_img_{slide_num}_{shape.shape_id}.png"
+                            img.save(temp_img)
+                            
+                            # Add to PDF (simplified positioning)
+                            if y_position > 200:
+                                c.drawImage(str(temp_img), 50, y_position - 150, width=200, height=150)
+                                y_position -= 160
+                            
+                            # Clean up
+                            temp_img.unlink()
+                        except:
+                            pass
                 
-                # Convert markdown to PDF
-                pypandoc.convert_text(
-                    markdown_content,
-                    'pdf',
-                    format='markdown',
-                    outputfile=str(output_file),
-                    extra_args=[
-                        '--pdf-engine=xelatex',
-                        '--variable=mainfont:NanumGothic',  # Korean font
-                        '--variable=geometry:margin=1in'
-                    ]
-                )
-                return True, str(output_file)
-                
-            except Exception as e2:
-                return False, f"PowerPoint conversion error: {str(e)} / {str(e2)}"
+                # Handle tables
+                for shape in slide.shapes:
+                    if shape.has_table:
+                        y_position -= 20
+                        c.setFont("Helvetica", 10)
+                        c.drawString(50, y_position, "[Table]")
+                        y_position -= 15
+                        
+                        table = shape.table
+                        for row in table.rows:
+                            row_text = " | ".join([cell.text for cell in row.cells])
+                            if len(row_text) > 80:
+                                row_text = row_text[:77] + "..."
+                            c.drawString(50, y_position, row_text)
+                            y_position -= 15
+                            if y_position < 50:
+                                break
+            
+            c.save()
+            return True, str(output_file)
+            
+        except ImportError:
+            return False, "Please install python-pptx and pillow: pip install python-pptx pillow"
+        except Exception as e:
+            return False, f"PowerPoint conversion error: {str(e)}"
+
             
     def _convert_text_to_pdf(self, input_file: Path, output_file: Path) -> Tuple[bool, str]:
         """Convert plain text to PDF"""
@@ -712,7 +725,6 @@ class FileConverter:
         error_msg = "Text conversion failed. "
         if converters_tried:
             error_msg += f"Tried: {', '.join(converters_tried)}. "
-            error_msg += "Install one of: reportlab, pdfkit+wkhtmltopdf, or pandoc"
         else:
             error_msg += "No PDF converters available. Install: pip install reportlab"
         
@@ -769,59 +781,6 @@ class FileConverter:
         pdf += b"%%EOF"
         
         return pdf
-
-    def _convert_markdown_to_pdf(self, input_file: Path, output_file: Path) -> Tuple[bool, str]:
-        """Convert Markdown to PDF"""
-        try:
-            pypandoc.convert_file(str(input_file), 'pdf', outputfile=str(output_file))
-            return True, str(output_file)
-        except Exception as e:
-            print(f"Pandoc conversion failed: {e}", file=sys.stderr)
-
-        try:
-            # Read markdown
-            with open(input_file, 'r', encoding='utf-8') as f:
-                md_text = f.read()
-
-            # Convert to HTML
-            html_content = markdown.markdown(md_text, extensions=['extra', 'codehilite'])
-
-            # Wrap in HTML document
-            full_html = f"""
-            <html>
-            <head>
-                <meta charset="utf-8">
-                <style>
-                    body {{ font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; }}
-                    code {{ background: #f4f4f4; padding: 2px 4px; }}
-                    pre {{ background: #f4f4f4; padding: 10px; overflow-x: auto; }}
-                    h1, h2, h3 {{ color: #333; }}
-                </style>
-            </head>
-            <body>
-                {html_content}
-            </body>
-            </html>
-            """
-
-            # (Removed weasyprint usage)
-            pass
-        except Exception as e:
-                print(f"Markdown conversion failed: {e}", file=sys.stderr)
-
-        return False, "Markdown conversion requires pandoc or markdown+weasyprint."
-    
-    def _convert_html_to_pdf(self, input_file: Path, output_file: Path) -> Tuple[bool, str]:
-        """Convert HTML to PDF"""
-        try:
-            pdfkit.from_file(str(input_file), str(output_file))
-            return True, str(output_file)
-        except Exception as e:
-            print(f"pdfkit conversion failed: {e}", file=sys.stderr)
-
-        # (Removed weasyprint usage)
-
-        return False, "HTML conversion requires pdfkit."
     
     def _convert_image_to_pdf(self, input_file: Path, output_file: Path) -> Tuple[bool, str]:
         """Convert image to PDF"""       
