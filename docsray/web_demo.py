@@ -136,7 +136,7 @@ class ErrorRecoveryMixin:
             if os.environ.get('DOCSRAY_AUTO_RESTART') == '1':
                 logger.info("Running under auto-restart wrapper, requesting restart...")
                 # Exit with code 42 to signal restart request
-                sys.exit(42)
+                os._exit(42)
             else:
                 logger.warning("Not running under auto-restart wrapper")
                 logger.info("Attempting to restart Gradio interface...")
