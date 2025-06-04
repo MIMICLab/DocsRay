@@ -152,6 +152,9 @@ for model in ALL_MODELS:
 
 DISABLE_VISUAL_ANALYSIS = os.environ.get("DOCSRAY_DISABLE_VISUALS", "0") == "1"
 
+if FAST_MODE:
+    DISABLE_VISUAL_ANALYSIS = True
+
 if os.environ.get("DOCSRAY_DEBUG", "0") == "1":
     print(f"Current Device: {device_type}")
     print(f"Available Memory: {available_gb:.2f} GB")

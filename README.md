@@ -115,7 +115,7 @@ Automatically detects system resources and optimizes performance:
 | System Memory |    Mode   | OCR | Visual Analysis | Max Tokens |
 |--------------|------------|--------------|--------------|------------|
 |  CPU  | FAST (Q4) | ❌ | ❌ | 8K | 
-| < 16GB | FAST (Q4) | ✅ | ✅ | 16K |
+| < 16GB | FAST (Q4) | ✅ | ❌ | 16K |
 | 16-24GB | STANDARD (Q8) | ✅ | ✅ | 32K |
 | > 24GB | FULL_FEATURE (F16) | ✅ | ✅  | 32K |
 
