@@ -51,7 +51,7 @@ PAGE_LIMIT = 5
 PDF_PROCESS_TIMEOUT = 300  
 # Error recovery settings
 MAX_MEMORY_PERCENT = 85  # Restart if memory usage exceeds this
-ERROR_THRESHOLD = 5  # Number of errors before restart
+ERROR_THRESHOLD = 1  # Number of errors before restart
 ERROR_WINDOW = 300  # Time window for error counting (5 minutes)
 
 # Global error tracking
@@ -717,8 +717,16 @@ def get_supported_formats() -> str:
         if supported_exts:
             info += f"**{category}:** {', '.join(supported_exts)}\n"
 
-    info += f"\n⏰ **Processing Timeout:** {PDF_PROCESS_TIMEOUT//60} minutes per document\n"
-    info += "💡 **Tip:** Disable visual analysis for faster processing of large documents"
+    # Add page limit info if applicable
+    if PAGE_LIMIT > 0:
+        info += f"\n📄 **Page Limit:** First {PAGE_LIMIT} pages per document\n"
+    
+    # Add timeout info if applicable
+    if PDF_PROCESS_TIMEOUT > 0:
+        info += f"\n⏰ **Processing Timeout:** {PDF_PROCESS_TIMEOUT//60} minutes per document\n"
+        info += "💡 **Tip:** Disable visual analysis for faster processing of large documents"
+    else:
+        info += "\n⏰ **Processing Timeout:** Disabled (no time limit)\n"
     
     return info
 
@@ -745,24 +753,7 @@ try:
             <p style="font-size: 14px; color: #9ca3af; max-width: 600px; margin: 8px auto;">
                 Upload any document (PDF, Word, Excel, PowerPoint, Images, etc.) and ask questions about it!
                 All processing happens in your session - no login required.
-            </p>"""
-
-        # Add page limit warning if applicable
-        if PAGE_LIMIT > 0:
-            header_html += f"""
-            <p style="font-size: 13px; color: #ef4444; font-weight: 600; margin-top: 8px;">
-                ⚠️ Demo Mode: Only first {PAGE_LIMIT} pages of each document will be processed
-            </p>"""
-
-        # Add timeout warning if applicable
-        if PDF_PROCESS_TIMEOUT > 0:
-            header_html += f"""
-            <p style="font-size: 13px; color: #f59e0b; font-weight: 600; margin-top: 4px;">
-                ⏰ Processing Timeout: {PDF_PROCESS_TIMEOUT//60} minutes per document
-            </p>"""
-
-        # Close the div
-        header_html += "</div>"
+            </p></div>"""
 
         # Create the Markdown component
         gr.Markdown(

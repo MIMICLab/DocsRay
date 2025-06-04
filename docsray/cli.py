@@ -157,7 +157,7 @@ Examples:
                 service_args.extend(["--host", args.host])
             if args.timeout != 300:
                 service_args.extend(["--timeout", str(args.timeout)])
-            if args.pages != 0:
+            if args.pages != 5:
                 service_args.extend(["--pages", str(args.pages)])                
             if args.share:
                 service_args.append("--share")
