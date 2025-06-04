@@ -126,16 +126,19 @@ Examples:
     elif args.command == "mcp":
         if args.auto_restart:
             # Use auto-restart wrapper
-            from docsray.auto_restart import ServiceMonitor
-            monitor = ServiceMonitor(
-                service_name="mcp_server",
-                command="docsray.mcp_server",
-                args=[],
+            from docsray.auto_restart import SimpleServiceMonitor  # 클래스 이름 수정!
+            
+            cmd = [sys.executable, "-m", "docsray.mcp_server"]
+            
+            monitor = SimpleServiceMonitor(  # 클래스 이름 수정!
+                service_name="DocsRay MCP",
+                command_args=cmd,
                 max_retries=args.max_retries,
                 retry_delay=args.retry_delay
             )
+            
             try:
-                monitor.monitor_loop()
+                monitor.run()  # monitor_loop() 대신 run() 사용!
             except KeyboardInterrupt:
                 print("\n🛑 MCP Server stopped by user")
         else:
@@ -147,28 +150,27 @@ Examples:
     elif args.command == "web":
         if args.auto_restart:
             # Use auto-restart wrapper
-            from docsray.auto_restart import ServiceMonitor
+            from docsray.auto_restart import SimpleServiceMonitor  # 클래스 이름 수정!
             
-            # Prepare arguments
-            service_args = []
+            # Build command for web service
+            cmd = [sys.executable, "-m", "docsray.web_demo"]
+            
             if args.port != 44665:
-                service_args.extend(["--port", str(args.port)])
+                cmd.extend(["--port", str(args.port)])
             if args.host != "0.0.0.0":
-                service_args.extend(["--host", args.host])
-            if args.timeout != 300:
-                service_args.extend(["--timeout", str(args.timeout)])
-            if args.pages != 5:
-                service_args.extend(["--pages", str(args.pages)])                
+                cmd.extend(["--host", args.host])
             if args.share:
-                service_args.append("--share")
+                cmd.append("--share")
+            if args.timeout != 300:
+                cmd.extend(["--timeout", str(args.timeout)])
+            if args.pages != 5:
+                cmd.extend(["--pages", str(args.pages)])
                 
-            monitor = ServiceMonitor(
-                service_name="web_demo",
-                command="docsray.web_demo",
-                args=service_args,
+            monitor = SimpleServiceMonitor(  # 클래스 이름 수정!
+                service_name="DocsRay Web",
+                command_args=cmd,
                 max_retries=args.max_retries,
-                retry_delay=args.retry_delay,
-                health_check_interval=30  # Check every 30 seconds
+                retry_delay=args.retry_delay
             )
             
             print("🚀 Starting DocsRay Web Interface with auto-restart enabled")
@@ -176,7 +178,7 @@ Examples:
             print(f"⏱️  Retry delay: {args.retry_delay} seconds")
             
             try:
-                monitor.monitor_loop()
+                monitor.run()  # monitor_loop() 대신 run() 사용!
             except KeyboardInterrupt:
                 print("\n🛑 Web Interface stopped by user")
         else:
@@ -191,7 +193,10 @@ Examples:
                 sys.argv.extend(["--host", args.host])
             if args.timeout:
                 sys.argv.extend(["--timeout", str(args.timeout)])
+            if args.pages:
+                sys.argv.extend(["--pages", str(args.pages)])
             web_main()
+
     
     elif args.command == "api":
         from docsray.app import main as api_main
