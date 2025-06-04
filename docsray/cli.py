@@ -167,14 +167,20 @@ Examples:
                 command="docsray.web_demo",
                 args=service_args,
                 max_retries=args.max_retries,
-                retry_delay=args.retry_delay
+                retry_delay=args.retry_delay,
+                health_check_interval=30  # Check every 30 seconds
             )
+            
+            print("🚀 Starting DocsRay Web Interface with auto-restart enabled")
+            print(f"♻️  Max retries: {args.max_retries}")
+            print(f"⏱️  Retry delay: {args.retry_delay} seconds")
+            
             try:
                 monitor.monitor_loop()
             except KeyboardInterrupt:
                 print("\n🛑 Web Interface stopped by user")
         else:
-            # Direct start
+            # Direct start without auto-restart
             from docsray.web_demo import main as web_main
             sys.argv = ["docsray-web"]
             if args.share:

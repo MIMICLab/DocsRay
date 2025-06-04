@@ -118,7 +118,7 @@ class ErrorRecoveryMixin:
     
     @staticmethod
     def trigger_recovery(reason):
-        """Trigger recovery action"""
+        """Trigger recovery action - FIXED VERSION"""
         logger.critical(f"Triggering recovery due to: {reason}")
         
         try:
@@ -132,16 +132,30 @@ class ErrorRecoveryMixin:
             with open(log_dir / "recovery_log.txt", "a") as f:
                 f.write(f"{datetime.now()}: Recovery triggered - {reason}\n")
             
-            # For Gradio app, we'll reload the interface
-            if hasattr(gr, 'close_all'):
-                gr.close_all()
-            
-            # Request restart from wrapper if available
-            if os.environ.get('DOCSRAY_WRAPPER'):
-                sys.exit(42)  # Special exit code for restart
+            # Check if running under auto-restart wrapper
+            if os.environ.get('DOCSRAY_AUTO_RESTART') == '1':
+                logger.info("Running under auto-restart wrapper, requesting restart...")
+                # Exit with code 42 to signal restart request
+                sys.exit(42)
+            else:
+                logger.warning("Not running under auto-restart wrapper")
+                logger.info("Attempting to restart Gradio interface...")
+                
+                # Try to restart just the Gradio interface
+                try:
+                    if 'demo' in globals() and hasattr(demo, 'close'):
+                        demo.close()
+                    # The main() function should handle restarting
+                except:
+                    pass
+                
+                # If all else fails, exit and let systemd or user restart
+                logger.error("Please restart manually or use: docsray web --auto-restart")
+                sys.exit(1)
                 
         except Exception as e:
             logger.error(f"Error during recovery: {e}")
+            sys.exit(1)
     
     @staticmethod
     def cleanup_temp_files():
