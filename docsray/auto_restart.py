@@ -11,6 +11,9 @@ import os
 from pathlib import Path
 import logging
 from datetime import datetime
+import signal
+import socket
+import errno
 # --- Watchdog settings ---
 PROCESS_WATCHDOG_TIMEOUT = 600  # Seconds with no child activity → force kill
 
@@ -31,6 +34,38 @@ def setup_logging(service_name):
         ]
     )
     return logging.getLogger(__name__)
+
+# -----------------------------------------------------------
+# Helper utilities to free ports held by zombie processes
+# -----------------------------------------------------------
+def get_port_from_args(cmd: list, default: int = 44665) -> int:
+    """Return port number parsed from '--port N' in command list."""
+    if "--port" in cmd:
+        try:
+            idx = cmd.index("--port")
+            return int(cmd[idx + 1])
+        except (ValueError, IndexError):
+            pass
+    return default
+
+
+def kill_port_holders(port: int):
+    """SIGKILL any process that still holds <port>."""
+    try:
+        # 'lsof -t -i:<port>' returns list of PIDs
+        out = subprocess.check_output(
+            ["lsof", "-t", f"-i:{port}"], text=True
+        ).strip()
+        if not out:
+            return
+        for pid in out.splitlines():
+            try:
+                os.kill(int(pid), signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+    except subprocess.CalledProcessError:
+        # lsof returns non‑zero if no process is found
+        pass
 
 class SimpleServiceMonitor:
     """Simple but working service monitor"""
@@ -54,6 +89,10 @@ class SimpleServiceMonitor:
                 # Set environment variable to indicate auto-restart mode
                 env = os.environ.copy()
                 env['DOCSRAY_AUTO_RESTART'] = '1'
+                
+                # Ensure port is free before starting new process
+                port_to_free = get_port_from_args(self.command_args)
+                kill_port_holders(port_to_free)
                 
                 self.logger.info(f"Starting {self.service_name} (attempt {self.retry_count + 1}/{self.max_retries})")
                 
