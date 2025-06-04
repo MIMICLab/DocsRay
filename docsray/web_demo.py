@@ -151,11 +151,11 @@ class ErrorRecoveryMixin:
                 
                 # If all else fails, exit and let systemd or user restart
                 logger.error("Please restart manually or use: docsray web --auto-restart")
-                sys.exit(1)
+                os._exit(1)
                 
         except Exception as e:
             logger.error(f"Error during recovery: {e}")
-            sys.exit(1)
+            os._exit(1)
     
     @staticmethod
     def cleanup_temp_files():
