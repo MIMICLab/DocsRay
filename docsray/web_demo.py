@@ -793,7 +793,6 @@ def get_supported_formats() -> str:
         "Text Files": ['.txt', '.md', '.rst', '.rtf'],
         "Web Files": ['.html', '.htm', '.xml'],
         "Images": ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.tif', '.webp'],
-        "E-books": ['.epub', '.mobi'],
         "PDF": ['.pdf']
     }
     
@@ -857,7 +856,6 @@ try:
                             ".txt", ".md", ".rtf", ".rst",
                             ".html", ".htm", ".xml",
                             ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tiff", ".tif", ".webp",
-                            ".epub", ".mobi",
                         ],
                         type="filepath",
                       )

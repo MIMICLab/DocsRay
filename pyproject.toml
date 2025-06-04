@@ -35,7 +35,8 @@ dependencies = [
     "olefile",
     "reportlab",
     "Pandoc",
-    "wkhtmltopdf"
+    "wkhtmltopdf",
+    "llama_index"
 ]
 
 [project.scripts]
