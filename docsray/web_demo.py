@@ -1012,7 +1012,7 @@ def main():
     logger.info(f"⏰ PDF Processing Timeout: {PDF_PROCESS_TIMEOUT} seconds")
     
     try:
-        demo.queue(max_size=10).launch(
+        demo.launch(
             server_name=args.host,
             server_port=args.port,
             share=args.share,
