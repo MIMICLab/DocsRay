@@ -47,8 +47,8 @@ TEMP_DIR.mkdir(exist_ok=True)
 
 # Session timeout (24 hours)
 SESSION_TIMEOUT = 86400
-PAGE_LIMIT = 0
-PDF_PROCESS_TIMEOUT = 300  
+PAGE_LIMIT = 5
+PDF_PROCESS_TIMEOUT = 120 
 # Error recovery settings
 MAX_MEMORY_PERCENT = 85  # Restart if memory usage exceeds this
 ERROR_THRESHOLD = 1  # Number of errors before restart
@@ -441,17 +441,20 @@ def process_document_with_timeout(file_path: str, session_dir: Path, analyze_vis
             future.cancel()
             
             elapsed_time = time.time() - start_time
-            error_msg = f"⏰ Processing timeout: {file_name}\n"
-            error_msg += f"⚠️ Document processing exceeded {PDF_PROCESS_TIMEOUT//60} minutes limit\n"
-            error_msg += f"📊 Elapsed time: {elapsed_time:.1f} seconds\n"
-            error_msg += f"💡 Try with a smaller document or disable visual analysis"
-            
+            error_msg = (
+                f"⏰ Processing timeout: {file_name}\n"
+                f"⚠️ Document processing exceeded {PDF_PROCESS_TIMEOUT//60} minutes limit\n"
+                f"📊 Elapsed time: {elapsed_time:.1f} seconds\n"
+                f"💡 Try with a smaller document or disable visual analysis"
+            )
+
+            if progress_callback is not None:
+                progress_callback(1.0, error_msg)
+
             logger.error(f"PDF processing timeout for {file_name} after {elapsed_time:.1f}s")
-            
-            # Force cleanup
             gc.collect()
-            
             raise ProcessingTimeoutError(error_msg)
+        
 
 
 def _do_process_document(file_path: str, session_dir: Path, analyze_visuals: bool = True, progress_callback=None) -> Tuple[list, list, str]:
@@ -468,19 +471,21 @@ def _do_process_document(file_path: str, session_dir: Path, analyze_visuals: boo
             
             # Add limits info
             if PAGE_LIMIT > 0:
-                status_msg += f"\n📄 Processing first {PAGE_LIMIT} pages"
-            else:
-                status_msg += "\n📄 Processing all pages"
+
                 
-            progress_callback(0.2, status_msg)
+
         
         # Only apply page_limit if it's greater than 0
         extract_kwargs = {
             "analyze_visuals": analyze_visuals
         }
-        if PAGE_LIMIT > 0:
+        # Only apply page_limit if it's greater than 0
+        if PAGE_LIMIT > 0 and analyze_visuals:
             extract_kwargs["page_limit"] = PAGE_LIMIT
-            
+                status_msg += f"\n📄 Processing first {PAGE_LIMIT} pages"
+        else:
+            status_msg += "\n📄 Processing all pages"     
+        progress_callback(0.2, status_msg)                   
         extracted = pdf_extractor.extract_content(file_path, **extract_kwargs)
         
         # Create chunks
@@ -650,9 +655,13 @@ def load_document(file, analyze_visuals: bool, session_state: Dict, progress=gr.
         if len(error_times) >= ERROR_THRESHOLD:
             logger.critical(f"Error threshold reached ({len(error_times)} errors in {ERROR_WINDOW}s)")
             ErrorRecoveryMixin.trigger_recovery("error_threshold")
-        
-        # Return safe default
-        return session_state, f"❌ Error processing document: {str(e)}", gr.update()
+
+        if isinstance(e, ProcessingTimeoutError):
+            display_msg = str(e)
+        else:
+            display_msg = f"❌ Error processing document: {str(e)}"    
+                
+        return session_state, display_msg, gr.update()
 
 
 def ask_question(question: str, session_state: Dict, system_prompt: str, use_coarse: bool, progress=gr.Progress()) -> Tuple[str, str]:
@@ -987,8 +996,8 @@ def main():
     parser.add_argument("--share", action="store_true", help="Create public link")
     parser.add_argument("--port", type=int, default=44665, help="Port number")
     parser.add_argument("--host", type=str, default="0.0.0.0", help="Host address")
-    parser.add_argument("--timeout", type=int, default=300, help="PDF processing timeout in seconds")
-    parser.add_argument("--pages", type=int, default=0, help="Maximum pages to process") 
+    parser.add_argument("--timeout", type=int, default=120, help="PDF processing timeout in seconds")
+    parser.add_argument("--pages", type=int, default=5, help="Maximum pages to process during visual analysis") 
     args = parser.parse_args()
     
     # Update global timeout if specified
