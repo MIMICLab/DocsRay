@@ -464,21 +464,22 @@ def _do_process_document(file_path: str, session_dir: Path, analyze_visuals: boo
     
     try:
         # Extract content with visual analysis option
+        extract_kwargs = {
+                    "analyze_visuals": analyze_visuals
+                }
         if progress_callback is not None:
             status_msg = f"📖 Extracting content from {file_name}..."
             if analyze_visuals:
                 status_msg += " (with visual analysis)"
                 # Only apply page_limit if it's greater than 0
-                extract_kwargs = {
-                    "analyze_visuals": analyze_visuals
-                }
                 # Only apply page_limit if it's greater than 0
                 if PAGE_LIMIT > 0:
                     extract_kwargs["page_limit"] = PAGE_LIMIT
                     status_msg += f"\n📄 Processing first {PAGE_LIMIT} pages"
                 else:
                     status_msg += "\n📄 Processing all pages"     
-            progress_callback(0.2, status_msg)                   
+            progress_callback(0.2, status_msg)            
+                   
         extracted = pdf_extractor.extract_content(file_path, **extract_kwargs)
         
         # Create chunks
