@@ -76,7 +76,12 @@ Guidelines:
 • Highlight connections between different sections when relevant
 """
 
-check_models()
+try:
+    model_status = check_models()
+    if isinstance(model_status, dict):
+        print(json.dumps(model_status, indent=2))
+except Exception as e:
+    print(f"Warning: Model check failed: {e}", file=sys.stderr)
 
 def get_recommended_search_paths() -> List[Dict[str, Any]]:
     """

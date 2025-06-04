@@ -9,119 +9,125 @@ import os
 import sys
 from pathlib import Path
 from typing import Optional, Tuple
-import tempfile
 import subprocess
 
-# Office document conversion
-try:
-    import pypandoc
-    HAS_PANDOC = True
-except ImportError:
-    HAS_PANDOC = False
+import pypandoc
+from PIL import Image
+from docx2pdf import convert as docx2pdf_convert
 
-# Image to PDF conversion
-try:
-    from PIL import Image
-    HAS_PIL = True
-except ImportError:
-    HAS_PIL = False
+import pdfkit
 
-# DOCX to PDF
-try:
-    from docx2pdf import convert as docx2pdf_convert
-    HAS_DOCX2PDF = True
-except ImportError:
-    HAS_DOCX2PDF = False
+import markdown
 
-# HTML to PDF
-try:
-    import pdfkit
-    HAS_PDFKIT = True
-except ImportError:
-    HAS_PDFKIT = False
+from llama_index.readers.file import HWPReader
+
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import A4
+from PIL import Image
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch    
+
+from bs4 import BeautifulSoup
 
 
-# Markdown to HTML (PDF handled later)
-try:
-    import markdown
-    HAS_MARKDOWN = True
-except ImportError:
-    HAS_MARKDOWN = False
+from typing import List, Tuple
+from pathlib import Path
+from docsray.config import CACHE_DIR
 
-# llama‑index HWP reader fallback
-try:
-    from llama_index.readers.hwp import HWPReader as LIHWPReader
-    HAS_LI_HWP = True
-except Exception:
-    HAS_LI_HWP = False
-
-# ReportLab + Pillow for PDF synthesis
-try:
-    from reportlab.pdfgen import canvas
-    from reportlab.lib.pagesizes import A4
-    from PIL import Image
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib.units import inch    
-    HAS_REPORTLAB = True
-except Exception:
-    HAS_REPORTLAB = False
-
-# BeautifulSoup (HWPX XML parser)
-try:
-    from bs4 import BeautifulSoup
-    HAS_BS4 = True
-except ImportError:
-    HAS_BS4 = False
-
-try:
-    import pyhwp
-    HAS_PYHWP = True
-except ImportError:
-    HAS_PYHWP = False
-
-try:
-    import hwp5
-    HAS_HWP5 = True
-except ImportError:
-    HAS_HWP5 = False
-
-
-
-def _save_text_images_to_pdf(text: str, img_paths: list, output_path: Path) -> bool:
-    """Save plain text followed by images into a simple PDF using ReportLab."""
-    if not HAS_REPORTLAB:
-        return False
+def _save_text_images_to_pdf_korean(text: str, image_paths: List[str], output_file: Path) -> bool:
+    """Save text and images to PDF with Korean font support"""
     try:
-        c = canvas.Canvas(str(output_path), pagesize=A4)
-        W, H = A4
-        margin, y, line = 50, H - 50, 14
-        c.setFont("Helvetica", 11)
-
-        # Write text
-        for ln in text.splitlines():
-            if y < 60:
-                c.showPage(); y = H - 50; c.setFont("Helvetica", 11)
-            c.drawString(margin, y, ln)
-            y -= line
-
-        # Embed images
-        for p in img_paths:
-            try:
-                im = Image.open(p)
-            except Exception:
-                continue
-            ratio = min((W - 2*margin) / im.width, 400 / im.height)
-            w, h = im.width * ratio, im.height * ratio
-            if y - h < 60:
-                c.showPage(); y = H - 50; c.setFont("Helvetica", 11)
-            c.drawInlineImage(p, margin, y - h, w, h)
-            y -= h + 20
-
+        from reportlab.pdfgen import canvas
+        from reportlab.lib.pagesizes import A4
+        from reportlab.pdfbase import pdfmetrics
+        from reportlab.pdfbase.ttfonts import TTFont
+        from reportlab.lib.utils import ImageReader
+        import os
+        
+        # Register Korean fonts
+        # Try to find Korean fonts on the system
+        korean_fonts = [
+            # Windows
+            "C:/Windows/Fonts/malgun.ttf",  # Malgun Gothic
+            "C:/Windows/Fonts/gulim.ttc",   # Gulim
+            "C:/Windows/Fonts/batang.ttc",  # Batang
+            # macOS
+            "/System/Library/Fonts/AppleSDGothicNeo.ttc",
+            "/Library/Fonts/NanumGothic.ttf",
+            # Linux
+            "/usr/share/fonts/truetype/nanum/NanumGothic.ttf",
+            "/usr/share/fonts/truetype/fonts-nanum/NanumGothic.ttf",
+        ]
+        
+        font_registered = False
+        font_name = "NanumGothic"
+        
+        for font_path in korean_fonts:
+            if os.path.exists(font_path):
+                try:
+                    pdfmetrics.registerFont(TTFont(font_name, font_path))
+                    font_registered = True
+                    break
+                except:
+                    continue
+        
+        if not font_registered:
+            # Fallback: download and use a free Korean font
+            import urllib.request
+            font_url = "https://github.com/google/fonts/raw/main/ofl/nanumgothic/NanumGothic-Regular.ttf"
+            font_path = output_file.parent / "NanumGothic.ttf"
+            urllib.request.urlretrieve(font_url, font_path)
+            pdfmetrics.registerFont(TTFont(font_name, str(font_path)))
+        
+        # Create PDF
+        c = canvas.Canvas(str(output_file), pagesize=A4)
+        width, height = A4
+        
+        # Set font with Korean support
+        c.setFont(font_name, 12)
+        
+        # Add text
+        y = height - 50
+        for line in text.split('\n'):
+            if y < 50:  # New page if needed
+                c.showPage()
+                c.setFont(font_name, 12)
+                y = height - 50
+            
+            # Handle long lines
+            if len(line) > 80:
+                words = line.split()
+                current_line = ""
+                for word in words:
+                    if len(current_line + word) < 80:
+                        current_line += word + " "
+                    else:
+                        c.drawString(50, y, current_line.strip())
+                        y -= 20
+                        current_line = word + " "
+                if current_line:
+                    c.drawString(50, y, current_line.strip())
+                    y -= 20
+            else:
+                c.drawString(50, y, line)
+                y -= 20
+        
+        # Add images
+        for img_path in image_paths:
+            if os.path.exists(img_path):
+                try:
+                    c.showPage()
+                    img = ImageReader(img_path)
+                    c.drawImage(img, 50, 50, width=width-100, height=height-100, preserveAspectRatio=True)
+                except:
+                    pass
+        
         c.save()
         return True
+        
     except Exception as e:
-        print(f"[ReportLab] synthesis failed: {e}", file=sys.stderr)
+        print(f"PDF creation error: {e}")
         return False
 
 class FileConverter:
@@ -139,8 +145,8 @@ class FileConverter:
         '.odt': 'OpenDocument Text',
         '.ods': 'OpenDocument Spreadsheet',
         '.odp': 'OpenDocument Presentation',
-        '.hwp': 'Hangul Word Processor',
-        '.hwpx': 'Hangul Word Processor (OOXML)',
+        '.hwp': 'Hancom Word Processor',
+        '.hwpx': 'Hancom Word Processor (OOXML)',
 
 
         # Text formats
@@ -176,7 +182,7 @@ class FileConverter:
         Args:
             output_dir: Directory to save converted PDFs (default: temp directory)
         """
-        self.output_dir = output_dir or Path(tempfile.gettempdir())
+        self.output_dir = output_dir or CACHE_DIR
         self.output_dir.mkdir(parents=True, exist_ok=True)
         
     def convert_to_pdf(self, input_path: str, output_path: Optional[str] = None) -> Tuple[bool, str]:
@@ -222,16 +228,12 @@ class FileConverter:
         elif file_ext in ['.pptx', '.ppt']:
             return self._convert_ppt_to_pdf(input_file, output_path)
         elif file_ext == '.hwp':
-            if HAS_HWP5:
-                return self._convert_hwp_to_pdf_with_hwp5(input_file, output_path)
             return self._convert_hwp_to_pdf(input_file, output_path)
         elif file_ext == '.hwpx':
             return self._convert_hwpx_to_pdf(input_file, output_path)
         elif file_ext in ['.odt', '.ods', '.odp']:
-            if HAS_PANDOC:
-                return self._convert_with_pandoc(input_file, output_path)
-            else:
-                return False, "OpenDocument formats require pandoc for conversion."
+            return self._convert_with_pandoc(input_file, output_path)
+        
         elif file_ext in ['.pdf']:
             # If already PDF, just return the path
             return True, str(input_file)
@@ -256,9 +258,6 @@ class FileConverter:
     # ------------------------------------------------------------------
     def _convert_hwpx_to_pdf(self, input_file: Path, output_file: Path) -> Tuple[bool, str]:
         """Convert HWPX (Hangul OOXML) to PDF."""
-        if not (HAS_BS4 and HAS_REPORTLAB):
-            return False, "HWPX conversion requires bs4 and reportlab."
-
         from zipfile import ZipFile
         texts, img_paths = [], []
         tmp_dir = output_file.with_suffix("")  # temp folder alongside output
@@ -269,265 +268,461 @@ class FileConverter:
                 # 1) Collect text + image ids
                 for name in zf.namelist():
                     if name.startswith("Contents/") and name.endswith(".xml"):
-                        soup = BeautifulSoup(zf.read(name), "xml")
-                        texts.extend(
-                            p.get_text(" ", strip=True)
-                            for p in soup.find_all("hp_para")
-                        )
-                        img_ids = [
-                            pic.get("hp_binFile")
-                            for pic in soup.find_all("hp_pic")
-                            if pic.get("hp_binFile")
-                        ]
-                        img_paths.extend(img_ids)
+                        # Read with proper encoding
+                        raw_content = zf.read(name)
+                        
+                        # Try different encodings for Korean text
+                        for encoding in ['utf-8', 'utf-8-sig', 'cp949', 'euc-kr']:
+                            try:
+                                content = raw_content.decode(encoding)
+                                break
+                            except UnicodeDecodeError:
+                                continue
+                        else:
+                            # If all encodings fail, use utf-8 with error handling
+                            content = raw_content.decode('utf-8', errors='replace')
+                        
+                        soup = BeautifulSoup(content, "xml")
+                        
+                        # HWPX uses different tag structure
+                        # Look for text in various possible tags
+                        text_tags = ['t', 'text', 'hp:t', 'hp:run', 'w:t']
+                        for tag_name in text_tags:
+                            for text_elem in soup.find_all(tag_name):
+                                text = text_elem.get_text(strip=True)
+                                if text:
+                                    texts.append(text)
+                        
+                        # Also try to find paragraphs with different naming conventions
+                        para_tags = ['p', 'para', 'hp:p', 'hp:para', 'w:p']
+                        for tag_name in para_tags:
+                            for para in soup.find_all(tag_name):
+                                para_text = para.get_text(" ", strip=True)
+                                if para_text and para_text not in texts:
+                                    texts.append(para_text)
+                        
+                        # Find images with various possible tag/attribute names
+                        img_tags = ['pic', 'hp:pic', 'image', 'hp:image']
+                        img_attrs = ['binFile', 'hp:binFile', 'r:embed', 'href']
+                        
+                        for img_tag in img_tags:
+                            for pic in soup.find_all(img_tag):
+                                for attr in img_attrs:
+                                    img_id = pic.get(attr)
+                                    if img_id:
+                                        img_paths.append(img_id)
 
+                # Debug: Print what we found
+                print(f"Found {len(texts)} text elements")
+                print(f"Found {len(img_paths)} image references")
+                
                 # 2) Extract BinData images
                 extracted_imgs = []
                 for img_id in img_paths:
-                    try:
-                        data = zf.read(f"BinData/{img_id}")
-                    except KeyError:
-                        continue
-                    ext = ".png" if data[:8] == b"\x89PNG\r\n\x1a\n" else ".jpg"
-                    out_path = tmp_dir / f"{input_file.stem}_{img_id}{ext}"
-                    out_path.write_bytes(data)
-                    extracted_imgs.append(str(out_path))
+                    for possible_path in [f"BinData/{img_id}", f"Contents/BinData/{img_id}", img_id]:
+                        try:
+                            data = zf.read(possible_path)
+                            # Detect image type
+                            if data[:8] == b"\x89PNG\r\n\x1a\n":
+                                ext = ".png"
+                            elif data[:2] == b"\xff\xd8":
+                                ext = ".jpg"
+                            else:
+                                ext = ".bin"  # unknown format
+                            
+                            out_path = tmp_dir / f"{input_file.stem}_{img_id}{ext}"
+                            out_path.write_bytes(data)
+                            extracted_imgs.append(str(out_path))
+                            break
+                        except KeyError:
+                            continue
 
-            # 3) Synthesize PDF
-            success = _save_text_images_to_pdf("\n".join(texts), extracted_imgs, output_file)
-            if success:
-                return True, str(output_file)
-            return False, "ReportLab synthesis failed."
+                # 3) Synthesize PDF with proper encoding
+                combined_text = "\n".join(texts) if texts else "No text content found"
+                
+                # Ensure _save_text_images_to_pdf handles Korean text properly
+                success = _save_text_images_to_pdf_korean(combined_text, extracted_imgs, output_file)
+                if success:
+                    return True, str(output_file)
+                return False, "PDF synthesis failed"
 
         except Exception as e:
             return False, f"HWPX conversion error: {e}"
-    
-    def _convert_docx_to_pdf(self, input_file: Path, output_file: Path) -> Tuple[bool, str]:
-        """Convert DOCX to PDF"""
-        # Try multiple methods in order of preference
-        
-        # Method 1: LibreOffice (most reliable)
-        if self._check_libreoffice():
+        finally:
+            # Cleanup temp directory
             try:
-                cmd = [
-                    'libreoffice', '--headless', '--convert-to', 'pdf',
-                    '--outdir', str(output_file.parent), str(input_file)
-                ]
-                result = subprocess.run(cmd, capture_output=True, text=True)
-                if result.returncode == 0:
-                    # LibreOffice names the output file automatically
-                    expected_output = output_file.parent / f"{input_file.stem}.pdf"
-                    if expected_output.exists() and expected_output != output_file:
-                        expected_output.rename(output_file)
-                    return True, str(output_file)
-            except Exception as e:
-                print(f"LibreOffice conversion failed: {e}", file=sys.stderr)
-        
-        # Method 2: docx2pdf (Windows/Mac)
-        if HAS_DOCX2PDF:
-            try:
-                docx2pdf_convert(str(input_file), str(output_file))
-                return True, str(output_file)
-            except Exception as e:
-                print(f"docx2pdf conversion failed: {e}", file=sys.stderr)
-        
-        # Method 3: pandoc
-        if HAS_PANDOC:
-            try:
-                pypandoc.convert_file(str(input_file), 'pdf', outputfile=str(output_file))
-                return True, str(output_file)
-            except Exception as e:
-                print(f"Pandoc conversion failed: {e}", file=sys.stderr)
-        
-        return False, "No suitable DOCX converter found. Install LibreOffice, docx2pdf, or pandoc."
-    
-    def _convert_excel_to_pdf(self, input_file: Path, output_file: Path) -> Tuple[bool, str]:
-        """Convert Excel to PDF"""
-        # Try LibreOffice
-        if self._check_libreoffice():
-            try:
-                cmd = [
-                    'libreoffice', '--headless', '--convert-to', 'pdf',
-                    '--outdir', str(output_file.parent), str(input_file)
-                ]
-                result = subprocess.run(cmd, capture_output=True, text=True)
-                if result.returncode == 0:
-                    expected_output = output_file.parent / f"{input_file.stem}.pdf"
-                    if expected_output.exists() and expected_output != output_file:
-                        expected_output.rename(output_file)
-                    return True, str(output_file)
-            except Exception as e:
-                print(f"LibreOffice conversion failed: {e}", file=sys.stderr)
-        
-        return False, "Excel conversion requires LibreOffice. Please install it first."
-    
-    def _convert_ppt_to_pdf(self, input_file: Path, output_file: Path) -> Tuple[bool, str]:
-        """Convert PowerPoint to PDF"""
-        # Try LibreOffice
-        if self._check_libreoffice():
-            try:
-                cmd = [
-                    'libreoffice', '--headless', '--convert-to', 'pdf',
-                    '--outdir', str(output_file.parent), str(input_file)
-                ]
-                result = subprocess.run(cmd, capture_output=True, text=True)
-                if result.returncode == 0:
-                    expected_output = output_file.parent / f"{input_file.stem}.pdf"
-                    if expected_output.exists() and expected_output != output_file:
-                        expected_output.rename(output_file)
-                    return True, str(output_file)
-            except Exception as e:
-                print(f"LibreOffice conversion failed: {e}", file=sys.stderr)
-        
-        return False, "PowerPoint conversion requires LibreOffice. Please install it first."
+                import shutil
+                shutil.rmtree(tmp_dir)
+            except:
+                pass
+
     def _convert_hwp_to_pdf(self, input_file: Path, output_file: Path) -> Tuple[bool, str]:
         """Convert HWP to PDF"""
-        
-        if HAS_PYHWP:
-            try:
-                hwp = pyhwp.HWP(str(input_file))
-                
-                text_content = ""
-                for section in hwp.sections:
-                    text_content += section.get_text() + "\n\n"
-                
-                html_content = f"""
-                <html>
-                <head>
-                    <meta charset="utf-8">
-                    <style>
-                        body {{
-                            font-family: 'Malgun Gothic', 'Nanum Gothic', sans-serif;
-                            margin: 40px;
-                            line-height: 1.6;
-                        }}
-                        p {{ margin-bottom: 10px; }}
-                    </style>
-                </head>
-                <body>
-                    <h1>{input_file.name}</h1>
-                    {"".join(f"<p>{para}</p>" for para in text_content.split('\n') if para.strip())}
-                </body>
-                </html>
-                """
-                
-     
-                # (Removed weasyprint usage)
-                pass
-            except Exception as e:
-                print(f"pyhwp conversion failed: {e}", file=sys.stderr)
-        
-        if self._check_hancom():
-            try:
-                cmd = ['hwp', '--convert-to', 'pdf', '--outdir', str(output_file.parent), str(input_file)]
-                result = subprocess.run(cmd, capture_output=True, text=True)
-                if result.returncode == 0:
-                    return True, str(output_file)
-            except Exception as e:
-                print(f"Hancom Office conversion failed: {e}", file=sys.stderr)
-
-        # ----- llama‑index fallback (text + images) -----
-        if HAS_LI_HWP and HAS_REPORTLAB:
-            try:
-                reader = LIHWPReader()
-                docs = reader.load_data(str(input_file))
-                if docs:
-                    txt = docs[0].page_content
-                    img_paths = docs[0].extra_info.get("images", [])
-                    if _save_text_images_to_pdf(txt, img_paths, output_file):
-                        return True, str(output_file)
-            except Exception as e:
-                print(f"[li-hwp] {e}", file=sys.stderr)
-
-        return False, "HWP conversion requires pyhwp or Hancom Office"
-
-    def _check_hancom(self) -> bool:
-        """Check if Hancom Office is available"""
         try:
-            result = subprocess.run(['hwp', '--version'], capture_output=True)
-            return result.returncode == 0
-        except FileNotFoundError:
-            return False
-    
-    def _convert_hwp_to_pdf_with_hwp5(self, input_file: Path, output_file: Path) -> Tuple[bool, str]:
-        """Convert HWP to PDF using hwp5"""
-        if not HAS_HWP5:
-            return False, "hwp5 not installed"
-        
-        try:
-            odf_path = output_file.with_suffix('.odt')
-
-            cmd = ['hwp5odt', str(input_file), str(odf_path)]
-            result = subprocess.run(cmd, capture_output=True, text=True)
-
-            if result.returncode == 0 and self._check_libreoffice():
-                cmd = [
-                    'libreoffice', '--headless', '--convert-to', 'pdf',
-                    '--outdir', str(output_file.parent), str(odf_path)
-                ]
-                result = subprocess.run(cmd, capture_output=True, text=True)
-
-                odf_path.unlink(missing_ok=True)
-
-                if result.returncode == 0:
+            reader = HWPReader()
+            # llama_index HWPReader returns a list of Document objects
+            documents = reader.load_data(file=str(input_file))
+            
+            if documents and len(documents) > 0:
+                # Combine text from all documents
+                full_text = ""
+                all_images = []
+                
+                for doc in documents:
+                    # llama_index Document objects have a 'text' attribute
+                    full_text += doc.text + "\n\n"
+                    
+                    # Extract images from metadata
+                    # Metadata structure may vary depending on HWPReader implementation
+                    if hasattr(doc, 'metadata') and doc.metadata:
+                        images = doc.metadata.get("images", [])
+                        all_images.extend(images)
+                
+                # Save text and images to PDF with Korean font support
+                if _save_text_images_to_pdf_korean(full_text.strip(), all_images, output_file):
                     return True, str(output_file)
-
-            print("hwp5 route failed; attempting pyhwp fallback…", file=sys.stderr)
-
+                else:
+                    return False, "Failed to save PDF"
+            else:
+                return False, "Unable to read HWP document"
+                
+        except ImportError:
+            return False, "llama_index not installed"
         except Exception as e:
-            print(f"hwp5 conversion failed: {e}", file=sys.stderr)
+            error_msg = f"Error during HWP conversion: {str(e)}"
+            print(f"[Error] {error_msg}", file=sys.stderr)
+            return False, error_msg
 
-        # -------- Fallback: pyhwp ----------
-        if HAS_PYHWP:
-            return self._convert_hwp_to_pdf(input_file, output_file)
+    def _save_text_images_to_pdf_korean(text: str, image_paths: List[str], output_file: Path) -> bool:
+        """Save text and images to PDF with Korean font support"""
+        try:
+            from reportlab.pdfgen import canvas
+            from reportlab.lib.pagesizes import A4
+            from reportlab.pdfbase import pdfmetrics
+            from reportlab.pdfbase.ttfonts import TTFont
+            from reportlab.lib.utils import ImageReader
+            import os
+            
+            # Register Korean fonts
+            # Try to find Korean fonts on the system
+            korean_fonts = [
+                # Windows
+                "C:/Windows/Fonts/malgun.ttf",  # Malgun Gothic
+                "C:/Windows/Fonts/gulim.ttc",   # Gulim
+                "C:/Windows/Fonts/batang.ttc",  # Batang
+                # macOS
+                "/System/Library/Fonts/AppleSDGothicNeo.ttc",
+                "/Library/Fonts/NanumGothic.ttf",
+                # Linux
+                "/usr/share/fonts/truetype/nanum/NanumGothic.ttf",
+                "/usr/share/fonts/truetype/fonts-nanum/NanumGothic.ttf",
+            ]
+            
+            font_registered = False
+            font_name = "NanumGothic"
+            
+            for font_path in korean_fonts:
+                if os.path.exists(font_path):
+                    try:
+                        pdfmetrics.registerFont(TTFont(font_name, font_path))
+                        font_registered = True
+                        break
+                    except:
+                        continue
+            
+            if not font_registered:
+                # Fallback: download and use a free Korean font
+                import urllib.request
+                font_url = "https://github.com/google/fonts/raw/main/ofl/nanumgothic/NanumGothic-Regular.ttf"
+                font_path = output_file.parent / "NanumGothic.ttf"
+                urllib.request.urlretrieve(font_url, font_path)
+                pdfmetrics.registerFont(TTFont(font_name, str(font_path)))
+            
+            # Create PDF
+            c = canvas.Canvas(str(output_file), pagesize=A4)
+            width, height = A4
+            
+            # Set font with Korean support
+            c.setFont(font_name, 12)
+            
+            # Add text
+            y = height - 50
+            for line in text.split('\n'):
+                if y < 50:  # New page if needed
+                    c.showPage()
+                    c.setFont(font_name, 12)
+                    y = height - 50
+                
+                # Handle long lines
+                if len(line) > 80:
+                    words = line.split()
+                    current_line = ""
+                    for word in words:
+                        if len(current_line + word) < 80:
+                            current_line += word + " "
+                        else:
+                            c.drawString(50, y, current_line.strip())
+                            y -= 20
+                            current_line = word + " "
+                    if current_line:
+                        c.drawString(50, y, current_line.strip())
+                        y -= 20
+                else:
+                    c.drawString(50, y, line)
+                    y -= 20
+            
+            # Add images
+            for img_path in image_paths:
+                if os.path.exists(img_path):
+                    try:
+                        c.showPage()
+                        img = ImageReader(img_path)
+                        c.drawImage(img, 50, 50, width=width-100, height=height-100, preserveAspectRatio=True)
+                    except:
+                        pass
+            
+            c.save()
+            return True
+            
+        except Exception as e:
+            print(f"PDF creation error: {e}")
+            return False
 
-        return False, "HWP conversion failed (hwp5+LibreOffice unavailable, and pyhwp not installed)"
-
+       
+    def _convert_docx_to_pdf(self, input_file: Path, output_file: Path) -> Tuple[bool, str]:
+        """Convert DOCX to PDF"""
+        # Method: pandoc
+        try:
+            pypandoc.convert_file(str(input_file), 'pdf', outputfile=str(output_file))
+            return True, str(output_file)
+        except Exception as e:
+            print(f"Pandoc conversion failed: {e}", file=sys.stderr)
+            return False, e
+    
+    def _convert_excel_to_pdf(self, input_file: Path, output_file: Path) -> Tuple[bool, str]:
+        """Convert Excel to PDF using openpyxl and reportlab"""
+        try:
+            import openpyxl
+            from reportlab.lib import colors
+            from reportlab.lib.pagesizes import A4, landscape
+            from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+            from reportlab.lib.styles import getSampleStyleSheet
+            from reportlab.lib.units import inch
+            
+            # Load Excel file
+            wb = openpyxl.load_workbook(input_file, data_only=True)
+            
+            # Create PDF
+            doc = SimpleDocTemplate(str(output_file), pagesize=landscape(A4))
+            story = []
+            styles = getSampleStyleSheet()
+            
+            # Process each sheet
+            for sheet_name in wb.sheetnames:
+                sheet = wb[sheet_name]
+                
+                # Add sheet title
+                story.append(Paragraph(f"Sheet: {sheet_name}", styles['Heading1']))
+                story.append(Spacer(1, 0.2*inch))
+                
+                # Extract data from sheet
+                data = []
+                max_row = min(sheet.max_row, 1000)  # Limit rows to prevent memory issues
+                max_col = min(sheet.max_column, 20)  # Limit columns
+                
+                for row in sheet.iter_rows(min_row=1, max_row=max_row, max_col=max_col, values_only=True):
+                    # Convert None to empty string and everything to string
+                    row_data = [str(cell) if cell is not None else '' for cell in row]
+                    if any(row_data):  # Skip completely empty rows
+                        data.append(row_data)
+                
+                if data:
+                    # Create table
+                    try:
+                        # Calculate column widths dynamically
+                        col_widths = [1.5*inch] * len(data[0]) if data else []
+                        
+                        table = Table(data, colWidths=col_widths)
+                        
+                        # Add style to table
+                        table_style = TableStyle([
+                            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                            ('FONTSIZE', (0, 0), (-1, 0), 10),
+                            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+                            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+                        ])
+                        
+                        table.setStyle(table_style)
+                        story.append(table)
+                        story.append(Spacer(1, 0.5*inch))
+                    except Exception as e:
+                        # If table creation fails, add data as text
+                        for row in data[:100]:  # Limit to first 100 rows
+                            text = ' | '.join(row)
+                            story.append(Paragraph(text, styles['Normal']))
+                        story.append(Spacer(1, 0.2*inch))
+            
+            # Build PDF
+            doc.build(story)
+            return True, str(output_file)
+            
+        except ImportError:
+            return False, "Please install openpyxl and reportlab: pip install openpyxl reportlab"
+        except Exception as e:
+            return False, f"Excel conversion error: {str(e)}"
+    
+    def _convert_ppt_to_pdf(self, input_file: Path, output_file: Path) -> Tuple[bool, str]:
+        """Convert PowerPoint to PDF using python-pptx and reportlab"""
+        try:
+            from pptx import Presentation
+            from reportlab.pdfgen import canvas
+            from reportlab.lib.pagesizes import A4, landscape
+            from PIL import Image
+            import io
+            
+            # Load PowerPoint file
+            prs = Presentation(str(input_file))
+            
+            # Create PDF
+            c = canvas.Canvas(str(output_file), pagesize=landscape(A4))
+            width, height = landscape(A4)
+            
+            for slide_num, slide in enumerate(prs.slides):
+                if slide_num > 0:
+                    c.showPage()
+                
+                # Add slide number
+                c.setFont("Helvetica-Bold", 16)
+                c.drawString(50, height - 50, f"Slide {slide_num + 1}")
+                
+                y_position = height - 100
+                
+                # Extract text from slide
+                for shape in slide.shapes:
+                    if hasattr(shape, "text") and shape.text:
+                        c.setFont("Helvetica", 12)
+                        
+                        # Handle text that might be too long
+                        text = shape.text.strip()
+                        lines = text.split('\n')
+                        
+                        for line in lines:
+                            if y_position < 50:
+                                break
+                                
+                            # Wrap long lines
+                            if len(line) > 80:
+                                words = line.split()
+                                current_line = ""
+                                for word in words:
+                                    if len(current_line + word) < 80:
+                                        current_line += word + " "
+                                    else:
+                                        c.drawString(50, y_position, current_line.strip())
+                                        y_position -= 20
+                                        current_line = word + " "
+                                if current_line:
+                                    c.drawString(50, y_position, current_line.strip())
+                                    y_position -= 20
+                            else:
+                                c.drawString(50, y_position, line)
+                                y_position -= 20
+                        
+                        y_position -= 10  # Extra space between shapes
+                    
+                    # Handle images (basic support)
+                    if shape.shape_type == 13:  # Picture
+                        try:
+                            image = shape.image
+                            image_bytes = image.blob
+                            img = Image.open(io.BytesIO(image_bytes))
+                            
+                            # Save temporary image
+                            temp_img = output_file.parent / f"temp_img_{slide_num}_{shape.shape_id}.png"
+                            img.save(temp_img)
+                            
+                            # Add to PDF (simplified positioning)
+                            if y_position > 200:
+                                c.drawImage(str(temp_img), 50, y_position - 150, width=200, height=150)
+                                y_position -= 160
+                            
+                            # Clean up
+                            temp_img.unlink()
+                        except:
+                            pass
+                
+                # Handle tables
+                for shape in slide.shapes:
+                    if shape.has_table:
+                        y_position -= 20
+                        c.setFont("Helvetica", 10)
+                        c.drawString(50, y_position, "[Table]")
+                        y_position -= 15
+                        
+                        table = shape.table
+                        for row in table.rows:
+                            row_text = " | ".join([cell.text for cell in row.cells])
+                            if len(row_text) > 80:
+                                row_text = row_text[:77] + "..."
+                            c.drawString(50, y_position, row_text)
+                            y_position -= 15
+                            if y_position < 50:
+                                break
+            
+            c.save()
+            return True, str(output_file)
+            
+        except ImportError:
+            return False, "Please install python-pptx and pillow: pip install python-pptx pillow"
+        except Exception as e:
+            return False, f"PowerPoint conversion error: {str(e)}"
     def _convert_text_to_pdf(self, input_file: Path, output_file: Path) -> Tuple[bool, str]:
         """Convert plain text to PDF"""
         try:
             # Read text file
             with open(input_file, 'r', encoding='utf-8') as f:
                 text = f.read()
-            
-            # First try: reportlab (most reliable for text)
-            if HAS_REPORTLAB:
-                try:
-                    doc = SimpleDocTemplate(str(output_file), pagesize=A4)
-                    styles = getSampleStyleSheet()
-                    story = []
-                    
-                    # Title
-                    title_style = ParagraphStyle(
-                        'CustomTitle',
-                        parent=styles['Heading1'],
-                        fontSize=24,
-                        spaceAfter=30
-                    )
-                    story.append(Paragraph(input_file.name, title_style))
-                    story.append(Spacer(1, 0.2*inch))
-                    
-                    # Content
-                    text_style = ParagraphStyle(
-                        'CustomText',
-                        parent=styles['Normal'],
-                        fontSize=11,
-                        leading=14
-                    )
-                    
-                    # Split text into paragraphs
-                    for paragraph in text.split('\n\n'):
-                        if paragraph.strip():
-                            # Escape special characters for reportlab
-                            safe_text = paragraph.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-                            story.append(Paragraph(safe_text, text_style))
-                            story.append(Spacer(1, 0.1*inch))
-                    
-                    doc.build(story)
-                    return True, str(output_file)
-                    
-                except Exception as e:
-                    print(f"Reportlab conversion failed: {e}", file=sys.stderr)
+
+            try:
+                doc = SimpleDocTemplate(str(output_file), pagesize=A4)
+                styles = getSampleStyleSheet()
+                story = []
+                
+                # Title
+                title_style = ParagraphStyle(
+                    'CustomTitle',
+                    parent=styles['Heading1'],
+                    fontSize=24,
+                    spaceAfter=30
+                )
+                story.append(Paragraph(input_file.name, title_style))
+                story.append(Spacer(1, 0.2*inch))
+                
+                # Content
+                text_style = ParagraphStyle(
+                    'CustomText',
+                    parent=styles['Normal'],
+                    fontSize=11,
+                    leading=14
+                )
+                
+                # Split text into paragraphs
+                for paragraph in text.split('\n\n'):
+                    if paragraph.strip():
+                        # Escape special characters for reportlab
+                        safe_text = paragraph.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+                        story.append(Paragraph(safe_text, text_style))
+                        story.append(Spacer(1, 0.1*inch))
+                
+                doc.build(story)
+                return True, str(output_file)
+                
+            except Exception as e:
+                print(f"Reportlab conversion failed: {e}", file=sys.stderr)
             
             # Second try: Direct PDF creation using pure Python
             try:
@@ -574,35 +769,29 @@ class FileConverter:
             # Try various HTML to PDF converters
             converters_tried = []
             # Try pdfkit
-            if HAS_PDFKIT:
-                try:
-                    import pdfkit
-                    pdfkit.from_string(html_content, str(output_file))
-                    return True, str(output_file)
-                except Exception as e:
-                    converters_tried.append("pdfkit")
+            try:
+                pdfkit.from_string(html_content, str(output_file))
+                return True, str(output_file)
+            except Exception as e:
+                converters_tried.append("pdfkit")
             
-            # Try pandoc
-            if HAS_PANDOC:
-                try:
-                    temp_html = output_file.with_suffix('.html')
-                    with open(temp_html, 'w', encoding='utf-8') as f:
-                        f.write(html_content)
-                    
-                    pypandoc.convert_file(str(temp_html), 'pdf', outputfile=str(output_file))
-                    temp_html.unlink()
-                    return True, str(output_file)
-                except Exception as e:
-                    converters_tried.append("pandoc")
+            try:
+                temp_html = output_file.with_suffix('.html')
+                with open(temp_html, 'w', encoding='utf-8') as f:
+                    f.write(html_content)
+                
+                pypandoc.convert_file(str(temp_html), 'pdf', outputfile=str(output_file))
+                temp_html.unlink()
+                return True, str(output_file)
+            except Exception as e:
+                converters_tried.append("pandoc")
                     
         except Exception as e:
             print(f"Text to PDF conversion error: {e}", file=sys.stderr)
         
         # Provide helpful error message
         error_msg = "Text conversion failed. "
-        if not HAS_REPORTLAB:
-            error_msg += "Install reportlab for best results: pip install reportlab"
-        elif converters_tried:
+        if converters_tried:
             error_msg += f"Tried: {', '.join(converters_tried)}. "
             error_msg += "Install one of: reportlab, pdfkit+wkhtmltopdf, or pandoc"
         else:
@@ -664,65 +853,59 @@ class FileConverter:
 
     def _convert_markdown_to_pdf(self, input_file: Path, output_file: Path) -> Tuple[bool, str]:
         """Convert Markdown to PDF"""
-        if HAS_PANDOC:
-            try:
-                pypandoc.convert_file(str(input_file), 'pdf', outputfile=str(output_file))
-                return True, str(output_file)
-            except Exception as e:
-                print(f"Pandoc conversion failed: {e}", file=sys.stderr)
+        try:
+            pypandoc.convert_file(str(input_file), 'pdf', outputfile=str(output_file))
+            return True, str(output_file)
+        except Exception as e:
+            print(f"Pandoc conversion failed: {e}", file=sys.stderr)
 
-        if HAS_MARKDOWN:
-            try:
-                # Read markdown
-                with open(input_file, 'r', encoding='utf-8') as f:
-                    md_text = f.read()
+        try:
+            # Read markdown
+            with open(input_file, 'r', encoding='utf-8') as f:
+                md_text = f.read()
 
-                # Convert to HTML
-                html_content = markdown.markdown(md_text, extensions=['extra', 'codehilite'])
+            # Convert to HTML
+            html_content = markdown.markdown(md_text, extensions=['extra', 'codehilite'])
 
-                # Wrap in HTML document
-                full_html = f"""
-                <html>
-                <head>
-                    <meta charset="utf-8">
-                    <style>
-                        body {{ font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; }}
-                        code {{ background: #f4f4f4; padding: 2px 4px; }}
-                        pre {{ background: #f4f4f4; padding: 10px; overflow-x: auto; }}
-                        h1, h2, h3 {{ color: #333; }}
-                    </style>
-                </head>
-                <body>
-                    {html_content}
-                </body>
-                </html>
-                """
+            # Wrap in HTML document
+            full_html = f"""
+            <html>
+            <head>
+                <meta charset="utf-8">
+                <style>
+                    body {{ font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; }}
+                    code {{ background: #f4f4f4; padding: 2px 4px; }}
+                    pre {{ background: #f4f4f4; padding: 10px; overflow-x: auto; }}
+                    h1, h2, h3 {{ color: #333; }}
+                </style>
+            </head>
+            <body>
+                {html_content}
+            </body>
+            </html>
+            """
 
-                # (Removed weasyprint usage)
-                pass
-            except Exception as e:
+            # (Removed weasyprint usage)
+            pass
+        except Exception as e:
                 print(f"Markdown conversion failed: {e}", file=sys.stderr)
 
         return False, "Markdown conversion requires pandoc or markdown+weasyprint."
     
     def _convert_html_to_pdf(self, input_file: Path, output_file: Path) -> Tuple[bool, str]:
         """Convert HTML to PDF"""
-        if HAS_PDFKIT:
-            try:
-                pdfkit.from_file(str(input_file), str(output_file))
-                return True, str(output_file)
-            except Exception as e:
-                print(f"pdfkit conversion failed: {e}", file=sys.stderr)
+        try:
+            pdfkit.from_file(str(input_file), str(output_file))
+            return True, str(output_file)
+        except Exception as e:
+            print(f"pdfkit conversion failed: {e}", file=sys.stderr)
 
         # (Removed weasyprint usage)
 
         return False, "HTML conversion requires pdfkit."
     
     def _convert_image_to_pdf(self, input_file: Path, output_file: Path) -> Tuple[bool, str]:
-        """Convert image to PDF"""
-        if not HAS_PIL:
-            return False, "Image conversion requires Pillow. Install with: pip install pillow"
-        
+        """Convert image to PDF"""       
         try:
             # Open image
             img = Image.open(input_file)
@@ -748,9 +931,6 @@ class FileConverter:
     
     def _convert_with_pandoc(self, input_file: Path, output_file: Path) -> Tuple[bool, str]:
         """Try to convert using pandoc as fallback"""
-        if not HAS_PANDOC:
-            return False, "Pandoc not available for conversion"
-        
         try:
             pypandoc.convert_file(str(input_file), 'pdf', outputfile=str(output_file))
             return True, str(output_file)
