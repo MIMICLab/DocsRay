@@ -614,6 +614,129 @@ If you see "No suitable converter found":
 2. Verify Python packages: `pip install docsray[conversion]`
 3. Try alternative converters (LibreOffice > docx2pdf > pandoc)
 
+## 🔄 Auto-Restart Feature (v1.3.0+)
+
+DocsRay includes an automatic restart feature that helps maintain service stability by automatically recovering from errors, memory issues, or crashes.
+
+### When Auto-Restart Triggers
+
+The service will automatically restart in the following situations:
+
+1. **Memory Usage Exceeds 85%** - Prevents out-of-memory crashes
+2. **PDF Processing Timeout** - Default 5 minutes per document
+3. **Error Threshold Reached** - When errors occur within the time window
+4. **Process Crashes** - Unexpected termination or unhandled exceptions
+
+### Basic Usage
+
+```bash
+# Start web interface with auto-restart
+docsray web --auto-restart
+
+# Start MCP server with auto-restart
+docsray mcp --auto-restart
+```
+
+### Advanced Options
+
+```bash
+# Custom retry settings
+docsray web --auto-restart --max-retries 10 --retry-delay 10
+
+# With other options
+docsray web --auto-restart --port 8080 --timeout 600 --max-retries 20
+```
+
+### Configuration Parameters
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `--auto-restart` | False | Enable automatic restart on errors |
+| `--max-retries` | 5 | Maximum restart attempts for crashes |
+| `--retry-delay` | 5 | Seconds to wait between restarts |
+
+### How It Works
+
+1. **Intentional Restarts (exit code 42)**
+   - Triggered by memory limits, timeouts, or error thresholds
+   - Retry counter resets to 0
+   - Can restart indefinitely
+
+2. **Crashes (other exit codes)**
+   - Triggered by unexpected errors
+   - Retry counter increases
+   - Stops after reaching max-retries
+
+### Monitoring
+
+Check restart logs:
+```bash
+# View recovery log
+cat ~/.docsray/logs/recovery_log.txt
+
+# Monitor service logs
+tail -f ~/.docsray/logs/DocsRay_Web_wrapper_*.log
+```
+
+### Example Scenarios
+
+#### Production Server
+```bash
+# High reliability settings
+docsray web --auto-restart \
+  --max-retries 100 \
+  --retry-delay 30 \
+  --timeout 900
+```
+
+#### Development Environment
+```bash
+# Quick restart for testing
+docsray web --auto-restart \
+  --max-retries 5 \
+  --retry-delay 2
+```
+
+### System Service Alternative (Linux)
+
+For production deployments, consider using systemd:
+
+```ini
+# /etc/systemd/system/docsray.service
+[Unit]
+Description=DocsRay Web Service
+After=network.target
+
+[Service]
+Type=simple
+User=your-user
+WorkingDirectory=/home/your-user
+ExecStart=/usr/bin/python -m docsray web --port 80
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Then:
+```bash
+sudo systemctl enable docsray
+sudo systemctl start docsray
+```
+
+### Troubleshooting
+
+1. **Service keeps restarting**
+   - Check memory usage: might need to increase system RAM
+   - Reduce visual analysis or page limits
+   - Increase timeout values
+
+2. **Service won't restart**
+   - Check if max-retries reached
+   - Look for "Max retries reached" in logs
+   - Restart manually or increase max-retries
+   
 ## 📚 Advanced Usage
 
 ### Custom Visual Analysis
