@@ -52,7 +52,7 @@ PDF_PROCESS_TIMEOUT = 120
 # Error recovery settings
 MAX_MEMORY_PERCENT = 85  # Restart if memory usage exceeds this
 ERROR_THRESHOLD = 1  # Number of errors before restart
-ERROR_WINDOW = 10 # Time window for error counting (5 minutes)
+ERROR_WINDOW = 10 # Time window for error counting 
 
 # Global error tracking
 error_queue = queue.Queue()
@@ -151,11 +151,11 @@ class ErrorRecoveryMixin:
                 
                 # If all else fails, exit and let systemd or user restart
                 logger.error("Please restart manually or use: docsray web --auto-restart")
-                os._exit(1)
+                os._exit(42)
                 
         except Exception as e:
             logger.error(f"Error during recovery: {e}")
-            os._exit(1)
+            os._exit(42)
     
     @staticmethod
     def cleanup_temp_files():
@@ -1022,7 +1022,7 @@ def main():
         )
     except Exception as e:
         logger.critical(f"Server crashed: {e}")
-        sys.exit(42)  # Special exit code for restart
+        os._exit(42)  # Special exit code for restart
 
 if __name__ == "__main__":
     main()
