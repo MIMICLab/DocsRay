@@ -423,7 +423,7 @@ def extract_pdf_content(pdf_path: str,
         print(f"❌ Failed to open PDF file: {e}", file=sys.stderr)
         raise
     
-    if page_limit >0:
+    if page_limit > 0:
         doc = doc[:page_limit]
     total_pages = len(doc)
     pages_text: List[str] = []

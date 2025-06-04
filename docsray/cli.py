@@ -79,7 +79,7 @@ Examples:
     web_parser.add_argument("--host", default="0.0.0.0", help="Host address")
     web_parser.add_argument("--timeout", type=int, default=300, 
                            help="PDF processing timeout in seconds (default: 300)")
-    web_parser.add_argument("--pages", type=int, default=5, 
+    web_parser.add_argument("--pages", type=int, default=0, 
                            help="Maximum pages to process per PDF (default: 5)")
     web_parser.add_argument("--auto-restart", action="store_true", 
                            help="Enable auto-restart on errors")
@@ -163,7 +163,7 @@ Examples:
                 cmd.append("--share")
             if args.timeout != 300:
                 cmd.extend(["--timeout", str(args.timeout)])
-            if args.pages != 5:
+            if args.pages != 0:
                 cmd.extend(["--pages", str(args.pages)])
                 
             monitor = SimpleServiceMonitor(  # 클래스 이름 수정!
