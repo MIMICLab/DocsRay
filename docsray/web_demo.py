@@ -52,7 +52,7 @@ PDF_PROCESS_TIMEOUT = 300
 # Error recovery settings
 MAX_MEMORY_PERCENT = 85  # Restart if memory usage exceeds this
 ERROR_THRESHOLD = 1  # Number of errors before restart
-ERROR_WINDOW = 300  # Time window for error counting (5 minutes)
+ERROR_WINDOW = 10 # Time window for error counting (5 minutes)
 
 # Global error tracking
 error_queue = queue.Queue()
@@ -440,7 +440,6 @@ def process_document_with_timeout(file_path: str, session_dir: Path, analyze_vis
             raise ProcessingTimeoutError(error_msg)
 
 
-# Also update the _do_process_document function to handle page_limit properly
 def _do_process_document(file_path: str, session_dir: Path, analyze_visuals: bool = True, progress_callback=None) -> Tuple[list, list, str]:
     """Actual document processing function (runs in thread with timeout)"""
     start_time = time.time()
@@ -452,6 +451,13 @@ def _do_process_document(file_path: str, session_dir: Path, analyze_visuals: boo
             status_msg = f"📖 Extracting content from {file_name}..."
             if analyze_visuals:
                 status_msg += " (with visual analysis)"
+            
+            # Add limits info
+            if PAGE_LIMIT > 0:
+                status_msg += f"\n📄 Processing first {PAGE_LIMIT} pages"
+            else:
+                status_msg += "\n📄 Processing all pages"
+                
             progress_callback(0.2, status_msg)
         
         # Only apply page_limit if it's greater than 0
@@ -465,19 +471,32 @@ def _do_process_document(file_path: str, session_dir: Path, analyze_visuals: boo
         
         # Create chunks
         if progress_callback is not None:
-            progress_callback(0.4, "✂️ Creating text chunks...")
+            progress_msg = "✂️ Creating text chunks..."
+            # Show elapsed time
+            elapsed = time.time() - start_time
+            if elapsed > 10:  # Show elapsed time after 10 seconds
+                progress_msg += f" ({elapsed:.0f}s elapsed)"
+            progress_callback(0.4, progress_msg)
         
         chunks = chunker.process_extracted_file(extracted)
         
         # Build search index
         if progress_callback is not None:
-            progress_callback(0.6, "🔍 Building search index...")
+            progress_msg = "🔍 Building search index..."
+            elapsed = time.time() - start_time
+            if elapsed > 10:
+                progress_msg += f" ({elapsed:.0f}s elapsed)"
+            progress_callback(0.6, progress_msg)
         
         chunk_index = build_index.build_chunk_index(chunks)
         
         # Build section representations
         if progress_callback is not None:
-            progress_callback(0.8, "📊 Building section representations...")
+            progress_msg = "📊 Building section representations..."
+            elapsed = time.time() - start_time
+            if elapsed > 10:
+                progress_msg += f" ({elapsed:.0f}s elapsed)"
+            progress_callback(0.8, progress_msg)
         
         sections = section_rep_builder.build_section_reps(extracted["sections"], chunk_index)
         
@@ -511,6 +530,10 @@ def _do_process_document(file_path: str, session_dir: Path, analyze_visuals: boo
         msg += f"🔍 Chunks: {len(chunks)}\n"
         msg += f"⏱️ Processing time: {elapsed_time:.1f} seconds"
         
+        # Add info about what limits were applied
+        if PAGE_LIMIT > 0:
+            msg += f"\n📄 Processed first {PAGE_LIMIT} pages"
+        
         if progress_callback is not None:
             progress_callback(1.0, "✅ Processing complete!")
         
@@ -543,7 +566,25 @@ def load_document(file, analyze_visuals: bool, session_state: Dict, progress=gr.
     file_name = Path(file.name).name
     dest_path = session_dir / file_name
     
-    progress(0.05, f"📁 Copying {file_name} to session...")
+    # Build initial progress message with limits info
+    initial_message = f"📁 Copying {file_name} to session..."
+    
+    # Add page limit info if applicable
+    if PAGE_LIMIT > 0:
+        initial_message += f"\n📄 Page Limit: First {PAGE_LIMIT} pages only"
+    
+    # Add timeout info if applicable  
+    if PDF_PROCESS_TIMEOUT > 0:
+        initial_message += f"\n⏰ Timeout: {PDF_PROCESS_TIMEOUT//60} minutes max"
+    else:
+        initial_message += "\n⏰ No timeout limit"
+        
+    if analyze_visuals:
+        initial_message += "\n👁️ Visual analysis enabled (slower)"
+    else:
+        initial_message += "\n⚡ Visual analysis disabled (faster)"
+    
+    progress(0.05, initial_message)
     shutil.copy(file.name, dest_path)
     
     try:
@@ -717,17 +758,6 @@ def get_supported_formats() -> str:
         if supported_exts:
             info += f"**{category}:** {', '.join(supported_exts)}\n"
 
-    # Add page limit info if applicable
-    if PAGE_LIMIT > 0:
-        info += f"\n📄 **Page Limit:** First {PAGE_LIMIT} pages per document\n"
-    
-    # Add timeout info if applicable
-    if PDF_PROCESS_TIMEOUT > 0:
-        info += f"\n⏰ **Processing Timeout:** {PDF_PROCESS_TIMEOUT//60} minutes per document\n"
-        info += "💡 **Tip:** Disable visual analysis for faster processing of large documents"
-    else:
-        info += "\n⏰ **Processing Timeout:** Disabled (no time limit)\n"
-    
     return info
 
 # Create Gradio interface with error handling
