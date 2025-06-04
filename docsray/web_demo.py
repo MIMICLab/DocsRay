@@ -482,7 +482,7 @@ def _do_process_document(file_path: str, session_dir: Path, analyze_visuals: boo
         # Only apply page_limit if it's greater than 0
         if PAGE_LIMIT > 0 and analyze_visuals:
             extract_kwargs["page_limit"] = PAGE_LIMIT
-                status_msg += f"\n📄 Processing first {PAGE_LIMIT} pages"
+            status_msg += f"\n📄 Processing first {PAGE_LIMIT} pages"
         else:
             status_msg += "\n📄 Processing all pages"     
         progress_callback(0.2, status_msg)                   
@@ -660,7 +660,7 @@ def load_document(file, analyze_visuals: bool, session_state: Dict, progress=gr.
             display_msg = str(e)
         else:
             display_msg = f"❌ Error processing document: {str(e)}"    
-                
+
         return session_state, display_msg, gr.update()
 
 
