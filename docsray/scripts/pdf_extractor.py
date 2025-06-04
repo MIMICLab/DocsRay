@@ -12,6 +12,7 @@ from PIL import Image
 import pandas as pd
 import numpy as np
 from sklearn.cluster import KMeans
+import gc  # garbage collection
 
 # Import FAST_MODE to determine if we can use image recognition
 from docsray.config import FAST_MODE, MAX_TOKENS, FULL_FEATURE_MODE, USE_TESSERACT
@@ -206,7 +207,8 @@ def analyze_visual_content(page, page_num: int) -> str:
                 
                 try:
                     # Render the area as image
-                    mat = fitz.Matrix(2, 2)  # 2x zoom for better quality
+                    zoom = min(1.5, 600 / max(bbox.width, bbox.height))
+                    mat = fitz.Matrix(zoom, zoom)
                     pix = page.get_pixmap(matrix=mat, clip=bbox)
                     vector_img = Image.open(io.BytesIO(pix.pil_tobytes(format="PNG")))
                     visual_graphics.append(vector_img)
@@ -323,27 +325,31 @@ Returns a list of dicts identical in structure to build_sections_from_toc.
 
     return sections
 
-def ocr_page_with_llm(page, dpi: int = 350) -> str:
+def ocr_page_with_llm(page, dpi_fast: int = 150, dpi_scan: int = 300) -> str:
     """
-    Render page to image and use LLM for OCR.
-    Uses pytesseract if not in FULL_FEATURE_MODE.
+    Render the page to an image and perform OCR.
+
+    DPI selection:
+      • embedded text exists → 150
+      • else and page.width < 600 pt → 300
+      • otherwise → 150
     """
+    try:
+        has_text = bool(page.get_text("text").strip())
+    except Exception:
+        has_text = False
+
+    dpi = dpi_fast if has_text else (dpi_scan if page.rect.width < 600 else dpi_fast)
+    zoom = dpi / 72
 
     try:
-        # Render page to high-quality image
-        zoom = dpi / 72
         pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom), alpha=False)
         img = Image.open(io.BytesIO(pix.pil_tobytes(format="PNG")))
     except Exception as e:
         print(f"⚠️  Failed to render page {page.number + 1} for OCR: {e}", file=sys.stderr)
         return ""
-    
-    if USE_TESSERACT:
-        text = pytesseract.image_to_string(img)
-    else:
-        text = ocr_with_llm(img, page.number)         
-     
 
+    text = pytesseract.image_to_string(img) if USE_TESSERACT else ocr_with_llm(img, page.number)
     return text.strip()
       
     
@@ -476,7 +482,12 @@ def extract_pdf_content(pdf_path: str,
                 page_text += visual_content
         
         pages_text.append(page_text)
-        
+        try:
+            del pix, img, vector_img
+        except NameError:
+            pass
+        del page
+        gc.collect()
         # Progress indicator
         if (i + 1) % 10 == 0:
             print(f"  Processed {i + 1}/{total_pages} pages...", file=sys.stderr)
