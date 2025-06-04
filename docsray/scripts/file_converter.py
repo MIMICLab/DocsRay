@@ -84,8 +84,8 @@ class FileConverter:
         '.odt': 'OpenDocument Text',
         '.ods': 'OpenDocument Spreadsheet',
         '.odp': 'OpenDocument Presentation',
-        #'.hwp': 'Hangul Word Processor',
-        #'.hwpx': 'Hangul Word Processor (OOXML)',
+        '.hwp': 'Hangul Word Processor',
+        '.hwpx': 'Hangul Word Processor (OOXML)',
 
 
         # Text formats
@@ -166,11 +166,11 @@ class FileConverter:
             return self._convert_excel_to_pdf(input_file, output_path)
         elif file_ext in ['.pptx', '.ppt']:
             return self._convert_ppt_to_pdf(input_file, output_path)
-        #elif file_ext in ['.hwp', '.hwpx']:
-        #    if HAS_HWP5:
-        #        return self._convert_hwp_to_pdf_with_hwp5(input_file, output_path)
-        #    else:
-        #        return self._convert_hwp_to_pdf(input_file, output_path)
+        elif file_ext in ['.hwp', '.hwpx']:
+            if HAS_HWP5:
+                return self._convert_hwp_to_pdf_with_hwp5(input_file, output_path)
+            else:
+                return self._convert_hwp_to_pdf(input_file, output_path)
         elif file_ext in ['.odt', '.ods', '.odp']:
             if HAS_PANDOC:
                 return self._convert_with_pandoc(input_file, output_path)

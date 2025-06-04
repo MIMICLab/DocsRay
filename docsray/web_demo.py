@@ -789,7 +789,7 @@ def get_supported_formats() -> str:
     
     # Group by category
     categories = {
-        "Office Documents": ['.docx', '.doc', '.xlsx', '.xls', '.pptx', '.ppt', '.odt', '.ods', '.odp'],
+        "Office Documents": ['.docx', '.doc', '.xlsx', '.xls', '.pptx', '.ppt', '.odt', '.ods', '.odp', 'hwp', 'hwpx'],
         "Text Files": ['.txt', '.md', '.rst', '.rtf'],
         "Web Files": ['.html', '.htm', '.xml'],
         "Images": ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.tif', '.webp'],
@@ -851,6 +851,7 @@ try:
                         file_types=[
                             ".pdf", 
                             ".docx", ".doc", 
+                            ".hwpx", ".hwp",
                             ".xlsx", ".xls", 
                             ".pptx", ".ppt",
                             ".txt", ".md", ".rtf", ".rst",
