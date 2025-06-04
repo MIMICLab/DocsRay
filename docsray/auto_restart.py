@@ -14,6 +14,14 @@ from datetime import datetime
 import signal
 import socket
 import errno
+import shutil
+
+try:
+    import psutil  # pure‑Python, fallback when lsof is absent
+except ImportError:
+    psutil = None
+
+USE_LSOF = shutil.which("lsof") is not None
 # --- Watchdog settings ---
 PROCESS_WATCHDOG_TIMEOUT = 600  # Seconds with no child activity → force kill
 
@@ -50,22 +58,41 @@ def get_port_from_args(cmd: list, default: int = 44665) -> int:
 
 
 def kill_port_holders(port: int):
-    """SIGKILL any process that still holds <port>."""
-    try:
-        # 'lsof -t -i:<port>' returns list of PIDs
-        out = subprocess.check_output(
-            ["lsof", "-t", f"-i:{port}"], text=True
-        ).strip()
-        if not out:
+    """
+    Ensure <port> is free.
+    1) Prefer 'lsof' if available (POSIX fast path).
+    2) Fallback to psutil if lsof is missing.
+    """
+    # --- Fast path: lsof ---
+    if USE_LSOF:
+        try:
+            out = subprocess.check_output(
+                ["lsof", "-t", f"-i:{port}"], text=True
+            ).strip()
+            for pid in out.splitlines():
+                try:
+                    os.kill(int(pid), signal.SIGKILL)
+                except ProcessLookupError:
+                    continue
+        except subprocess.CalledProcessError:
+            # lsof returns non‑zero if no process found
             return
-        for pid in out.splitlines():
-            try:
-                os.kill(int(pid), signal.SIGKILL)
-            except ProcessLookupError:
-                pass
-    except subprocess.CalledProcessError:
-        # lsof returns non‑zero if no process is found
-        pass
+        except FileNotFoundError:
+            # Should not happen because we checked, but continue to psutil
+            pass
+
+    # --- Fallback: psutil ---
+    if psutil is None:
+        return  # No way to inspect ports on this platform
+
+    for proc in psutil.process_iter(attrs=["pid", "connections"]):
+        try:
+            for conn in proc.info["connections"]:
+                if conn.status == psutil.CONN_LISTEN and conn.laddr.port == port:
+                    os.kill(proc.info["pid"], signal.SIGKILL)
+                    break
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            continue
 
 class SimpleServiceMonitor:
     """Simple but working service monitor"""
