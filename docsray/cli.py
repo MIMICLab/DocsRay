@@ -78,7 +78,7 @@ Examples:
     web_parser.add_argument("--port", type=int, default=44665, help="Port number")
     web_parser.add_argument("--host", default="0.0.0.0", help="Host address")
     web_parser.add_argument("--timeout", type=int, default=120, 
-                           help="PDF processing timeout in seconds (default: 300)")
+                           help="PDF processing timeout in seconds (default: 120)")
     web_parser.add_argument("--pages", type=int, default=5, 
                            help="Maximum pages to process per PDF (default: 5)")
     web_parser.add_argument("--auto-restart", action="store_true", 
@@ -126,11 +126,11 @@ Examples:
     elif args.command == "mcp":
         if args.auto_restart:
             # Use auto-restart wrapper
-            from docsray.auto_restart import SimpleServiceMonitor  # 클래스 이름 수정!
+            from docsray.auto_restart import SimpleServiceMonitor
             
             cmd = [sys.executable, "-m", "docsray.mcp_server"]
-            
-            monitor = SimpleServiceMonitor(  # 클래스 이름 수정!
+            os.environ["DOCSRAY_AUTO_RESTART"] = "1"  # Tell child processes we're under auto‑restart
+            monitor = SimpleServiceMonitor(
                 service_name="DocsRay MCP",
                 command_args=cmd,
                 max_retries=args.max_retries,
@@ -138,7 +138,7 @@ Examples:
             )
             
             try:
-                monitor.run()  # monitor_loop() 대신 run() 사용!
+                monitor.run()
             except KeyboardInterrupt:
                 print("\n🛑 MCP Server stopped by user")
         else:
@@ -150,11 +150,11 @@ Examples:
     elif args.command == "web":
         if args.auto_restart:
             # Use auto-restart wrapper
-            from docsray.auto_restart import SimpleServiceMonitor  # 클래스 이름 수정!
+            from docsray.auto_restart import SimpleServiceMonitor
             
             # Build command for web service
             cmd = [sys.executable, "-m", "docsray.web_demo"]
-            
+            os.environ["DOCSRAY_AUTO_RESTART"] = "1"
             if args.port != 44665:
                 cmd.extend(["--port", str(args.port)])
             if args.host != "0.0.0.0":
@@ -166,7 +166,7 @@ Examples:
             if args.pages != 5:
                 cmd.extend(["--pages", str(args.pages)])
                 
-            monitor = SimpleServiceMonitor(  # 클래스 이름 수정!
+            monitor = SimpleServiceMonitor(
                 service_name="DocsRay Web",
                 command_args=cmd,
                 max_retries=args.max_retries,
@@ -178,7 +178,7 @@ Examples:
             print(f"⏱️  Retry delay: {args.retry_delay} seconds")
             
             try:
-                monitor.run()  # monitor_loop() 대신 run() 사용!
+                monitor.run()
             except KeyboardInterrupt:
                 print("\n🛑 Web Interface stopped by user")
         else:

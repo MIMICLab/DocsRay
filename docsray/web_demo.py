@@ -39,7 +39,29 @@ logging.basicConfig(
         logging.StreamHandler(sys.stdout)
     ]
 )
+
 logger = logging.getLogger(__name__)
+
+# --- Liveness watchdog variables ---
+LAST_ACTIVITY = time.time()           # Timestamp of last successful UI update
+HEALTH_TIMEOUT = 180                  # Seconds of silence → watchdog restart
+
+def safe_progress(cb, pct, msg):
+    """
+    Wrapper around Gradio progress callbacks that
+    (1) updates global liveness,
+    (2) swallows BrokenPipeError if the browser tab closed,
+    (3) triggers auto‑recovery on lost connection.
+    """
+    global LAST_ACTIVITY
+    LAST_ACTIVITY = time.time()
+    if cb is None:
+        return
+    try:
+        cb(pct, msg)
+    except Exception:
+        logger.error("Progress callback lost – BrokenPipe?")
+        ErrorRecoveryMixin.trigger_recovery("broken_pipe")
 
 # Create a temporary directory for this session
 TEMP_DIR = Path(tempfile.gettempdir()) / "docsray_web"
@@ -50,7 +72,7 @@ SESSION_TIMEOUT = 86400
 PAGE_LIMIT = 5
 PDF_PROCESS_TIMEOUT = 120 
 # Error recovery settings
-MAX_MEMORY_PERCENT = 85  # Restart if memory usage exceeds this
+MAX_MEMORY_PERCENT = 75  # Restart if memory usage exceeds this
 ERROR_THRESHOLD = 1  # Number of errors before restart
 ERROR_WINDOW = 10 # Time window for error counting 
 
@@ -136,6 +158,8 @@ class ErrorRecoveryMixin:
             if os.environ.get('DOCSRAY_AUTO_RESTART') == '1':
                 logger.info("Running under auto-restart wrapper, requesting restart...")
                 # Exit with code 42 to signal restart request
+                logging.shutdown()
+                time.sleep(0.1)
                 os._exit(42)
             else:
                 logger.warning("Not running under auto-restart wrapper")
@@ -151,10 +175,14 @@ class ErrorRecoveryMixin:
                 
                 # If all else fails, exit and let systemd or user restart
                 logger.error("Please restart manually or use: docsray web --auto-restart")
+                logging.shutdown()
+                time.sleep(0.1)
                 os._exit(42)
                 
         except Exception as e:
             logger.error(f"Error during recovery: {e}")
+            logging.shutdown()
+            time.sleep(0.1)
             os._exit(42)
     
     @staticmethod
@@ -183,6 +211,10 @@ def memory_monitor():
     while True:
         try:
             ErrorRecoveryMixin.check_memory()
+            # Watchdog: restart if no UI activity for HEALTH_TIMEOUT seconds
+            if time.time() - LAST_ACTIVITY > HEALTH_TIMEOUT:
+                logger.error("Health watchdog timeout, triggering recovery.")
+                ErrorRecoveryMixin.trigger_recovery("health_timeout")
             time.sleep(30)  # Check every 30 seconds
         except Exception as e:
             logger.error(f"Memory monitor error: {e}")
@@ -425,8 +457,7 @@ def process_document_with_timeout(file_path: str, session_dir: Path, analyze_vis
     file_name = Path(file_path).name
     
     # Progress: Starting
-    if progress_callback is not None:
-        progress_callback(0.1, f"📄 Starting to process: {file_name}")
+    safe_progress(progress_callback, 0.1, f"📄 Starting to process: {file_name}")
     
     # Create a thread pool for timeout handling
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
@@ -448,11 +479,11 @@ def process_document_with_timeout(file_path: str, session_dir: Path, analyze_vis
                 f"💡 Try with a smaller document or disable visual analysis"
             )
 
-            if progress_callback is not None:
-                progress_callback(1.0, error_msg)
+            safe_progress(progress_callback, 1.0, error_msg)
 
             logger.error(f"PDF processing timeout for {file_name} after {elapsed_time:.1f}s")
             gc.collect()
+            ErrorRecoveryMixin.trigger_recovery("timeout")
             raise ProcessingTimeoutError(error_msg)
         
 
@@ -472,16 +503,15 @@ def _do_process_document(file_path: str, session_dir: Path, analyze_visuals: boo
             if analyze_visuals:
                 status_msg += " (with visual analysis)"
                 # Only apply page_limit if it's greater than 0
-                # Only apply page_limit if it's greater than 0
                 if PAGE_LIMIT > 0:
                     extract_kwargs["page_limit"] = PAGE_LIMIT
                     status_msg += f"\n📄 Processing first {PAGE_LIMIT} pages"
                 else:
-                    status_msg += "\n📄 Processing all pages"     
-            progress_callback(0.2, status_msg)            
-                   
+                    status_msg += "\n📄 Processing all pages"
+            safe_progress(progress_callback, 0.2, status_msg)
+
         extracted = pdf_extractor.extract_content(file_path, **extract_kwargs)
-        
+
         # Create chunks
         if progress_callback is not None:
             progress_msg = "✂️ Creating text chunks..."
@@ -489,67 +519,67 @@ def _do_process_document(file_path: str, session_dir: Path, analyze_visuals: boo
             elapsed = time.time() - start_time
             if elapsed > 10:  # Show elapsed time after 10 seconds
                 progress_msg += f" ({elapsed:.0f}s elapsed)"
-            progress_callback(0.4, progress_msg)
-        
+            safe_progress(progress_callback, 0.4, progress_msg)
+
         chunks = chunker.process_extracted_file(extracted)
-        
+
         # Build search index
         if progress_callback is not None:
             progress_msg = "🔍 Building search index..."
             elapsed = time.time() - start_time
             if elapsed > 10:
                 progress_msg += f" ({elapsed:.0f}s elapsed)"
-            progress_callback(0.6, progress_msg)
-        
+            safe_progress(progress_callback, 0.6, progress_msg)
+
         chunk_index = build_index.build_chunk_index(chunks)
-        
+
         # Build section representations
         if progress_callback is not None:
             progress_msg = "📊 Building section representations..."
             elapsed = time.time() - start_time
             if elapsed > 10:
                 progress_msg += f" ({elapsed:.0f}s elapsed)"
-            progress_callback(0.8, progress_msg)
-        
+            safe_progress(progress_callback, 0.8, progress_msg)
+
         sections = section_rep_builder.build_section_reps(extracted["sections"], chunk_index)
-        
+
         # Save to session cache
         if progress_callback is not None:
-            progress_callback(0.9, "💾 Saving to cache...")
-        
+            safe_progress(progress_callback, 0.9, "💾 Saving to cache...")
+
         cache_data = {
             "sections": sections,
             "chunk_index": chunk_index,
             "filename": file_name,
             "metadata": extracted.get("metadata", {})
         }
-        
+
         # Save with pickle for better performance
         cache_file = session_dir / f"{Path(file_path).stem}_cache.pkl"
         with open(cache_file, "wb") as f:
             pickle.dump(cache_data, f)
-        
+
         # Calculate processing time
         elapsed_time = time.time() - start_time
-        
+
         # Create status message
         was_converted = extracted.get("metadata", {}).get("was_converted", False)
         original_format = extracted.get("metadata", {}).get("original_format", "")
-        
+
         msg = f"✅ Successfully processed: {file_name}\n"
         if was_converted:
             msg += f"🔄 Converted from {original_format.upper()} to PDF\n"
         msg += f"📑 Sections: {len(sections)}\n"
         msg += f"🔍 Chunks: {len(chunks)}\n"
         msg += f"⏱️ Processing time: {elapsed_time:.1f} seconds"
-        
+
         # Add info about what limits were applied
         if PAGE_LIMIT > 0:
             msg += f"\n📄 Processed first {PAGE_LIMIT} pages"
-        
+
         if progress_callback is not None:
-            progress_callback(1.0, "✅ Processing complete!")
-        
+            safe_progress(progress_callback, 1.0, "✅ Processing complete!")
+
         return sections, chunk_index, msg
         
     except Exception as e:
@@ -597,7 +627,7 @@ def load_document(file, analyze_visuals: bool, session_state: Dict, progress=gr.
     else:
         initial_message += "\n⚡ Visual analysis disabled (faster)"
     
-    progress(0.05, initial_message)
+    safe_progress(progress, 0.05, initial_message)
     shutil.copy(file.name, dest_path)
     
     try:
@@ -652,6 +682,7 @@ def load_document(file, analyze_visuals: bool, session_state: Dict, progress=gr.
 
         if isinstance(e, ProcessingTimeoutError):
             display_msg = str(e)
+            ErrorRecoveryMixin.trigger_recovery("timeout")
         else:
             display_msg = f"❌ Error processing document: {str(e)}"    
 
@@ -672,15 +703,13 @@ def ask_question(question: str, session_state: Dict, system_prompt: str, use_coa
         sections = current_doc["sections"]
         chunk_index = current_doc["chunk_index"]
         
-        if progress is not None:
-            progress(0.2, "🤔 Thinking about your question...")
+        safe_progress(progress, 0.2, "🤔 Thinking about your question...")
         
         # Create chatbot and get answer
         prompt = system_prompt or DEFAULT_SYSTEM_PROMPT
         chatbot = PDFChatBot(sections, chunk_index, system_prompt=prompt)
         
-        if progress is not None:
-            progress(0.5, "🔍 Searching relevant sections...")
+        safe_progress(progress, 0.5, "🔍 Searching relevant sections...")
         
         # Get answer
         answer_output, reference_output = chatbot.answer(
@@ -688,8 +717,7 @@ def ask_question(question: str, session_state: Dict, system_prompt: str, use_coa
             fine_only=not use_coarse
         )
         
-        if progress is not None:
-            progress(1.0, "✅ Answer ready!")
+        safe_progress(progress, 1.0, "✅ Answer ready!")
         
         return answer_output, reference_output
         

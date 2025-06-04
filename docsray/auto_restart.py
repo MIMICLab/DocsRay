@@ -11,6 +11,8 @@ import os
 from pathlib import Path
 import logging
 from datetime import datetime
+# --- Watchdog settings ---
+PROCESS_WATCHDOG_TIMEOUT = 600  # Seconds with no child activity → force kill
 
 # Setup logging
 log_dir = Path.home() / ".docsray" / "logs"
@@ -61,8 +63,30 @@ class SimpleServiceMonitor:
                     env=env
                 )
                 
-                # Wait for it to finish
-                exit_code = process.wait()
+                # --- Wait with watchdog ---
+                start_ts = time.time()
+                exit_code = None
+                while True:
+                    exit_code = process.poll()
+                    if exit_code is not None:
+                        # Child exited normally or via os._exit
+                        break
+
+                    # Hung‑process watchdog
+                    if time.time() - start_ts > PROCESS_WATCHDOG_TIMEOUT:
+                        self.logger.error("Watchdog timeout – child appears hung, terminating…")
+                        process.terminate()
+                        try:
+                            exit_code = process.wait(timeout=10)
+                        except subprocess.TimeoutExpired:
+                            self.logger.error("Graceful terminate failed – killing…")
+                            process.kill()
+                            exit_code = process.wait(timeout=5)
+                        # Mark forced kill with special code
+                        exit_code = 99
+                        break
+
+                    time.sleep(5)
                 
                 self.logger.info(f"{self.service_name} exited with code: {exit_code}")
                 
@@ -75,6 +99,10 @@ class SimpleServiceMonitor:
                     # Restart requested
                     self.logger.info("Service requested restart")
                     self.retry_count = 0  # Reset retry count
+                elif exit_code == 99:
+                    # Forced kill because watchdog detected a hang
+                    self.logger.error("Service hung – watchdog forced termination (code 99)")
+                    self.retry_count += 1
                 else:
                     # Crash
                     self.logger.error(f"Service crashed with exit code {exit_code}")
