@@ -301,14 +301,22 @@ def configure_claude_desktop():
     config = {
         "mcpServers": {
             "docsray": {
-                "command": sys.executable,  # Current Python interpreter
+                "command": sys.executable,
                 "args": [str(mcp_server_path)],
                 "cwd": str(docsray_path.parent),
-                "timeout": 1800000,  # 30 minutes
+                "timeout": 1800000,  # 밀리초
+                "env": {
+                    "PYTHONUNBUFFERED": "1",
+                    "MCP_TIMEOUT": "1800"  # 초
+                },
+                # 추가 옵션들
+                "stdio": {
+                    "readTimeout": 1800000,  # 밀리초
+                    "writeTimeout": 1800000
+                }
             }
         }
     }
-    
     # Ensure directory exists
     try:
         config_path.parent.mkdir(parents=True, exist_ok=True)
