@@ -11,8 +11,6 @@ from pathlib import Path
 from typing import Optional, Tuple
 
 import pypandoc
-from pypandoc.pandoc_download import download_pandoc
-download_pandoc()
 
 from PIL import Image
 
@@ -197,6 +195,8 @@ class FileConverter:
             Tuple of (success: bool, output_path_or_error: str)
         """
         input_file = Path(input_path)
+        from pypandoc.pandoc_download import download_pandoc
+        download_pandoc()
         
         # Check if file exists
         if not input_file.exists():
