@@ -19,11 +19,11 @@ pip install docsray
 # 1-1. Tesseract OCR (optional)
 # For faster OCR, install Tesseract with appropriate language pack.
 
-pip install pytesseract
-sudo apt-get install tesseract-ocr   # Debian/Ubuntu
-sudo apt-get install tesseract-ocr-kor
-brew install tesseract-ocr   # MacOS
-brew install tesseract-ocr-kor
+#pip install pytesseract
+#sudo apt-get install tesseract-ocr   # Debian/Ubuntu
+#sudo apt-get install tesseract-ocr-kor
+#brew install tesseract-ocr   # MacOS
+#brew install tesseract-ocr-kor
 
 # 2. Download required models (approximately 8GB)
 docsray download-models
@@ -60,17 +60,9 @@ DocsRay now automatically converts various document formats to PDF for processin
 - Microsoft Word (.docx, .doc)
 - Microsoft Excel (.xlsx, .xls)
 - Microsoft PowerPoint (.pptx, .ppt)
-- OpenDocument formats (.odt, .ods, .odp)
 
 **Text Formats**
 - Plain Text (.txt)
-- Markdown (.md)
-- Rich Text Format (.rtf)
-- reStructuredText (.rst)
-
-**Web Formats**
-- HTML (.html, .htm)
-- XML (.xml)
 
 **Image Formats**
 - JPEG (.jpg, .jpeg)
@@ -79,10 +71,6 @@ DocsRay now automatically converts various document formats to PDF for processin
 - BMP (.bmp)
 - TIFF (.tiff, .tif)
 - WebP (.webp)
-
-**E-book Formats**
-- EPUB (.epub)
-- MOBI (.mobi)
 
 ### Automatic Conversion
 Simply load any supported file type, and DocsRay will:
