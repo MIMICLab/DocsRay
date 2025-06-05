@@ -11,8 +11,10 @@ from pathlib import Path
 from typing import Optional, Tuple
 
 import pypandoc
+from pypandoc.pandoc_download import download_pandoc
+download_pandoc()
+
 from PIL import Image
-from docx2pdf import convert as docx2pdf_convert
 
 import pdfkit
 
