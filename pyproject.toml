@@ -39,9 +39,6 @@ docsray = "docsray.cli:main"
 requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
-[tool.setuptools]
-packages = ["docsray"]
-include-package-data = true
-
-[tool.setuptools.package-data]
-docsray = ["data/*"]
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["docsray*"]
