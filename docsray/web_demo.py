@@ -795,11 +795,11 @@ def get_supported_formats() -> str:
         "PDF": ['.pdf']
     }
     
-    info = "📄 **Supported File Formats:**\n\n"
+    info = ""
     for category, extensions in categories.items():
         supported_exts = [ext for ext in extensions if ext in formats or ext == '.pdf']
         if supported_exts:
-            info += f"**{category}:** {', '.join(supported_exts)}\n"
+            info += f"**{category}:** {', '.join(supported_exts)}\n\n"
 
     return info
 
