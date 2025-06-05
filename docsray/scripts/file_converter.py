@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import Optional, Tuple
 
 import pypandoc
+from pypandoc.pandoc_download import download_pandoc
+
 
 from PIL import Image
 
@@ -195,8 +197,6 @@ class FileConverter:
             Tuple of (success: bool, output_path_or_error: str)
         """
         input_file = Path(input_path)
-        from pypandoc.pandoc_download import download_pandoc
-        download_pandoc()
         
         # Check if file exists
         if not input_file.exists():
@@ -388,29 +388,30 @@ class FileConverter:
             print(f"[Error] {error_msg}", file=sys.stderr)
             return False, error_msg
 
-       
     def _convert_docx_to_pdf(self, input_file: Path, output_file: Path) -> Tuple[bool, str]:
-        """Convert DOCX to PDF using only Pandoc"""
+        """Convert DOCX to PDF using pypandoc"""
         try:
             import subprocess
             
-            # Create temp directory for extracted images
+            # Ensure pandoc is downloaded
+            pypandoc.ensure_pandoc_installed()
+            
+            # Create temp directory
             temp_dir = output_file.parent / f"temp_{input_file.stem}"
             temp_dir.mkdir(exist_ok=True)
             
-            # Extract text using pandoc
-            result = subprocess.run([
-                'pandoc', str(input_file), '-t', 'plain'
-            ], capture_output=True, text=True)
+            # Extract text using pypandoc
+            try:
+                full_text = pypandoc.convert_file(str(input_file), 'plain')
+            except Exception as e:
+                return False, f"Pandoc text extraction failed: {str(e)}"
             
-            if result.returncode != 0:
-                return False, f"Pandoc text extraction failed: {result.stderr}"
+            # Extract images - still need subprocess for this
+            # Get pandoc path from pypandoc
+            pandoc_path = pypandoc.get_pandoc_path()
             
-            full_text = result.stdout
-            
-            # Extract images using pandoc
             subprocess.run([
-                'pandoc', str(input_file),
+                pandoc_path, str(input_file),
                 '-t', 'markdown',
                 '-o', str(temp_dir / 'dummy.md'),
                 '--extract-media', str(temp_dir)
@@ -421,7 +422,7 @@ class FileConverter:
             media_dir = temp_dir / "media"
             if media_dir.exists():
                 for img_file in media_dir.rglob('*'):
-                    if img_file.suffix.lower() in ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg', '.emf', '.wmf']:
+                    if img_file.suffix.lower() in ['.png', '.jpg', '.jpeg', '.gif', '.bmp']:
                         image_files.append(str(img_file))
             
             # Use Korean PDF function
@@ -434,8 +435,6 @@ class FileConverter:
             else:
                 return False, "Failed to save PDF"
                 
-        except subprocess.CalledProcessError as e:
-            return False, f"Pandoc error: {e.stderr if e.stderr else str(e)}"
         except Exception as e:
             return False, f"DOCX conversion error: {str(e)}"
 
