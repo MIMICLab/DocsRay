@@ -379,240 +379,152 @@ class FileConverter:
 
        
     def _convert_docx_to_pdf(self, input_file: Path, output_file: Path) -> Tuple[bool, str]:
-        """Convert DOCX to PDF"""
+        """Convert DOCX to PDF using only Pandoc"""
         try:
-            pypandoc.convert_file(str(input_file), 'pdf', outputfile=str(output_file))
-            return True, str(output_file)
-        except Exception as e:
-            print(f"Pandoc conversion failed: {e}", file=sys.stderr)
-            return False, e
-
-    def _convert_excel_to_pdf(self, input_file: Path, output_file: Path) -> Tuple[bool, str]:
-        """Convert Excel to PDF using pypandoc"""
-        try:
-            # Convert Excel to PDF via pandoc
-            pypandoc.convert_file(
-                str(input_file), 
-                'pdf', 
-                outputfile=str(output_file),
-                extra_args=['--pdf-engine=xelatex']  # xelatex handles Unicode better
-            )
-            return True, str(output_file)
+            import subprocess
             
-        except ImportError:
-            return False, "Please install pypandoc: pip install pypandoc"
-        except Exception as e:
-            # Fallback to pandas if pypandoc fails
-            try:
-                # Read Excel file
-                excel_file = pd.ExcelFile(input_file)
-                
-                # Convert to HTML first
-                html_content = "<html><head><meta charset='utf-8'></head><body>"
-                
-                for sheet_name in excel_file.sheet_names:
-                    df = excel_file.parse(sheet_name)
-                    html_content += f"<h2>Sheet: {sheet_name}</h2>"
-                    html_content += df.to_html(index=False, escape=False)
-                    html_content += "<br><br>"
-                
-                html_content += "</body></html>"
-                
-                # Convert HTML to PDF using pypandoc
-                pypandoc.convert_text(
-                    html_content,
-                    'pdf',
-                    format='html',
-                    outputfile=str(output_file),
-                    extra_args=['--pdf-engine=xelatex', '--variable=mainfont:NanumGothic']
-                )
+            # Create temp directory for extracted images
+            temp_dir = output_file.parent / f"temp_{input_file.stem}"
+            temp_dir.mkdir(exist_ok=True)
+            
+            # Extract text using pandoc
+            result = subprocess.run([
+                'pandoc', str(input_file), '-t', 'plain'
+            ], capture_output=True, text=True)
+            
+            if result.returncode != 0:
+                return False, f"Pandoc text extraction failed: {result.stderr}"
+            
+            full_text = result.stdout
+            
+            # Extract images using pandoc
+            subprocess.run([
+                'pandoc', str(input_file),
+                '-t', 'markdown',
+                '-o', str(temp_dir / 'dummy.md'),
+                '--extract-media', str(temp_dir)
+            ], capture_output=True)
+            
+            # Find extracted images
+            image_files = []
+            media_dir = temp_dir / "media"
+            if media_dir.exists():
+                for img_file in media_dir.rglob('*'):
+                    if img_file.suffix.lower() in ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg', '.emf', '.wmf']:
+                        image_files.append(str(img_file))
+            
+            # Use Korean PDF function
+            if _save_text_images_to_pdf_korean(full_text, image_files, output_file):
+                # Cleanup
+                import shutil
+                if temp_dir.exists():
+                    shutil.rmtree(temp_dir)
                 return True, str(output_file)
+            else:
+                return False, "Failed to save PDF"
                 
-            except Exception as e2:
-                return False, f"Excel conversion error: {str(e)} / {str(e2)}"
+        except subprocess.CalledProcessError as e:
+            return False, f"Pandoc error: {e.stderr if e.stderr else str(e)}"
+        except Exception as e:
+            return False, f"DOCX conversion error: {str(e)}"
 
     def _convert_excel_to_pdf(self, input_file: Path, output_file: Path) -> Tuple[bool, str]:
-        """Convert Excel to PDF using openpyxl and reportlab"""
+        """Convert Excel to PDF using openpyxl"""
         try:
             import openpyxl
-            from reportlab.lib import colors
-            from reportlab.lib.pagesizes import A4, landscape
-            from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-            from reportlab.lib.styles import getSampleStyleSheet
-            from reportlab.lib.units import inch
             
             # Load Excel file
             wb = openpyxl.load_workbook(input_file, data_only=True)
             
-            # Create PDF
-            doc = SimpleDocTemplate(str(output_file), pagesize=landscape(A4))
-            story = []
-            styles = getSampleStyleSheet()
+            # Extract all text content
+            full_text = ""
             
-            # Process each sheet
             for sheet_name in wb.sheetnames:
                 sheet = wb[sheet_name]
-                
-                # Add sheet title
-                story.append(Paragraph(f"Sheet: {sheet_name}", styles['Heading1']))
-                story.append(Spacer(1, 0.2*inch))
+                full_text += f"=== Sheet: {sheet_name} ===\n\n"
                 
                 # Extract data from sheet
-                data = []
-                max_row = min(sheet.max_row, 1000)  # Limit rows to prevent memory issues
-                max_col = min(sheet.max_column, 20)  # Limit columns
+                for row in sheet.iter_rows(values_only=True):
+                    row_text = "\t".join([str(cell) if cell is not None else '' for cell in row])
+                    if row_text.strip():
+                        full_text += row_text + "\n"
                 
-                for row in sheet.iter_rows(min_row=1, max_row=max_row, max_col=max_col, values_only=True):
-                    # Convert None to empty string and everything to string
-                    row_data = [str(cell) if cell is not None else '' for cell in row]
-                    if any(row_data):  # Skip completely empty rows
-                        data.append(row_data)
+                full_text += "\n\n"
+            
+            images = []
+
+            if _save_text_images_to_pdf_korean(full_text.strip(), images, output_file):
+                return True, str(output_file)
+            else:
+                return False, "Failed to save PDF"
                 
-                if data:
-                    # Create table
-                    try:
-                        # Calculate column widths dynamically
-                        col_widths = [1.5*inch] * len(data[0]) if data else []
-                        
-                        table = Table(data, colWidths=col_widths)
-                        
-                        # Add style to table
-                        table_style = TableStyle([
-                            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-                            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-                            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-                            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                            ('FONTSIZE', (0, 0), (-1, 0), 10),
-                            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-                            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-                            ('GRID', (0, 0), (-1, -1), 1, colors.black),
-                        ])
-                        
-                        table.setStyle(table_style)
-                        story.append(table)
-                        story.append(Spacer(1, 0.5*inch))
-                    except Exception as e:
-                        # If table creation fails, add data as text
-                        for row in data[:100]:  # Limit to first 100 rows
-                            text = ' | '.join(row)
-                            story.append(Paragraph(text, styles['Normal']))
-                        story.append(Spacer(1, 0.2*inch))
-            
-            # Build PDF
-            doc.build(story)
-            return True, str(output_file)
-            
         except ImportError:
-            return False, "Please install openpyxl and reportlab: pip install openpyxl reportlab"
+            return False, "Please install openpyxl: pip install openpyxl"
         except Exception as e:
             return False, f"Excel conversion error: {str(e)}"
-    
+
     def _convert_ppt_to_pdf(self, input_file: Path, output_file: Path) -> Tuple[bool, str]:
-        """Convert PowerPoint to PDF using python-pptx and reportlab"""
+        """Convert PowerPoint to PDF using python-pptx"""
         try:
             from pptx import Presentation
-            from reportlab.pdfgen import canvas
-            from reportlab.lib.pagesizes import A4, landscape
             from PIL import Image
             import io
             
             # Load PowerPoint file
             prs = Presentation(str(input_file))
             
-            # Create PDF
-            c = canvas.Canvas(str(output_file), pagesize=landscape(A4))
-            width, height = landscape(A4)
+            # Extract text and images
+            full_text = ""
+            image_paths = []
+            temp_dir = output_file.parent / f"temp_{input_file.stem}"
+            temp_dir.mkdir(exist_ok=True)
             
             for slide_num, slide in enumerate(prs.slides):
-                if slide_num > 0:
-                    c.showPage()
-                
-                # Add slide number
-                c.setFont("Helvetica-Bold", 16)
-                c.drawString(50, height - 50, f"Slide {slide_num + 1}")
-                
-                y_position = height - 100
+                full_text += f"=== Slide {slide_num + 1} ===\n\n"
                 
                 # Extract text from slide
                 for shape in slide.shapes:
                     if hasattr(shape, "text") and shape.text:
-                        c.setFont("Helvetica", 12)
-                        
-                        # Handle text that might be too long
-                        text = shape.text.strip()
-                        lines = text.split('\n')
-                        
-                        for line in lines:
-                            if y_position < 50:
-                                break
-                                
-                            # Wrap long lines
-                            if len(line) > 80:
-                                words = line.split()
-                                current_line = ""
-                                for word in words:
-                                    if len(current_line + word) < 80:
-                                        current_line += word + " "
-                                    else:
-                                        c.drawString(50, y_position, current_line.strip())
-                                        y_position -= 20
-                                        current_line = word + " "
-                                if current_line:
-                                    c.drawString(50, y_position, current_line.strip())
-                                    y_position -= 20
-                            else:
-                                c.drawString(50, y_position, line)
-                                y_position -= 20
-                        
-                        y_position -= 10  # Extra space between shapes
+                        full_text += shape.text.strip() + "\n\n"
                     
-                    # Handle images (basic support)
+                    # Extract images
                     if shape.shape_type == 13:  # Picture
                         try:
                             image = shape.image
                             image_bytes = image.blob
                             img = Image.open(io.BytesIO(image_bytes))
                             
-                            # Save temporary image
-                            temp_img = output_file.parent / f"temp_img_{slide_num}_{shape.shape_id}.png"
-                            img.save(temp_img)
-                            
-                            # Add to PDF (simplified positioning)
-                            if y_position > 200:
-                                c.drawImage(str(temp_img), 50, y_position - 150, width=200, height=150)
-                                y_position -= 160
-                            
-                            # Clean up
-                            temp_img.unlink()
+                            # Save image
+                            img_path = temp_dir / f"slide_{slide_num}_img_{shape.shape_id}.png"
+                            img.save(img_path)
+                            image_paths.append(str(img_path))
                         except:
                             pass
                 
-                # Handle tables
+                # Extract tables
                 for shape in slide.shapes:
                     if shape.has_table:
-                        y_position -= 20
-                        c.setFont("Helvetica", 10)
-                        c.drawString(50, y_position, "[Table]")
-                        y_position -= 15
-                        
+                        full_text += "[Table]\n"
                         table = shape.table
                         for row in table.rows:
                             row_text = " | ".join([cell.text for cell in row.cells])
-                            if len(row_text) > 80:
-                                row_text = row_text[:77] + "..."
-                            c.drawString(50, y_position, row_text)
-                            y_position -= 15
-                            if y_position < 50:
-                                break
+                            full_text += row_text + "\n"
+                        full_text += "\n"
+                
+                full_text += "\n"
             
-            c.save()
-            return True, str(output_file)
-            
+            if _save_text_images_to_pdf_korean(full_text.strip(), image_paths, output_file):
+                # Cleanup temp directory
+                import shutil
+                shutil.rmtree(temp_dir)
+                return True, str(output_file)
+            else:
+                return False, "Failed to save PDF"
+                
         except ImportError:
             return False, "Please install python-pptx and pillow: pip install python-pptx pillow"
         except Exception as e:
             return False, f"PowerPoint conversion error: {str(e)}"
-
             
     def _convert_text_to_pdf(self, input_file: Path, output_file: Path) -> Tuple[bool, str]:
         """Convert plain text to PDF"""
@@ -809,25 +721,52 @@ class FileConverter:
         except Exception as e:
             return False, f"Image conversion failed: {e}"
     
-    def _convert_with_pandoc(self, input_file: Path, output_file: Path) -> Tuple[bool, str]:
-        """Try to convert using pandoc as fallback"""
+    def _convert_with_pandoc_simple(self, input_file: Path, output_file: Path) -> Tuple[bool, str]:
+        """Convert documents using Pandoc without LaTeX"""
         try:
-            pypandoc.convert_file(str(input_file), 'pdf', outputfile=str(output_file))
-            return True, str(output_file)
+            import subprocess
+            
+            # Create temp directory for extracted images
+            temp_dir = output_file.parent / f"temp_{input_file.stem}"
+            temp_dir.mkdir(exist_ok=True)
+            
+            # Extract text
+            result = subprocess.run([
+                'pandoc', str(input_file), '-t', 'plain'
+            ], capture_output=True, text=True)
+            
+            if result.returncode != 0:
+                return False, "Pandoc text extraction failed"
+            
+            full_text = result.stdout
+            
+            # Extract images
+            subprocess.run([
+                'pandoc', str(input_file),
+                '-t', 'markdown',
+                '-o', str(temp_dir / 'dummy.md'),
+                '--extract-media', str(temp_dir)
+            ], capture_output=True)
+            
+            # Find extracted images
+            image_files = []
+            media_dir = temp_dir / "media"
+            if media_dir.exists():
+                for img_file in media_dir.rglob('*'):
+                    if img_file.suffix.lower() in ['.png', '.jpg', '.jpeg', '.gif', '.bmp']:
+                        image_files.append(str(img_file))
+            
+            # 한글 지원 PDF 함수 사용
+            if _save_text_images_to_pdf_korean(full_text, image_files, output_file):
+                # Cleanup
+                import shutil
+                shutil.rmtree(temp_dir)
+                return True, str(output_file)
+            else:
+                return False, "Failed to save PDF"
+                
         except Exception as e:
-            return False, f"Pandoc conversion failed: {e}"
-
-    @classmethod
-    def get_supported_formats(cls) -> dict:
-        """Get dictionary of supported formats"""
-        return cls.SUPPORTED_FORMATS.copy()
-    
-    @classmethod
-    def is_supported(cls, file_path: str) -> bool:
-        """Check if file format is supported"""
-        ext = Path(file_path).suffix.lower()
-        return ext in cls.SUPPORTED_FORMATS or ext == '.pdf'
-
+            return False, f"Conversion error: {str(e)}"
 
 def convert_file_to_pdf(input_path: str, output_dir: Optional[str] = None) -> Tuple[bool, str]:
     """
