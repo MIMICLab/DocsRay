@@ -58,6 +58,7 @@ min_available_gb = 8
 
 if not has_gpu:
     FAST_MODE = True
+    DISABLE_VISUAL_ANALYSIS = True
     MAX_TOKENS = MAX_TOKENS // 4
 else:
     if available_gb < min_available_gb * 2:
@@ -152,8 +153,6 @@ for model in ALL_MODELS:
 
 DISABLE_VISUAL_ANALYSIS = os.environ.get("DOCSRAY_DISABLE_VISUALS", "0") == "1"
 
-if FAST_MODE:
-    DISABLE_VISUAL_ANALYSIS = True
 
 if os.environ.get("DOCSRAY_DEBUG", "0") == "1":
     print(f"Current Device: {device_type}")
