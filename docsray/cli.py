@@ -309,7 +309,6 @@ def configure_claude_desktop():
                     "PYTHONUNBUFFERED": "1",
                     "MCP_TIMEOUT": "1800"  # sec
                 },
-                # 추가 옵션들
                 "stdio": {
                     "readTimeout": 1800000,  # ms
                     "writeTimeout": 1800000
