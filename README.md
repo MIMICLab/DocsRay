@@ -102,7 +102,7 @@ Automatically detects system resources and optimizes performance:
 
 | System Memory |    Mode   | OCR | Visual Analysis | Max Tokens |
 |--------------|------------|--------------|--------------|------------|
-|  CPU  | FAST (Q4) | ❌ | ✅ | 8K | 
+|  CPU  | FAST (Q4) | ✅ | ✅ | 8K | 
 | < 16GB | FAST (Q4) | ✅ | ✅ | 8K |
 | 16-24GB | STANDARD (Q8) | ✅ | ✅ | 16K |
 | > 24GB | FULL_FEATURE (F16) | ✅ | ✅  | 32K |
@@ -162,39 +162,6 @@ git clone https://github.com/MIMICLab/DocsRay.git
 cd DocsRay
 pip install -e .
 ```
-
-### GPU Support (Optional but Recommended)
-
-After installing DocsRay, you can enable GPU acceleration for better performance:
-
-```bash
-# For Metal (Apple Silicon)
-CMAKE_ARGS=-DLLAMA_METAL=on FORCE_CMAKE=1 pip install llama-cpp-python --force-reinstall --upgrade --no-cache-dir
-
-# For CUDA (NVIDIA)
-CMAKE_ARGS=-DGGML_CUDA=on FORCE_CMAKE=1 pip install llama-cpp-python --force-reinstall --upgrade --no-cache-dir
-```
-
-### File Conversion Dependencies (Optional)
-
-For best file conversion results, install system dependencies:
-
-```bash
-# Ubuntu/Debian
-sudo apt-get install libreoffice pandoc wkhtmltopdf
-
-# macOS
-brew install libreoffice pandoc wkhtmltopdf
-
-# Windows
-# Download and install:
-# - LibreOffice: https://www.libreoffice.org/download/
-# - Pandoc: https://pandoc.org/installing.html
-# - wkhtmltopdf: https://wkhtmltopdf.org/downloads.html
-```
-
-Python packages for conversion are included in the base installation, but system tools provide better results for complex documents.
-
 ## 🎯 Usage
 
 ### Command Line Interface
