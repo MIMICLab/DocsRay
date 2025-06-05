@@ -70,7 +70,7 @@ TEMP_DIR.mkdir(exist_ok=True)
 # Session timeout (24 hours)
 SESSION_TIMEOUT = 86400
 PAGE_LIMIT = 5
-PDF_PROCESS_TIMEOUT = 120 
+PDF_PROCESS_TIMEOUT = 180
 # Error recovery settings
 MAX_MEMORY_PERCENT = 90  # Restart if memory usage exceeds this
 ERROR_THRESHOLD = 1  # Number of errors before restart
