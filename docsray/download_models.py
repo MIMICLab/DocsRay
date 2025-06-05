@@ -37,11 +37,11 @@ def download_models():
 
         if model_path.exists():
             file_size = model_path.stat().st_size / (1024 * 1024)
-            print(f"✅ Already exists ({file_size:.1f} MB)")
+            print(f"✅ Already exists ({file_size:.1f} MB)", file=sys.stderr)
             continue
         
-        print(f"📥 Starting download: {model['file']}")
-        print(f"URL: {model['url']}")
+        print(f"📥 Starting download: {model['file']}", file=sys.stderr)
+        print(f"URL: {model['url']}", file=sys.stderr)
         
         # Create directory
         model["dir"].mkdir(parents=True, exist_ok=True)
@@ -52,37 +52,37 @@ def download_models():
                 str(model_path), 
                 reporthook=show_progress
             )
-            print(f"\n✅ Completed: {model['file']}")
+            print(f"\n✅ Completed: {model['file']}", file=sys.stderr)
             
             # Check file size
             file_size = model_path.stat().st_size / (1024 * 1024)
             print(f"   File size: {file_size:.1f} MB")
             
         except Exception as e:
-            print(f"\n❌ Failed: {model['file']}")
-            print(f"   Error: {e}")
+            print(f"\n❌ Failed: {model['file']}", file=sys.stderr)
+            print(f"   Error: {e}", file=sys.stderr)
             
             # Remove failed file
             if model_path.exists():
                 model_path.unlink()
             
-            print(f"   Manual download URL: {model['url']}")
-            print(f"   Save to: {model_path}")
+            print(f"   Manual download URL: {model['url']}", file=sys.stderr)
+            print(f"   Save to: {model_path}", file=sys.stderr)
             
             # Ask whether to continue
             response = input("   Continue downloading? (y/n): ")
             if response.lower() != 'y':
-                print("Download cancelled.")
+                print("Download cancelled.", file=sys.stderr)
                 sys.exit(1)
     
-    print("\n🎉 All model downloads completed!")
-    print("You can now use DocsRay!")
+    print("\n🎉 All model downloads completed!", file=sys.stderr)
+    print("You can now use DocsRay!", file=sys.stderr)
 
 def check_models():
     """Check the status of currently downloaded models"""
     
-    print("📋 Model Status Check:")
-    print(f"Base path: {MODEL_DIR}")
+    print("📋 Model Status Check:", file=sys.stderr)
+    print(f"Base path: {MODEL_DIR}", file=sys.stderr)
     
     total_size = 0
     available_models = []
@@ -98,26 +98,26 @@ def check_models():
         else:
             missing_models.append(model['file'])
     
-    print("\n📊 Available Models:")
+    print("\n📊 Available Models:", file=sys.stderr)
     for desc, size in available_models:
-        print(f"  ✅ {desc}: {size:.1f} MB")
+        print(f"  ✅ {desc}: {size:.1f} MB", file=sys.stderr)
     
     if missing_models:
-        print("\n❌ Missing Models:")
+        print("\n❌ Missing Models:", file=sys.stderr)
         for desc in missing_models:
-            print(f"  ❌ {desc}")
+            print(f"  ❌ {desc}", file=sys.stderr)
     
-    print("\n" + "="*50)
-    print(f"📈 Summary:")
+    print("\n" + "="*50, file=sys.stderr)
+    print(f"📈 Summary:", file=sys.stderr)
     if total_size > 0:
         gb_size = total_size / 1024
-        print(f"  • Total size: {total_size:.1f} MB ({gb_size:.2f} GB)")
+        print(f"  • Total size: {total_size:.1f} MB ({gb_size:.2f} GB)", file=sys.stderr)
     
     if missing_models:
-        print(f"\n⚠️  {len(missing_models)} models are missing.")
-        print("💡 Run 'docsray download-models' to download them.")
+        print(f"\n⚠️  {len(missing_models)} models are missing.", file=sys.stderr)
+        print("💡 Run 'docsray download-models' to download them.", file=sys.stderr)
     else:
-        print("\n✅ All models are ready for use!")
+        print("\n✅ All models are ready for use!", file=sys.stderr)
     
     return {
         'available': len(available_models),
