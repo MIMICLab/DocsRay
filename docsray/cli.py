@@ -304,14 +304,14 @@ def configure_claude_desktop():
                 "command": sys.executable,
                 "args": [str(mcp_server_path)],
                 "cwd": str(docsray_path.parent),
-                "timeout": 1800000,  # 밀리초
+                "timeout": 1800000,  # ms
                 "env": {
                     "PYTHONUNBUFFERED": "1",
-                    "MCP_TIMEOUT": "1800"  # 초
+                    "MCP_TIMEOUT": "1800"  # sec
                 },
                 # 추가 옵션들
                 "stdio": {
-                    "readTimeout": 1800000,  # 밀리초
+                    "readTimeout": 1800000,  # ms
                     "writeTimeout": 1800000
                 }
             }
