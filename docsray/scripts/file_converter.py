@@ -174,6 +174,17 @@ class FileConverter:
         self.output_dir = output_dir or CACHE_DIR
         self.output_dir.mkdir(parents=True, exist_ok=True)
         
+    @classmethod
+    def get_supported_formats(cls) -> dict:
+        """Get dictionary of supported formats"""
+        return cls.SUPPORTED_FORMATS.copy()
+    
+    @classmethod
+    def is_supported(cls, file_path: str) -> bool:
+        """Check if file format is supported"""
+        ext = Path(file_path).suffix.lower()
+        return ext in cls.SUPPORTED_FORMATS or ext == '.pdf'
+
     def convert_to_pdf(self, input_path: str, output_path: Optional[str] = None) -> Tuple[bool, str]:
         """
         Convert file to PDF
