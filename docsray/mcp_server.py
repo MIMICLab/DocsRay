@@ -79,7 +79,7 @@ Guidelines:
 try:
     model_status = check_models()
     if isinstance(model_status, dict):
-        print(json.dumps(model_status, indent=2))
+        print(json.dumps(model_status, indent=2), file=sys.stderr)
 except Exception as e:
     print(f"Warning: Model check failed: {e}", file=sys.stderr)
 
