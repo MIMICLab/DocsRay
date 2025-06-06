@@ -14,7 +14,7 @@ try:
     import pytesseract
     USE_TESSERACT =True
 except:
-    print("Pytesseract not installed. Using gemma3 for OCR")
+    print("Pytesseract not installed. Using gemma3 for OCR", , file=sys.stderr)
     USE_TESSERACT = False
 
 # Create directories
