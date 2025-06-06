@@ -29,7 +29,8 @@ dependencies = [
     "python-pptx>=0.6.21",
     "reportlab",
     "Pandoc",
-    "llama_index"
+    "llama_index",
+    "pdfkit"
 ]
 
 [project.scripts]
