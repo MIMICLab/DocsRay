@@ -14,7 +14,7 @@ from docsray.scripts import pdf_extractor, chunker, build_index, section_rep_bui
 app = FastAPI(
     title="DocsRay API",
     description="PDF Question-Answering System API",
-    version="1.4.7"
+    version="1.4.8"
 )
 
 # Global variables to store the current PDF data

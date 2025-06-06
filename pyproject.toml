@@ -1,6 +1,6 @@
 [project]
 name = "docsray"
-version = "1.4.7"
+version = "1.4.8"
 description = "PDF Question-Answering System with MCP Integration"
 authors = [{name = "Taehoon Kim", email = "taehoonkim@sogang.ac.kr"}]
 readme = "README.md"
@@ -30,7 +30,9 @@ dependencies = [
     "reportlab",
     "Pandoc",
     "llama_index",
-    "pdfkit"
+    "pdfkit",
+    "openpyxl",
+    "llama_index"
 ]
 
 [project.scripts]
