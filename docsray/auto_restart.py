@@ -85,13 +85,15 @@ def kill_port_holders(port: int):
     if psutil is None:
         return  # No way to inspect ports on this platform
 
-    for proc in psutil.process_iter(attrs=["pid", "connections"]):
+    for proc in psutil.process_iter(['pid']):
         try:
-            for conn in proc.info["connections"]:
+            # connections()는 메서드로 직접 호출
+            connections = proc.connections()
+            for conn in connections:
                 if conn.status == psutil.CONN_LISTEN and conn.laddr.port == port:
-                    os.kill(proc.info["pid"], signal.SIGKILL)
+                    os.kill(proc.pid, signal.SIGKILL)  # proc.pid 사용
                     break
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.Error):
             continue
 
 class SimpleServiceMonitor:
