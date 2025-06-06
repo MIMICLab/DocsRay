@@ -129,7 +129,7 @@ def _save_text_images_to_pdf_korean(text: str, image_paths: List[str], output_fi
         return True
         
     except Exception as e:
-        print(f"PDF creation error: {e}")
+        print(f"PDF creation error: {e}", file=sys.stderr)
         return False
             
 class FileConverter:
@@ -308,8 +308,8 @@ class FileConverter:
                                         img_paths.append(img_id)
 
                 # Debug: Print what we found
-                print(f"Found {len(texts)} text elements")
-                print(f"Found {len(img_paths)} image references")
+                print(f"Found {len(texts)} text elements", file=sys.stderr)
+                print(f"Found {len(img_paths)} image references", file=sys.stderr)
                 
                 # 2) Extract BinData images
                 extracted_imgs = []
@@ -808,7 +808,7 @@ if __name__ == "__main__":
     success, result = converter.convert_to_pdf(args.input_file, args.output)
     
     if success:
-        print(f"✅ Converted successfully: {result}")
+        print(f"✅ Converted successfully: {result}, file=sys.stderr")
     else:
-        print(f"❌ Conversion failed: {result}")
+        print(f"❌ Conversion failed: {result}", file=sys.stderr)
         sys.exit(1)
