@@ -25,6 +25,9 @@ pip install docsray
 #brew install tesseract-ocr   # MacOS
 #brew install tesseract-ocr-kor
 
+# 1-2. llama_cpp_python rebuild (recommended for CUDA)
+#CMAKE_ARGS="-DGGML_CUDA=on" pip install llama-cpp-python --upgrade --force-reinstall --no-cache-dir
+
 # 2. Download required models (approximately 8GB)
 docsray download-models
 
