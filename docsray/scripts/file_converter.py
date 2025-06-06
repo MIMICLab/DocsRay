@@ -12,6 +12,8 @@ from typing import Optional, Tuple
 
 import pypandoc
 from pypandoc.pandoc_download import download_pandoc
+from docsray.config import DOCSRAY_HOME
+os.environ.setdefault('PYPANDOC_PANDOC', DOCSRAY_HOME)
 download_pandoc()
 
 from PIL import Image
