@@ -24,8 +24,8 @@ def show_hotfix_message():
 def hotfix_check():
     """Main post-install function"""
     # Check if llama-cpp-python needs update
-    pass
     #Identity function for now
+    pass
 def main():
     """Run the post-installation hotfix check"""
     print("Running DocsRay post-installation hotfix check...")
