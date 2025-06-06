@@ -27,6 +27,7 @@ pip install docsray
 
 # 1-2. llama_cpp_python (Recommended)
 # Re-install llama-cpp-python for device optimization
+#pip uninstall llama-cpp-python
 #CMAKE_ARGS="-DGGML_CUDA=on" pip install llama-cpp-python
 #CMAKE_ARGS="-DGGML_METAL=on" pip install llama-cpp-python
 
