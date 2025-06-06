@@ -140,7 +140,7 @@ Examples:
             try:
                 monitor.run()
             except KeyboardInterrupt:
-                print("\n🛑 MCP Server stopped by user")
+                print("\n🛑 MCP Server stopped by user", file=sys.stderr)
         else:
             # Direct start
             import asyncio
@@ -173,14 +173,14 @@ Examples:
                 retry_delay=args.retry_delay
             )
             
-            print("🚀 Starting DocsRay Web Interface with auto-restart enabled")
-            print(f"♻️  Max retries: {args.max_retries}")
-            print(f"⏱️  Retry delay: {args.retry_delay} seconds")
+            print("🚀 Starting DocsRay Web Interface with auto-restart enabled", file=sys.stderr)
+            print(f"♻️  Max retries: {args.max_retries}", file=sys.stderr)
+            print(f"⏱️  Retry delay: {args.retry_delay} seconds", file=sys.stderr)
             
             try:
                 monitor.run()
             except KeyboardInterrupt:
-                print("\n🛑 Web Interface stopped by user")
+                print("\n🛑 Web Interface stopped by user", file=sys.stderr)
         else:
             # Direct start without auto-restart
             from docsray.web_demo import main as web_main
@@ -241,7 +241,7 @@ def configure_claude_desktop():
     elif system == "Windows":
         config_path = Path(os.environ["APPDATA"]) / "Claude" / "claude_desktop_config.json"
     else:
-        print("❌ Unsupported OS for Claude Desktop")
+        print("❌ Unsupported OS for Claude Desktop", file=sys.stderr)
         return
     
     # Get DocsRay installation path
@@ -257,7 +257,7 @@ def configure_claude_desktop():
                 raise AttributeError("Cannot find docsray module path")
                 
     except (AttributeError, ImportError, IndexError) as e:
-        print(f"⚠️  Warning: Could not find docsray module path: {e}")
+        print(f"⚠️  Warning: Could not find docsray module path: {e}", file=sys.stderr)
         
         if 'docsray' in sys.modules:
             module = sys.modules['docsray']
@@ -276,7 +276,7 @@ def configure_claude_desktop():
     mcp_server_path = docsray_path / "mcp_server.py"
 
     if not mcp_server_path.exists():
-        print(f"❌ MCP server not found at: {mcp_server_path}")
+        print(f"❌ MCP server not found at: {mcp_server_path}", file=sys.stderr)
         
         possible_locations = [
             docsray_path.parent / "docsray" / "mcp_server.py",
@@ -289,12 +289,12 @@ def configure_claude_desktop():
             if location.exists():
                 mcp_server_path = location
                 docsray_path = location.parent
-                print(f"✅ Found MCP server at: {mcp_server_path}")
+                print(f"✅ Found MCP server at: {mcp_server_path}", file=sys.stderr)
                 break
         else:
-            print("❌ Could not locate mcp_server.py")
-            print("💡 Please ensure DocsRay is properly installed")
-            print("   Try: pip install -e . (in the DocsRay directory)")
+            print("❌ Could not locate mcp_server.py", file=sys.stderr)
+            print("💡 Please ensure DocsRay is properly installed", file=sys.stderr)
+            print("   Try: pip install -e . (in the DocsRay directory)", file=sys.stderr)
             return
     
     # Create config
@@ -320,7 +320,7 @@ def configure_claude_desktop():
     try:
         config_path.parent.mkdir(parents=True, exist_ok=True)
     except Exception as e:
-        print(f"❌ Failed to create config directory: {e}")
+        print(f"❌ Failed to create config directory: {e}", file=sys.stderr)
         return
     
     # Check if config already exists and merge
@@ -333,27 +333,27 @@ def configure_claude_desktop():
                 existing["mcpServers"]["docsray"] = config["mcpServers"]["docsray"]
                 config = existing
         except json.JSONDecodeError:
-            print("⚠️  Warning: Existing config file is invalid, overwriting...")
+            print("⚠️  Warning: Existing config file is invalid, overwriting...", file=sys.stderr)
         except Exception as e:
-            print(f"⚠️  Warning: Could not read existing config: {e}")
+            print(f"⚠️  Warning: Could not read existing config: {e}", file=sys.stderr)
     
     # Write config
     try:
         with open(config_path, "w") as f:
             json.dump(config, f, indent=2)
         
-        print(f"✅ Claude Desktop configured successfully!")
-        print(f"📁 Config location: {config_path}")
-        print(f"🐍 Python: {sys.executable}")
-        print(f"📄 MCP Server: {mcp_server_path}")
-        print(f"📂 Working directory: {docsray_path.parent}")
-        print("\n⚠️  Please restart Claude Desktop for changes to take effect.")
+        print(f"✅ Claude Desktop configured successfully!", file=sys.stderr)
+        print(f"📁 Config location: {config_path}", file=sys.stderr)
+        print(f"🐍 Python: {sys.executable}", file=sys.stderr)
+        print(f"📄 MCP Server: {mcp_server_path}", file=sys.stderr)
+        print(f"📂 Working directory: {docsray_path.parent}", file=sys.stderr)
+        print("\n⚠️  Please restart Claude Desktop for changes to take effect.", file=sys.stderr)
         
     except Exception as e:
-        print(f"❌ Failed to write config file: {e}")
-        print(f"📁 Attempted path: {config_path}")
-        print("\n💡 You can manually create the config file with:")
-        print(json.dumps(config, indent=2))
+        print(f"❌ Failed to write config file: {e}", file=sys.stderr)
+        print(f"📁 Attempted path: {config_path}", file=sys.stderr)
+        print("\n💡 You can manually create the config file with:", file=sys.stderr)
+        print(json.dumps(config, indent=2), file=sys.stderr)
 
 def process_pdf_with_timeout(pdf_path: str, analyze_visuals: bool, timeout: int):
     """Process PDF with optional timeout handling"""
@@ -361,22 +361,22 @@ def process_pdf_with_timeout(pdf_path: str, analyze_visuals: bool, timeout: int)
         from docsray.scripts import pdf_extractor, chunker, build_index, section_rep_builder
         
         # Extract
-        print("📖 Extracting content...")
+        print("📖 Extracting content...", file=sys.stderr)
         extracted = pdf_extractor.extract_content(
             pdf_path,
             analyze_visuals=analyze_visuals
         )
 
         # Chunk
-        print("✂️  Creating chunks...")
+        print("✂️  Creating chunks...", file=sys.stderr)
         chunks = chunker.process_extracted_file(extracted)
         
         # Build index
-        print("🔍 Building search index...")
+        print("🔍 Building search index...", file=sys.stderr)
         chunk_index = build_index.build_chunk_index(chunks)
         
         # Build section representations
-        print("📊 Building section representations...")
+        print("📊 Building section representations...", file=sys.stderr)
         sections = section_rep_builder.build_section_reps(extracted["sections"], chunk_index)
         
         return sections, chunks
@@ -385,7 +385,7 @@ def process_pdf_with_timeout(pdf_path: str, analyze_visuals: bool, timeout: int)
     if timeout > 0:
         # Run with timeout
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-            print(f"⏰ Processing timeout: {timeout} seconds ({timeout//60}m {timeout%60}s)")
+            print(f"⏰ Processing timeout: {timeout} seconds ({timeout//60}m {timeout%60}s)", file=sys.stderr)
             future = executor.submit(_process)
             
             try:
@@ -393,13 +393,13 @@ def process_pdf_with_timeout(pdf_path: str, analyze_visuals: bool, timeout: int)
                 return sections, chunks
             except concurrent.futures.TimeoutError:
                 future.cancel()
-                print(f"\n⏰ Processing timeout exceeded!")
-                print(f"❌ Document processing took longer than {timeout} seconds")
-                print(f"💡 Try with a smaller document or use --no-visuals flag")
+                print(f"\n⏰ Processing timeout exceeded!", file=sys.stderr)
+                print(f"❌ Document processing took longer than {timeout} seconds", file=sys.stderr)
+                print(f"💡 Try with a smaller document or use --no-visuals flag", file=sys.stderr)
                 raise ProcessingTimeoutError(f"Processing timeout after {timeout} seconds")
     else:
         # Run without timeout
-        print("⏰ No timeout limit set")
+        print("⏰ No timeout limit set", file=sys.stderr)
         return _process()
 
 def process_pdf_cli(pdf_path: str, no_visuals: bool = False, timeout: int = 300):
@@ -408,14 +408,14 @@ def process_pdf_cli(pdf_path: str, no_visuals: bool = False, timeout: int = 300)
         print(f"❌ File not found: {pdf_path}")
         return
     
-    print(f"📄 Processing: {pdf_path}")
+    print(f"📄 Processing: {pdf_path}", file=sys.stderr)
     
     # Visual analysis 
     analyze_visuals = not no_visuals 
     if no_visuals:
-        print("👁️ Visual analysis disabled by user")
+        print("👁️ Visual analysis disabled by user", file=sys.stderr)
     else:
-        print("👁️ Visual analysis enabled")
+        print("👁️ Visual analysis enabled", file=sys.stderr)
     
     start_time = time.time()
     
@@ -424,28 +424,28 @@ def process_pdf_cli(pdf_path: str, no_visuals: bool = False, timeout: int = 300)
         sections, chunks = process_pdf_with_timeout(pdf_path, analyze_visuals, timeout)
         
         elapsed_time = time.time() - start_time
-        print(f"✅ Processing complete!")
-        print(f"   Sections: {len(sections)}")
-        print(f"   Chunks: {len(chunks)}")
-        print(f"   Time: {elapsed_time:.1f} seconds")
+        print(f"✅ Processing complete!", file=sys.stderr)
+        print(f"   Sections: {len(sections)}", file=sys.stderr)
+        print(f"   Chunks: {len(chunks)}", file=sys.stderr)
+        print(f"   Time: {elapsed_time:.1f} seconds", file=sys.stderr)
         
         # Save cache (optional)
         try:
             save_cache(pdf_path, sections, chunks)
-            print(f"💾 Cache saved for future use")
+            print(f"💾 Cache saved for future use", file=sys.stderr)
         except Exception as e:
-            print(f"⚠️  Warning: Could not save cache: {e}")
+            print(f"⚠️  Warning: Could not save cache: {e}", file=sys.stderr)
             
     except ProcessingTimeoutError as e:
-        print(f"\n❌ {e}")
+        print(f"\n❌ {e}", file=sys.stderr)
         return
     except KeyboardInterrupt:
-        print(f"\n🛑 Processing interrupted by user")
+        print(f"\n🛑 Processing interrupted by user", file=sys.stderr)
         return
     except Exception as e:
         elapsed_time = time.time() - start_time
-        print(f"\n❌ Processing failed after {elapsed_time:.1f} seconds")
-        print(f"Error: {e}")
+        print(f"\n❌ Processing failed after {elapsed_time:.1f} seconds", file=sys.stderr)
+        print(f"Error: {e}", file=sys.stderr)
         return
 
 def save_cache(pdf_path: str, sections, chunks):
@@ -471,7 +471,7 @@ def save_cache(pdf_path: str, sections, chunks):
     with open(idx_path, "wb") as f:
         pickle.dump(chunks, f)
     
-    print(f"📁 Cache saved to: {cache_dir}")
+    print(f"📁 Cache saved to: {cache_dir}", file=sys.stderr)
 
 def ask_question_cli(question: str, pdf_name: str):
     """Ask a question about a PDF from command line"""
@@ -484,12 +484,12 @@ def ask_question_cli(question: str, pdf_name: str):
     idx_path = cache_dir / f"{pdf_name}_index.pkl"
     
     if not sec_path.exists() or not idx_path.exists():
-        print(f"❌ No cached data for {pdf_name}. Please process the PDF first:")
-        print(f"   docsray process {pdf_name}.pdf")
+        print(f"❌ No cached data for {pdf_name}. Please process the PDF first:", file=sys.stderr)
+        print(f"   docsray process {pdf_name}.pdf", file=sys.stderr)
         return
     
     # Load data
-    print(f"📁 Loading cached data for {pdf_name}...")
+    print(f"📁 Loading cached data for {pdf_name}...", file=sys.stderr)
     try:
         with open(sec_path, "r") as f:
             sections = json.load(f)
@@ -499,12 +499,12 @@ def ask_question_cli(question: str, pdf_name: str):
             chunk_index = pickle.load(f)
             
     except Exception as e:
-        print(f"❌ Failed to load cached data: {e}")
-        print(f"💡 Try reprocessing the PDF: docsray process {pdf_name}.pdf")
+        print(f"❌ Failed to load cached data: {e}", file=sys.stderr)
+        print(f"💡 Try reprocessing the PDF: docsray process {pdf_name}.pdf", file=sys.stderr)
         return
     
     # Create chatbot and get answer
-    print(f"🤔 Thinking about: {question}")
+    print(f"🤔 Thinking about: {question}", file=sys.stderr)
     start_time = time.time()
     
     try:
@@ -512,13 +512,13 @@ def ask_question_cli(question: str, pdf_name: str):
         answer, references = chatbot.answer(question)
         
         elapsed_time = time.time() - start_time
-        print(f"\n💡 Answer (took {elapsed_time:.1f}s):")
-        print(f"{answer}")
-        print(f"\n📚 References:")
-        print(f"{references}")
+        print(f"\n💡 Answer (took {elapsed_time:.1f}s):", file=sys.stderr)
+        print(f"{answer}", file=sys.stderr)
+        print(f"\n📚 References:", file=sys.stderr)
+        print(f"{references}", file=sys.stderr)
         
     except Exception as e:
-        print(f"❌ Failed to get answer: {e}")
+        print(f"❌ Failed to get answer: {e}", file=sys.stderr)
         return
 
 if __name__ == "__main__":
