@@ -520,29 +520,29 @@ if __name__ == "__main__":
 
     pdf_files = [f for f in os.listdir(pdf_folder) if f.lower().endswith(".pdf")]
     if not pdf_files:
-        print(f"[ERROR] No PDF files found in '{pdf_folder}'.")
+        print(f"[ERROR] No PDF files found in '{pdf_folder}'.", file=sys.stderr)
         sys.exit(1)
 
     # If multiple PDFs exist, show the list and let the user choose
     if len(pdf_files) > 1:
-        print("Multiple PDF files found:")
+        print("Multiple PDF files found:", file=sys.stderr)
         for idx, fname in enumerate(pdf_files):
-            print(f"{idx+1}. {fname}")
+            print(f"{idx+1}. {fname}", file=sys.stderr)
         selection = input("Select a file by number: ")
         try:
             selection_idx = int(selection) - 1
             if selection_idx < 0 or selection_idx >= len(pdf_files):
-                print("Invalid selection.")
+                print("Invalid selection.", file=sys.stderr)
                 sys.exit(1)
             selected_file = pdf_files[selection_idx]
         except ValueError:
-            print("Invalid input.")
+            print("Invalid input.", file=sys.stderr)
             sys.exit(1)
     else:
         selected_file = pdf_files[0]
 
     pdf_path = os.path.join(pdf_folder, selected_file)
-    print(f"Processing file: {selected_file}")
+    print(f"Processing file: {selected_file}", file=sys.stderr)
     
     # Ask user about visual analysis options
     analyze_visuals = input("Analyze visual content (images, charts)? (y/N): ").lower() == 'y'
@@ -563,18 +563,18 @@ if __name__ == "__main__":
     output_json = os.path.join(output_folder, f"{base_name}.json")
     save_extracted_content(extracted_data, output_json)
     
-    print(f"\nProcessing complete!")
-    print(f"- Document: {selected_file}")
-    print(f"- Sections found: {len(extracted_data['sections'])}")
-    print(f"- Total pages: {extracted_data['metadata']['total_pages']}")
-    print(f"- Fast mode: {extracted_data['metadata']['fast_mode']}")
+    print(f"\nProcessing complete!", file=sys.stderr)
+    print(f"- Document: {selected_file}", file=sys.stderr)
+    print(f"- Sections found: {len(extracted_data['sections'])}", file=sys.stderr)
+    print(f"- Total pages: {extracted_data['metadata']['total_pages']}", file=sys.stderr)
+    print(f"- Fast mode: {extracted_data['metadata']['fast_mode']}, file=sys.stderr")
     if analyze_visuals:
-        print(f"- Visual analysis: Every {visual_interval} pages")
+        print(f"- Visual analysis: Every {visual_interval} pages", file=sys.stderr)
 
     # Also save merged sections as sections.json for convenience
     sections_output = os.path.join(output_folder, "sections.json")
     with open(sections_output, 'w', encoding='utf-8') as f:
         json.dump(extracted_data["sections"], f, ensure_ascii=False, indent=2)
-    print(f"\nSections saved to {sections_output}")
+    print(f"\nSections saved to {sections_output}", file=sys.stderr)
 
-    print("\nPDF Extraction Complete.")
+    print("\nPDF Extraction Complete.", file=sys.stderr)
