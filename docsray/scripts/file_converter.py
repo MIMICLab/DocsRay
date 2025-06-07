@@ -379,8 +379,8 @@ class FileConverter:
             else:
                 return False, "Unable to read HWP document"
                 
-        except ImportError:
-            return False, "llama_index not installed"
+        except ImportError as e:
+            return False, f"{e} not installed"
         except Exception as e:
             error_msg = f"Error during HWP conversion: {str(e)}"
             print(f"[Error] {error_msg}", file=sys.stderr)
