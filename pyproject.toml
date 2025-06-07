@@ -32,7 +32,8 @@ dependencies = [
     "llama_index",
     "pdfkit",
     "openpyxl",
-    "llama_index"
+    "llama_index",
+    "olefile"
 ]
 
 [project.scripts]
