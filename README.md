@@ -1,7 +1,6 @@
 # DocsRay 
 [![PyPI Status](https://badge.fury.io/py/docsray.svg)](https://badge.fury.io/py/docsray)
 [![license](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/MIMICLab/DocsRay/blob/main/LICENSE)
-[![smithery badge](https://smithery.ai/badge/@MIMICLab/docsray)](https://smithery.ai/server/@MIMICLab/docsray)
 
 
 A powerful PDF Question-Answering System that uses advanced embedding models and multimodal LLMs with Coarse-to-Fine search (RAG) approach. Features seamless MCP (Model Context Protocol) integration with Claude Desktop, comprehensive directory management capabilities, visual content analysis, and intelligent hybrid OCR system.
