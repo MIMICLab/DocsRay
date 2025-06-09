@@ -6,15 +6,14 @@ import asyncio
 from docsray.search.section_coarse_search import coarse_search_sections
 from docsray.search.fine_search import fine_search_chunks
 from docsray.inference.embedding_model import embedding_model
-from docsray.inference.llm_model import local_llm, local_llm_large
+from docsray.inference.llm_model import local_llm
 from docsray.config import FAST_MODE, STANDARD_MODE, FULL_FEATURE_MODE
 
 DEFAULT_SYSTEM_PROMPT = (
     "You are a document-grounded assistant.\n"
     "• Use ONLY the information provided in <Document Context> as evidence.\n"
-    "• When quoting, silently repair broken lines or spacing caused by chunking, "
-    "and merge fragments so the sentence flows naturally.\n"
-    "• Paraphrase or summarize rather than copying large passages verbatim.\n\n"
+    "• When quoting, silently repair broken lines or spacing caused by chunking.\n"
+    "• Answer in the same language as the question.\n\n"
 )
 
 class PDFChatBot:
@@ -152,12 +151,12 @@ class PDFChatBot:
         prompt = self.build_prompt(query, best_chunks)
         import time
         start_time = time.time()
-        answer_text = local_llm_large.generate(prompt)
+        answer_text = local_llm.generate(prompt)
         end_time = time.time()
         print(f"LLM generation took {end_time - start_time:.2f} seconds")
         answer = answer_text.split("=== Document Context ===")[1].split("=== User Question ===")
         reference_output = answer[0].strip()
-        answer_output = local_llm_large.strip_response(answer[1])
+        answer_output = local_llm.strip_response(answer[1])
         return answer_output, reference_output
 
 if __name__ == "__main__":

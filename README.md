@@ -806,7 +806,6 @@ This project is licensed under the MIT License. See [LICENSE](LICENSE) file for 
 **Note**: Individual model licenses may have different requirements:
 - BAAI/bge-m3: MIT License
 - intfloat/multilingual-e5-large: MIT License
-- gemma-3-1B-it: Gemma Terms of Use
 - gemma-3-4B-it: Gemma Terms of Use
 
 ## 🤝 Support

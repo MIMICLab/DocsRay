@@ -21,8 +21,7 @@ if USE_TESSERACT:
     import pytesseract
 
 # LLM for outline generation and image analysis
-from docsray.inference.llm_model import local_llm, local_llm_large
-
+from docsray.inference.llm_model import local_llm
 from docsray.scripts.file_converter import FileConverter
 from pathlib import Path
 
@@ -153,7 +152,7 @@ def analyze_image_with_llm(images: list, page_num: int) -> str:
 
 Start immediately with "Figure 1: ". No introduction needed."""
     # Use the large model for better image understanding
-    response = local_llm_large.generate(prompt, images=images)
+    response = local_llm.generate(prompt, images=images)
     
     return f"\n\n[Page: {page_num + 1}]\n{response}\n\n"
 
@@ -165,8 +164,8 @@ def ocr_with_llm(image: Image.Image, page_num: int) -> str:
     # OCR-specific prompt
     prompt = """Extract text from this image and present it as readable paragraphs. Start directly with the content."""
 
-    response = local_llm_large.generate(prompt, images=[image])
-    extracted_text = local_llm_large.strip_response(response)
+    response = local_llm.generate(prompt, images=[image])
+    extracted_text = local_llm.strip_response(response)
     return extracted_text.strip()
 
 def analyze_visual_content(page, page_num: int) -> str:

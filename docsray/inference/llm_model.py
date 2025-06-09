@@ -15,18 +15,15 @@ from PIL import Image
 from contextlib import redirect_stderr
 from docsray.inference.gemma3_handler import Gemma3ChatHandler, merge_images_to_grid
 def get_gemma_model_paths(mode_models):
-    small_model_path = None
-    large_model_path = None
+    model_path = None
     mmproj_path = None
     for model in mode_models:
-        if "gemma-3-1b-it" in model["file"] and "mmproj" not in model["file"]:
-            small_model_path = str(model["dir"] / model["file"])
-        elif "gemma-3-4b-it" in model["file"] and "mmproj" not in model["file"]:
-            large_model_path = str(model["dir"] / model["file"])
-        elif "mmproj" in model["file"]:
+        if "gemma-3-4b-it" in model["file"] and "mmproj" not in model["file"]:
+            model_path = str(model["dir"] / model["file"])
+        elif "gemma-3-4b-it" in model["file"]:
             mmproj_path = str(model["dir"] / model["file"])
     
-    return small_model_path, large_model_path, mmproj_path
+    return model_path, mmproj_path
 
 class LlamaTokenizer:
     def __init__(self, llama_model):
@@ -157,16 +154,15 @@ else:
 def get_llm_models():
     """Get or create the LLM model instances"""
     if FAST_MODE:
-        small_model_path, large_model_path, mmproj_path = get_gemma_model_paths(FAST_MODELS)
+        model_path, mmproj_path = get_gemma_model_paths(FAST_MODELS)
     elif STANDARD_MODE: 
-        small_model_path, large_model_path, mmproj_path = get_gemma_model_paths(STANDARD_MODELS)
+        model_path, mmproj_path = get_gemma_model_paths(STANDARD_MODELS)
     else:
-        small_model_path, large_model_path, mmproj_path = get_gemma_model_paths(FULL_FEATURE_MODELS)
+        model_path, mmproj_path = get_gemma_model_paths(FULL_FEATURE_MODELS)
+            
+    local_llm = LocalLLM(model_name=model_path, mmproj_name=mmproj_path, device=device, is_multimodal=True)
     
-    local_llm = LocalLLM(model_name=small_model_path, device=device)            
-    local_llm_large = LocalLLM(model_name=large_model_path, mmproj_name=mmproj_path, device=device, is_multimodal=True)
-    
-    return local_llm, local_llm_large
+    return local_llm
 
 
-local_llm, local_llm_large = get_llm_models()
+local_llm = get_llm_models()

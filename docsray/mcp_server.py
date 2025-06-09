@@ -21,7 +21,7 @@ from mcp.types import Tool, TextContent
 # DocsRay imports
 from docsray.chatbot import PDFChatBot, DEFAULT_SYSTEM_PROMPT
 from docsray.scripts import pdf_extractor, chunker, build_index, section_rep_builder
-from docsray.inference.llm_model import local_llm, local_llm_large
+from docsray.inference.llm_model import local_llm
 from docsray.inference.embedding_model import embedding_model
 from docsray.scripts.file_converter import FileConverter
 from docsray.config import FAST_MODE, DISABLE_VISUAL_ANALYSIS
@@ -1294,7 +1294,7 @@ Return only the queries, one per line.
 Alternative queries:"""
             
             try:
-                improved_queries_response = local_llm_large.generate(improve_prompt)
+                improved_queries_response = local_llm.generate(improve_prompt)
                 improved_queries = local_llm.strip_response(improved_queries_response).strip().split('\n')
                 improved_queries = [query + ':' +q.strip() for q in improved_queries if q.strip()][:3]
                 
@@ -1431,14 +1431,6 @@ def summarize_document_by_sections(sections: List, chunk_index: List,
     Overall summary at the top, no table of contents.
     """
     
-    # Use smaller model for everything in fast mode
-    if brief_mode:
-        summary_model = local_llm
-        overall_model = local_llm
-    else:
-        summary_model = local_llm
-        overall_model = local_llm_large
-    
     # Determine detail level for cache      
     if max_chunks_per_section <= 3:
         detail_level = "brief"
@@ -1473,10 +1465,10 @@ Provide a brief executive summary (2-3 paragraphs) highlighting the main theme a
         try:
             print("Generating overall summary...", file=sys.stderr)
             start_time = time.time()
-            overall_response = overall_model.generate(overall_prompt)
+            overall_response = local_llm.generate(overall_prompt)
             
-            if hasattr(overall_model, 'strip_response'):
-                overall_summary = overall_model.strip_response(overall_response)
+            if hasattr(local_llm, 'strip_response'):
+                overall_summary = local_llm.strip_response(overall_response)
             else:
                 if "<|im_start|>assistant" in overall_response:
                     overall_summary = overall_response.split("<|im_start|>assistant")[1].split("<|im_end|>")[0].strip()
@@ -1575,8 +1567,8 @@ Summary (2-3 paragraphs):"""
             
             try:
                 start_time = time.time()
-                summary_response = summary_model.generate(section_prompt)
-                summary_text = summary_model.strip_response(summary_response)
+                summary_response = local_llm.generate(section_prompt)
+                summary_text = local_llm.strip_response(summary_response)
                 elapsed = time.time() - start_time
                 print(f"Section {i+1} summarized in {elapsed:.1f}s", file=sys.stderr)
             except Exception as e:
