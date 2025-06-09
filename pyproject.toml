@@ -1,6 +1,6 @@
 [project]
 name = "docsray"
-version = "1.5.0"
+version = "1.5.2"
 description = "PDF Question-Answering System with MCP Integration"
 authors = [{name = "Taehoon Kim", email = "taehoonkim@sogang.ac.kr"}]
 readme = "README.md"
@@ -33,7 +33,8 @@ dependencies = [
     "pdfkit",
     "openpyxl",
     "llama_index",
-    "olefile"
+    "olefile",
+    "markdown"
 ]
 
 [project.scripts]

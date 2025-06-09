@@ -42,4 +42,5 @@ reportlab
 Pandoc
 llama_index
 pdfkit
-
+olefile
+markdown
