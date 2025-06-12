@@ -379,7 +379,7 @@ def process_pdf_with_timeout(pdf_path: str, analyze_visuals: bool, timeout: int)
         print("📊 Building section representations...", file=sys.stderr)
         sections = section_rep_builder.build_section_reps(extracted["sections"], chunk_index)
         
-        return sections, chunks
+        return sections, chunk_index
     
     # Check if timeout is enabled
     if timeout > 0:
@@ -421,7 +421,7 @@ def process_pdf_cli(pdf_path: str, no_visuals: bool = False, timeout: int = 300)
     
     try:
         # Process with timeout
-        sections, chunks = process_pdf_with_timeout(pdf_path, analyze_visuals, timeout)
+        sections, chunk_index = process_pdf_with_timeout(pdf_path, analyze_visuals, timeout)
         
         elapsed_time = time.time() - start_time
         print(f"✅ Processing complete!", file=sys.stderr)
@@ -431,7 +431,7 @@ def process_pdf_cli(pdf_path: str, no_visuals: bool = False, timeout: int = 300)
         
         # Save cache (optional)
         try:
-            save_cache(pdf_path, sections, chunks)
+            save_cache(pdf_path, sections, chunk_index)
             print(f"💾 Cache saved for future use", file=sys.stderr)
         except Exception as e:
             print(f"⚠️  Warning: Could not save cache: {e}", file=sys.stderr)
@@ -480,9 +480,10 @@ def ask_question_cli(question: str, pdf_name: str):
     
     # Look for cached data
     cache_dir = Path.home() / ".docsray" / "cache"
-    sec_path = cache_dir / f"{pdf_name}_sections.json"
-    idx_path = cache_dir / f"{pdf_name}_index.pkl"
-    
+    pdf_name_stem = Path(pdf_name).stem  # 또는 pdf_name.split('.')[0]
+    sec_path = cache_dir / f"{pdf_name_stem}_sections.json"
+    idx_path = cache_dir / f"{pdf_name_stem}_index.pkl"
+
     if not sec_path.exists() or not idx_path.exists():
         print(f"❌ No cached data for {pdf_name}. Please process the PDF first:", file=sys.stderr)
         print(f"   docsray process {pdf_name}.pdf", file=sys.stderr)
