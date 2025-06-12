@@ -176,16 +176,16 @@ docsray download-models
 docsray download-models --check
 
 # Process a PDF with visual analysis
-docsray process /path/to/document.pdf
+docsray process /path/to/document
 
 # Ask questions about a processed PDF
-docsray ask "What is the main topic?" --pdf document.pdf
+docsray ask "What is the main topic?" --doc document.pdf
 
 # Start web interface
 docsray web
 
 # Start API server
-docsray api --pdf /path/to/document.pdf --port 8000
+docsray api --doc /path/to/document.pdf --port 8000
 
 # Start MCP server
 docsray mcp
@@ -197,9 +197,7 @@ docsray mcp
 docsray web
 ```
 
-Access the web interface at `http://localhost:44665`. Default credentials:
-- Username: `admin`
-- Password: `password`
+Access the web interface at `http://localhost:44665`. 
 
 Features:
 - Upload and process PDFs with visual content analysis
@@ -210,7 +208,7 @@ Features:
 ### API Server
 
 ```bash
-docsray api --pdf /path/to/document.pdf
+docsray api --doc /path/to/document
 ```
 
 Example API usage:
@@ -422,7 +420,6 @@ DocsRay uses the following models (automatically downloaded):
 |-------|------|---------|
 | bge-m3 | 1.7GB | Multilingual embedding model |
 | multilingual-e5-Large | 1.2GB | Multilingual embedding model |
-| Gemma-3-1B | 1.1GB | Query enhancement and light tasks |
 | Gemma-3-4B | 4.1GB | Main answer generation & visual analysis |
 
 **Total storage requirement**: ~8GB
@@ -544,25 +541,6 @@ sudo apt-get install tesseract-ocr   # Debian/Ubuntu
 sudo apt-get install tesseract-ocr-kor
 brew install tesseract-ocr   # MacOS
 brew install tesseract-ocr-kor
-```
-
-### File Conversion Issues
-
-#### Office Documents Not Converting
-```bash
-# Install LibreOffice for best results
-sudo apt-get install libreoffice  # Ubuntu/Debian
-brew install libreoffice  # macOS
-```
-
-#### HTML/Web Files Not Converting
-```bash
-# Install wkhtmltopdf
-sudo apt-get install wkhtmltopdf  # Ubuntu/Debian
-brew install wkhtmltopdf  # macOS
-
-# Or use weasyprint (Python-only alternative)
-pip install weasyprint
 ```
 
 #### Missing Converter Warning

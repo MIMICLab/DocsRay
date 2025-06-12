@@ -1,6 +1,6 @@
 # docsray/cli.py
 #!/usr/bin/env python3
-"""DocsRay Command Line Interface with Auto-Restart Support and PDF Timeout"""
+"""DocsRay Command Line Interface with Auto-Restart Support and doc Timeout"""
 
 import argparse
 import sys
@@ -20,7 +20,7 @@ class ProcessingTimeoutError(Exception):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="DocsRay - PDF Question-Answering System",
+        description="DocsRay - Document Question-Answering System",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -42,17 +42,17 @@ Examples:
   # Start web interface with custom timeout
   docsray web --timeout 600
   
-  # Start API server with PDF
-  docsray api --pdf /path/to/document.pdf --port 8000
+  # Start API server with a document
+  docsray api --doc /path/to/document --port 8000
   
   # Configure Claude Desktop
   docsray configure-claude
   
-  # Process a PDF with timeout
-  docsray process /path/to/document.pdf --timeout 300
+  # Process a document with timeout
+  docsray process /path/to/document --timeout 300
   
   # Ask a question
-  docsray ask "What is the main topic?" --pdf document.pdf
+  docsray ask "What is the main topic?" --doc document
         """
     )
     
@@ -78,9 +78,9 @@ Examples:
     web_parser.add_argument("--port", type=int, default=44665, help="Port number")
     web_parser.add_argument("--host", default="0.0.0.0", help="Host address")
     web_parser.add_argument("--timeout", type=int, default=120, 
-                           help="PDF processing timeout in seconds (default: 120)")
+                           help="Document processing timeout in seconds (default: 120)")
     web_parser.add_argument("--pages", type=int, default=5, 
-                           help="Maximum pages to process per PDF (default: 5)")
+                           help="Maximum pages to process per document (default: 5)")
     web_parser.add_argument("--auto-restart", action="store_true", 
                            help="Enable auto-restart on errors")
     web_parser.add_argument("--max-retries", type=int, default=5,
@@ -92,27 +92,27 @@ Examples:
     api_parser = subparsers.add_parser("api", help="Start API server")
     api_parser.add_argument("--port", type=int, default=8000, help="Port number")
     api_parser.add_argument("--host", default="0.0.0.0", help="Host address")
-    api_parser.add_argument("--pdf", type=str, help="Path to PDF file to load")
+    api_parser.add_argument("--doc", type=str, help="Path to document file to load")
     api_parser.add_argument("--system-prompt", type=str, help="Custom system prompt")
     api_parser.add_argument("--reload", action="store_true", help="Enable hot reload for development")
     api_parser.add_argument("--timeout", type=int, default=300,
-                           help="PDF processing timeout in seconds (default: 300)")
+                           help="Document processing timeout in seconds (default: 300)")
     
     # Configure Claude command
     config_parser = subparsers.add_parser("configure-claude", help="Configure Claude Desktop")
     
-    # Process PDF command
-    process_parser = subparsers.add_parser("process", help="Process a PDF file")
-    process_parser.add_argument("pdf_path", help="Path to PDF file")
+    # Process Document command
+    process_parser = subparsers.add_parser("process", help="Process a document file")
+    process_parser.add_argument("pdf_path", help="Path to document file")
     process_parser.add_argument("--no-visuals", action="store_true", 
                             help="Disable visual content analysis")
     process_parser.add_argument("--timeout", type=int, default=300,
                             help="Processing timeout in seconds (default: 300)")
 
     # Ask question command
-    ask_parser = subparsers.add_parser("ask", help="Ask a question about a PDF")
+    ask_parser = subparsers.add_parser("ask", help="Ask a question about a document")
     ask_parser.add_argument("question", help="Question to ask")
-    ask_parser.add_argument("--pdf", required=True, help="PDF file name")
+    ask_parser.add_argument("--doc", required=True, help="Document file name")
     
     args = parser.parse_args()
     
@@ -201,8 +201,8 @@ Examples:
     elif args.command == "api":
         from docsray.app import main as api_main
         sys.argv = ["docsray-api", "--host", args.host, "--port", str(args.port)]
-        if args.pdf:
-            sys.argv.extend(["--pdf", args.pdf])
+        if args.doc:
+            sys.argv.extend(["--doc", args.doc])
         if args.system_prompt:
             sys.argv.extend(["--system-prompt", args.system_prompt])
         if args.timeout:
@@ -218,7 +218,7 @@ Examples:
         process_pdf_cli(args.pdf_path, args.no_visuals, args.timeout)
     
     elif args.command == "ask":
-        ask_question_cli(args.question, args.pdf)
+        ask_question_cli(args.question, args.doc)
     
     else:
         if hotfix_check():
@@ -356,7 +356,7 @@ def configure_claude_desktop():
         print(json.dumps(config, indent=2), file=sys.stderr)
 
 def process_pdf_with_timeout(pdf_path: str, analyze_visuals: bool, timeout: int):
-    """Process PDF with optional timeout handling"""
+    """Process doc with optional timeout handling"""
     def _process():
         from docsray.scripts import pdf_extractor, chunker, build_index, section_rep_builder
         
@@ -403,7 +403,7 @@ def process_pdf_with_timeout(pdf_path: str, analyze_visuals: bool, timeout: int)
         return _process()
 
 def process_pdf_cli(pdf_path: str, no_visuals: bool = False, timeout: int = 300):
-    """Process a PDF file from command line with timeout"""
+    """Process a doc file from command line with timeout"""
     if not os.path.exists(pdf_path):
         print(f"❌ File not found: {pdf_path}")
         return
@@ -426,7 +426,7 @@ def process_pdf_cli(pdf_path: str, no_visuals: bool = False, timeout: int = 300)
         elapsed_time = time.time() - start_time
         print(f"✅ Processing complete!", file=sys.stderr)
         print(f"   Sections: {len(sections)}", file=sys.stderr)
-        print(f"   Chunks: {len(chunks)}", file=sys.stderr)
+        print(f"   Chunks: {len(chunk_index)}", file=sys.stderr)
         print(f"   Time: {elapsed_time:.1f} seconds", file=sys.stderr)
         
         # Save cache (optional)
@@ -458,7 +458,7 @@ def save_cache(pdf_path: str, sections, chunks):
     cache_dir = Path.home() / ".docsray" / "cache"
     cache_dir.mkdir(parents=True, exist_ok=True)
     
-    # Use PDF filename without extension as base name
+    # Use doc filename without extension as base name
     pdf_name = Path(pdf_path).stem
     
     # Save sections as JSON
@@ -474,7 +474,7 @@ def save_cache(pdf_path: str, sections, chunks):
     print(f"📁 Cache saved to: {cache_dir}", file=sys.stderr)
 
 def ask_question_cli(question: str, pdf_name: str):
-    """Ask a question about a PDF from command line"""
+    """Ask a question about a doc from command line"""
     from docsray.chatbot import PDFChatBot
     import json
     
@@ -485,8 +485,8 @@ def ask_question_cli(question: str, pdf_name: str):
     idx_path = cache_dir / f"{pdf_name_stem}_index.pkl"
 
     if not sec_path.exists() or not idx_path.exists():
-        print(f"❌ No cached data for {pdf_name}. Please process the PDF first:", file=sys.stderr)
-        print(f"   docsray process {pdf_name}.pdf", file=sys.stderr)
+        print(f"❌ No cached data for {pdf_name}. Please process the document first:", file=sys.stderr)
+        print(f'docsray process "{pdf_name}"', file=sys.stderr)
         return
     
     # Load data
@@ -501,7 +501,7 @@ def ask_question_cli(question: str, pdf_name: str):
             
     except Exception as e:
         print(f"❌ Failed to load cached data: {e}", file=sys.stderr)
-        print(f"💡 Try reprocessing the PDF: docsray process {pdf_name}.pdf", file=sys.stderr)
+        print(f'💡 Try reprocessing the document: docsray process "{pdf_name}"', file=sys.stderr)
         return
     
     # Create chatbot and get answer
