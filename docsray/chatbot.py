@@ -1,8 +1,11 @@
-# src/chatbot.py
+# docsray/chatbot.py
 import sys
 import os
 import json
 import asyncio
+import time
+from typing import List, Dict, Any, Tuple
+
 from docsray.search.section_coarse_search import coarse_search_sections
 from docsray.search.fine_search import fine_search_chunks
 from docsray.inference.embedding_model import embedding_model
@@ -158,6 +161,11 @@ class PDFChatBot:
         reference_output = answer[0].strip()
         answer_output = local_llm.strip_response(answer[1])
         return answer_output, reference_output
+    
+    async def answer_async(self, query: str, **kwargs):
+        """비동기 답변 생성 (웹/API용)"""
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, self.answer, query, **kwargs)
 
 if __name__ == "__main__":
     sections_path = "data/extracted/sections_with_emb.json"
@@ -187,8 +195,3 @@ if __name__ == "__main__":
         answer_output, reference_output = chatbot.answer(query)
         print("Answer Output:", answer_output)
         print("Reference Output:", reference_output)
-
-async def answer_async(self, query: str, **kwargs):
-    """비동기 답변 생성 (웹/API용)"""
-    loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(None, self.answer, query, **kwargs)

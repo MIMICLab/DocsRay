@@ -1,9 +1,10 @@
 # DocsRay 
 [![PyPI Status](https://badge.fury.io/py/docsray.svg)](https://badge.fury.io/py/docsray)
+[![Python Version](https://img.shields.io/pypi/pyversions/docsray)](https://pypi.org/project/docsray/)
 [![license](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/MIMICLab/DocsRay/blob/main/LICENSE)
+[![Downloads](https://pepy.tech/badge/docsray)](https://pepy.tech/project/docsray)
 
-
-A powerful PDF Question-Answering System that uses advanced embedding models and multimodal LLMs with Coarse-to-Fine search (RAG) approach. Features seamless MCP (Model Context Protocol) integration with Claude Desktop, comprehensive directory management capabilities, visual content analysis, and intelligent hybrid OCR system.
+A powerful Universal Document Question-Answering System that uses advanced embedding models and multimodal LLMs with Coarse-to-Fine search (RAG) approach. Features seamless MCP (Model Context Protocol) integration with Claude Desktop, comprehensive directory management capabilities, visual content analysis, and intelligent hybrid OCR system.
 
 ## Try It Online
 - [Demo on H100 GPU](https://docsray.com/) 
@@ -59,9 +60,11 @@ DocsRay now automatically converts various document formats to PDF for processin
 #### Supported File Formats
 
 **Office Documents**
-- Microsoft Word (.docx, .doc)
+- Microsoft Word (.docx, .doc*)
 - Microsoft Excel (.xlsx, .xls)
 - Microsoft PowerPoint (.pptx, .ppt)
+
+*Note on .doc files: Legacy .doc format requires additional dependencies. For best compatibility, please save as .docx format or install optional dependencies with `pip install docsray[doc]`
 
 **Text Formats**
 - Plain Text (.txt)
@@ -87,6 +90,23 @@ docsray process /path/to/document.docx
 docsray process /path/to/spreadsheet.xlsx
 docsray process /path/to/image.png
 ```
+
+#### Handling Legacy .doc Files
+For Microsoft Word .doc files (legacy format), DocsRay will attempt multiple conversion methods:
+1. First, it tries to extract content without external dependencies
+2. If that fails, it will provide clear instructions
+
+**Recommended solutions for .doc files:**
+- **Best option**: Save the file as .docx format in Microsoft Word
+- **Alternative**: Install optional dependencies:
+  ```bash
+  pip install docsray[doc]
+  # or individually:
+  pip install python-docx docx2txt
+  ```
+- **Last resort**: Convert to PDF manually and upload the PDF
+
+**Note**: The newer .docx format is strongly recommended over .doc for better compatibility and features.
 
 ### Hybrid OCR System
 DocsRay now features an AI-OCR powered by Gemma3-4b.

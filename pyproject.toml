@@ -1,40 +1,50 @@
 [project]
 name = "docsray"
-version = "1.5.3"
+version = "1.5.4"
 description = "Document Question-Answering System with MCP Integration"
 authors = [{name = "Taehoon Kim", email = "taehoonkim@sogang.ac.kr"}]
 readme = "README.md"
 requires-python = ">=3.8"
 license = {text = "MIT"}
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 
 dependencies = [
-    "PyMuPDF",
-    "pdfplumber",
-    "tiktoken",
-    "torch",
-    "protobuf",
-    "fastapi",
-    "uvicorn",
-    "mcp",
-    "numpy",
-    "pandas",
-    "pillow",
-    "scikit-learn",
-    "opencv-python",
-    "psutil",
-    "llama-cpp-python",
-    "gradio",
+    "PyMuPDF>=1.23.0",
+    "pdfplumber>=0.10.0",
+    "tiktoken>=0.5.0",
+    "torch>=2.0.0",
+    "protobuf>=4.0.0",
+    "fastapi>=0.100.0",
+    "uvicorn>=0.20.0",
+    "mcp>=1.0.0",
+    "numpy>=1.24.0",
+    "pandas>=2.0.0",
+    "pillow>=10.0.0",
+    "scikit-learn>=1.3.0",
+    "opencv-python>=4.8.0",
+    "psutil>=5.9.0",
+    "llama-cpp-python>=0.2.0",
+    "gradio>=4.0.0",
     "pypandoc>=1.11",
-    "docx2pdf>=0.1.8",
     "python-pptx>=0.6.21",
-    "reportlab",
-    "Pandoc",
-    "llama_index",
-    "pdfkit",
-    "openpyxl",
-    "llama_index",
-    "olefile",
-    "markdown"
+    "reportlab>=4.0.0",
+    "Pandoc>=2.3",
+    "llama_index>=0.9.0",
+    "pdfkit>=1.0.0",
+    "openpyxl>=3.1.0",
+    "olefile>=0.46",
+    "markdown>=3.4.0",
+    "beautifulsoup4>=4.12.0"
 ]
 
 [project.scripts]
@@ -43,6 +53,12 @@ docsray = "docsray.cli:main"
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
+
+[project.optional-dependencies]
+doc = [
+    "python-docx>=0.8.11",
+    "docx2txt>=0.8",
+]
 
 [tool.setuptools.packages.find]
 where = ["."]

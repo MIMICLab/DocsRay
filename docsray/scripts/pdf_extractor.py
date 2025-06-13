@@ -100,12 +100,22 @@ def extract_content(file_path: str,
 # Alias for backward compatibility
 extract_document_content = extract_content
 
-def extract_images_from_page(page, min_width: int = 100, min_height: int = 100) -> List[Tuple[Image.Image, fitz.Rect]]:
+def extract_images_from_page(page, min_width: int = 100, min_height: int = 100, min_area_ratio: float = 0.02) -> List[Tuple[Image.Image, fitz.Rect]]:
     """
     Extract images from a PDF page that meet minimum size requirements.
-    Returns list of (PIL Image, position rectangle) tuples.
+    Filters out small icons and UI elements.
+    
+    Args:
+        page: PyMuPDF page object
+        min_width: Minimum width in pixels
+        min_height: Minimum height in pixels
+        min_area_ratio: Minimum ratio of image area to page area
+    
+    Returns:
+        List of PIL Image objects
     """
     images = []
+    page_area = page.rect.width * page.rect.height
     
     try:
         image_list = page.get_images()
@@ -118,32 +128,50 @@ def extract_images_from_page(page, min_width: int = 100, min_height: int = 100) 
         xref = img[0]
         
         try:
+            # Get image position on page first to check size
+            img_rects = page.get_image_rects(xref)
+            if not img_rects:
+                continue
+                
+            rect = img_rects[0]
+            rect_area = rect.width * rect.height
+            
+            # Skip if image takes up too little of the page (likely an icon)
+            if rect_area / page_area < min_area_ratio:
+                continue
+            
             # Extract image
             pix = fitz.Pixmap(page.parent, xref)
-            pil_img = Image.open(io.BytesIO(pix.pil_tobytes(format="PNG")))
             
-            # Check size
-            if pil_img.width >= min_width and pil_img.height >= min_height:
-                # Get image position on page
-                img_rects = page.get_image_rects(xref)
-                if img_rects:
-                    images.append((pil_img, img_rects[0]))
+            # Check pixel dimensions
+            if pix.width < min_width or pix.height < min_height:
+                continue
+            
+            # Check aspect ratio to filter out UI elements (very thin or tall images)
+            aspect_ratio = pix.width / pix.height
+            if aspect_ratio > 10 or aspect_ratio < 0.1:
+                continue
+            
+            pil_img = Image.open(io.BytesIO(pix.pil_tobytes(format="PNG")))
+            images.append((pil_img, rect))
+            
         except Exception as e:
             print(f"⚠️  Failed to extract image {img_index}: {e}", file=sys.stderr)
             continue
-
+    
+    # Sort by position (top to bottom, left to right)
     images.sort(key=lambda x: (x[1].y0, x[1].x0))
-    images = [img for img, rect in images]   
-
-    return images
+    
+    # Return only the images (without rectangles)
+    return [img for img, rect in images]
 
 
 def analyze_image_with_llm(images: list, page_num: int) -> str:
     """
-    Use multimodal LLM to analyze and describe an image.
+    Use multimodal LLM to analyze and describe images.
     """
     
-    # Prepare multimodal prompt
+    # Prepare multimodal prompt based on content type
     prompt = """Describe all images in left-to-right, top-to-bottom order:
 
     Figure 1: [description]
@@ -151,10 +179,10 @@ def analyze_image_with_llm(images: list, page_num: int) -> str:
     Figure N: [description]
 
 Start immediately with "Figure 1: ". No introduction needed."""
-    # Use the large model for better image understanding
+    
     response = local_llm.generate(prompt, images=images)
     
-    return f"\n\n[Page: {page_num + 1}]\n{response}\n\n"
+    return f"\n\n[Visual Content - Page {page_num + 1}]\n{response}\n\n"
 
 def ocr_with_llm(image: Image.Image, page_num: int) -> str:
     """
@@ -171,17 +199,13 @@ def ocr_with_llm(image: Image.Image, page_num: int) -> str:
 def analyze_visual_content(page, page_num: int) -> str:
     """
     Analyze visual content (images, charts, tables) on a page using multimodal LLM.
+    First checks for vector graphics to avoid capturing embedded icons.
     """
     visual_graphics = []
     visual_description = ""
+    has_complex_vector_graphics = False
     
-    # Extract images
-    images = extract_images_from_page(page)
-
-    if images:
-        print(f"  Found {len(images)} images on page {page_num + 1}", file=sys.stderr)
-        visual_graphics += images
-    
+    # First, check for vector graphics (drawings)
     try:
         drawings = page.get_drawings()
     except Exception as e:
@@ -193,10 +217,23 @@ def analyze_visual_content(page, page_num: int) -> str:
         lines = sum(1 for d in drawings if d["type"] == "l")
         curves = sum(1 for d in drawings if d["type"] == "c")
         rects = sum(1 for d in drawings if d["type"] == "r")
+        fills = sum(1 for d in drawings if d["type"] == "f")
+        strokes = sum(1 for d in drawings if d["type"] == "s")
         
-        if lines > 10 or curves > 5 or rects > 5:
-            # For complex vector graphics, render the page area as image and analyze
-            # Get the bounding box of all drawings
+        # Total number of drawing elements
+        total_drawings = len(drawings)
+        
+        # Check if this is a complex vector graphic (chart, diagram, etc.)
+        # Need significant number of actual drawing operations, not just fills
+        has_significant_paths = lines > 10 or curves > 5 or (lines + curves) > 8
+        has_significant_shapes = rects > 10 or (rects > 5 and fills > 3)
+        has_many_elements = total_drawings > 20
+        
+        if has_significant_paths or has_significant_shapes or has_many_elements:
+            has_complex_vector_graphics = True
+            print(f"  Detected complex vector graphics on page {page_num + 1} (lines: {lines}, curves: {curves}, rects: {rects}, fills: {fills}, total: {total_drawings})", file=sys.stderr)
+            
+            # For complex vector graphics, render the entire drawing area as one image
             all_rects = [fitz.Rect(d["rect"]) for d in drawings]
             if all_rects:
                 # Union of all drawing rectangles
@@ -204,18 +241,53 @@ def analyze_visual_content(page, page_num: int) -> str:
                 for r in all_rects[1:]:
                     bbox = bbox | r  # Union operation
                 
-                try:
-                    # Render the area as image
-                    zoom = min(1.5, 600 / max(bbox.width, bbox.height))
-                    mat = fitz.Matrix(zoom, zoom)
-                    pix = page.get_pixmap(matrix=mat, clip=bbox)
-                    vector_img = Image.open(io.BytesIO(pix.pil_tobytes(format="PNG")))
-                    visual_graphics.append(vector_img)
-                except Exception as e:
-                    print(f"⚠️  Failed to render drawings as image on page {page_num + 1}: {e}", file=sys.stderr)
+                # Check if the bounding box is reasonable (not too small, not entire page)
+                page_rect = page.rect
+                bbox_area = bbox.width * bbox.height
+                page_area = page_rect.width * page_rect.height
+                
+                # Only render if the graphics area is significant but not the entire page
+                if bbox_area > 100 and bbox_area < page_area * 0.9:
+                    # Expand bbox slightly to capture full graphics
+                    bbox.x0 = max(bbox.x0 - 5, page_rect.x0)
+                    bbox.y0 = max(bbox.y0 - 5, page_rect.y0)
+                    bbox.x1 = min(bbox.x1 + 5, page_rect.x1)
+                    bbox.y1 = min(bbox.y1 + 5, page_rect.y1)
+                    
+                    try:
+                        # Render the area as image
+                        zoom = min(2.0, 800 / max(bbox.width, bbox.height))
+                        mat = fitz.Matrix(zoom, zoom)
+                        pix = page.get_pixmap(matrix=mat, clip=bbox)
+                        vector_img = Image.open(io.BytesIO(pix.pil_tobytes(format="PNG")))
+                        visual_graphics.append(vector_img)
+                        print(f"  Rendered vector graphics area: {bbox.width:.0f}x{bbox.height:.0f} pixels", file=sys.stderr)
+                    except Exception as e:
+                        print(f"⚠️  Failed to render drawings as image on page {page_num + 1}: {e}", file=sys.stderr)
+                else:
+                    # Graphics too small or covers entire page, treat as regular page
+                    has_complex_vector_graphics = False
+                    print(f"  Vector graphics area not suitable for separate rendering (area ratio: {bbox_area/page_area:.2f})", file=sys.stderr)
     
+    # Extract individual images
+    # If we have complex vector graphics, be more strict about image filtering
+    if has_complex_vector_graphics:
+        # Use stricter filtering for pages with vector graphics
+        images = extract_images_from_page(page, min_width=150, min_height=150, min_area_ratio=0.05)
+        if images:
+            print(f"  Found {len(images)} significant images alongside vector graphics", file=sys.stderr)
+            visual_graphics += images
+    else:
+        # Normal image extraction for pages without complex vector graphics
+        images = extract_images_from_page(page)
+        if images:
+            print(f"  Found {len(images)} standalone images on page {page_num + 1}", file=sys.stderr)
+            visual_graphics += images
+    
+    # Analyze all visual content together
     if len(visual_graphics) > 0:
         visual_description += analyze_image_with_llm(visual_graphics, page_num)
+    
     return visual_description
 
 
@@ -309,8 +381,8 @@ Returns a list of dicts identical in structure to build_sections_from_toc.
         sample_text = " ".join(pages_text[start:end])[: MAX_TOKENS - 100]  # leave space for LLM response
         title_prompt = prompt_template.format(sample=sample_text)
         try:
-            title_line = local_llm_large.generate(title_prompt)
-            title_line = local_llm_large.strip_response(title_line).strip()
+            title_line = local_llm.generate(title_prompt)
+            title_line = local_llm.strip_response(title_line).strip()
 
         except Exception:
             title_line = f"Miscellaneous Section {start + 1}-{end}"
@@ -481,11 +553,10 @@ def extract_pdf_content(pdf_path: str,
                 page_text += visual_content
         
         pages_text.append(page_text)
-        try:
-            del pix, img, vector_img
-        except NameError:
-            pass
-        del page
+        
+        # Clean up any created image objects
+        if 'page' in locals():
+            del page
         gc.collect()
         # Progress indicator
         if (i + 1) % 10 == 0:
@@ -566,7 +637,7 @@ if __name__ == "__main__":
     print(f"- Document: {selected_file}", file=sys.stderr)
     print(f"- Sections found: {len(extracted_data['sections'])}", file=sys.stderr)
     print(f"- Total pages: {extracted_data['metadata']['total_pages']}", file=sys.stderr)
-    print(f"- Fast mode: {extracted_data['metadata']['fast_mode']}, file=sys.stderr")
+    print(f"- Fast mode: {extracted_data['metadata']['fast_mode']}", file=sys.stderr)
     if analyze_visuals:
         print(f"- Visual analysis: Every {visual_interval} pages", file=sys.stderr)
 

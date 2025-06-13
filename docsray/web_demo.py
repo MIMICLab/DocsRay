@@ -44,7 +44,7 @@ logger = logging.getLogger(__name__)
 
 # --- Liveness watchdog variables ---
 LAST_ACTIVITY = time.time()           # Timestamp of last successful UI update
-HEALTH_TIMEOUT = 180                  # Seconds of silence → watchdog restart
+HEALTH_TIMEOUT = 300                 # Seconds of silence → watchdog restart
 
 def safe_progress(cb, pct, msg):
     """
@@ -70,7 +70,7 @@ TEMP_DIR.mkdir(exist_ok=True)
 # Session timeout (24 hours)
 SESSION_TIMEOUT = 86400
 PAGE_LIMIT = 5
-PDF_PROCESS_TIMEOUT = 180
+PDF_PROCESS_TIMEOUT = 300
 # Error recovery settings
 MAX_MEMORY_PERCENT = 90  # Restart if memory usage exceeds this
 ERROR_THRESHOLD = 1  # Number of errors before restart

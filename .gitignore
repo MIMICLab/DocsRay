@@ -1,20 +1,12 @@
-# --------------------------
-# Python Byte-Compiled Files
-# --------------------------
+# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
 
-# --------------------------
-# Cython / C Extensions
-# --------------------------
+# C extensions
 *.so
-*.dylib
-*.dll
 
-# --------------------------
-# Distribution / Packaging
-# --------------------------
+# Distribution / packaging
 .Python
 build/
 develop-eggs/
@@ -28,57 +20,159 @@ parts/
 sdist/
 var/
 wheels/
+share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+MANIFEST
 
-# --------------------------
-# Virtual Environments
-# --------------------------
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# Translations
+*.mo
+*.pot
+
+# Django stuff:
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+
+# Flask stuff:
+instance/
+.webassets-cache
+
+# Scrapy stuff:
+.scrapy
+
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+.pybuilder/
+target/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+.python-version
+
+# pipenv
+Pipfile.lock
+
+# poetry
+poetry.lock
+
+# pdm
+.pdm.toml
+
+# PEP 582
+__pypackages__/
+
+# Celery stuff
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Environments
+.env
+.venv
 env/
 venv/
-.venv/
-.gradio/
-# --------------------------
-# VSCode Settings
-# --------------------------
+ENV/
+env.bak/
+venv.bak/
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# pytype static type analyzer
+.pytype/
+
+# Cython debug symbols
+cython_debug/
+
+# PyCharm
+.idea/
+
+# VSCode
 .vscode/
 
-# --------------------------
-# MyPy / Pytest Cache / Coverage
-# --------------------------
-.mypy_cache/
+# macOS
+.DS_Store
+
+# DocsRay specific
+data/
+models/
+.docsray/
+*.gguf
+*.pkl
+*.json
+!package.json
+!pyproject.toml
+!tsconfig.json
+
+# Temporary files
+*.tmp
+*.temp
+*~
+.*.swp
+
+# Log files
+logs/
+*.log
+
+# Test artifacts
 .pytest_cache/
 .coverage
 htmlcov/
-.cache/
 
-# --------------------------
-# PyInstaller
-# --------------------------
-*.spec
+# Generated documentation
+docs/_build/
+docs/api/
 
-# --------------------------
-# Logs / Temp Files
-# --------------------------
-*.log
-*.tmp
-
-# --------------------------
-# Jupyter Notebooks
-# --------------------------
-.ipynb_checkpoints
-
-# --------------------------
-# System Files
-# --------------------------
-.DS_Store
-Thumbs.db
-
-# --------------------------
-# Project Data and Checkpoints
-# --------------------------
-checkpoints/
-data/
-# (Optional) If you store model weights in a specific folder:
-# models/
+# Pandoc temporary files
+.pandoc/

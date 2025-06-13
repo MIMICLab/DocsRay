@@ -1,0 +1,3 @@
+"""
+DocsRay test suite
+"""

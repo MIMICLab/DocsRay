@@ -2,16 +2,19 @@
 DocsRay - Document Question-Answering System with MCP Integration
 """
 
-__version__ = "1.5.3"
+__version__ = "1.5.4"
 __author__ = "Taehoon Kim"
 
 import os
 import sys
 
-# Suppress logs
-os.environ["LLAMA_LOG_LEVEL"] = "40"
-os.environ["GGML_LOG_LEVEL"] = "error"
-os.environ["LLAMA_CPP_LOG_LEVEL"] = "ERROR"
+# Suppress logs if not already set
+if "LLAMA_LOG_LEVEL" not in os.environ:
+    os.environ["LLAMA_LOG_LEVEL"] = "40"
+if "GGML_LOG_LEVEL" not in os.environ:
+    os.environ["GGML_LOG_LEVEL"] = "error"
+if "LLAMA_CPP_LOG_LEVEL" not in os.environ:
+    os.environ["LLAMA_CPP_LOG_LEVEL"] = "ERROR"
 
 # Import config
 from .config import FAST_MODE, STANDARD_MODE, FULL_FEATURE_MODE

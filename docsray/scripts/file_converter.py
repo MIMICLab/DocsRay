@@ -219,8 +219,10 @@ class FileConverter:
         print(f"Converting {self.SUPPORTED_FORMATS[file_ext]} file to PDF...", file=sys.stderr)
         
         # Office documents
-        if file_ext in ['.docx', '.doc']:
+        if file_ext == '.docx':
             return self._convert_docx_to_pdf(input_file, output_path)
+        elif file_ext == '.doc':
+            return self._convert_doc_to_pdf(input_file, output_path)
         elif file_ext in ['.xlsx', '.xls']:
             return self._convert_excel_to_pdf(input_file, output_path)
         elif file_ext in ['.pptx', '.ppt']:
@@ -386,8 +388,147 @@ class FileConverter:
             print(f"[Error] {error_msg}", file=sys.stderr)
             return False, error_msg
 
+    def _convert_doc_to_pdf(self, input_file: Path, output_file: Path) -> Tuple[bool, str]:
+        """Convert DOC (legacy format) to PDF"""
+        # First try: Use python-docx2txt (no external dependencies)
+        try:
+            import docx2txt
+            
+            # Extract text
+            text = docx2txt.process(str(input_file))
+            
+            # Extract images
+            temp_dir = output_file.parent / f"temp_{input_file.stem}"
+            temp_dir.mkdir(exist_ok=True)
+            
+            # docx2txt extracts images to a directory
+            images_dir = temp_dir / "images"
+            images_dir.mkdir(exist_ok=True)
+            
+            # Extract with images
+            text_with_images = docx2txt.process(str(input_file), str(images_dir))
+            
+            # Find extracted images
+            image_files = []
+            if images_dir.exists():
+                for img_file in images_dir.iterdir():
+                    if img_file.suffix.lower() in ['.png', '.jpg', '.jpeg', '.gif', '.bmp']:
+                        image_files.append(str(img_file))
+            
+            # Convert to PDF
+            if _save_text_images_to_pdf_korean(text, image_files, output_file):
+                # Cleanup
+                import shutil
+                if temp_dir.exists():
+                    shutil.rmtree(temp_dir)
+                return True, str(output_file)
+            else:
+                return False, "Failed to save PDF"
+                
+        except ImportError:
+            # docx2txt not installed, try alternative methods
+            pass
+        except Exception as e:
+            print(f"docx2txt failed: {e}", file=sys.stderr)
+        
+        # Second try: Use python-docx (may work for some .doc files)
+        try:
+            from docx import Document
+            
+            doc = Document(str(input_file))
+            full_text = ""
+            
+            for paragraph in doc.paragraphs:
+                full_text += paragraph.text + "\n"
+            
+            # Extract tables
+            for table in doc.tables:
+                for row in table.rows:
+                    row_text = "\t".join([cell.text for cell in row.cells])
+                    full_text += row_text + "\n"
+                full_text += "\n"
+            
+            if full_text.strip():
+                if _save_text_images_to_pdf_korean(full_text, [], output_file):
+                    return True, str(output_file)
+        except Exception as e:
+            print(f"python-docx failed: {e}", file=sys.stderr)
+        
+        # Third try: Use pandoc if available
+        try:
+            # Check if pandoc is available
+            pypandoc.get_pandoc_version()
+            
+            # Try to convert
+            text = pypandoc.convert_file(str(input_file), 'plain')
+            
+            if text and _save_text_images_to_pdf_korean(text, [], output_file):
+                return True, str(output_file)
+        except Exception as e:
+            print(f"Pandoc failed: {e}", file=sys.stderr)
+        
+        # All methods failed
+        return False, (
+            "Failed to convert .doc file. This is a legacy format that requires special handling.\n\n"
+            "Please try one of the following:\n"
+            "1. Save the file as .docx format in Microsoft Word and upload again\n"
+            "2. Install docx2txt: pip install docx2txt\n"
+            "3. Install python-docx: pip install python-docx\n"
+            "4. Convert to PDF manually and upload the PDF\n\n"
+            "Note: .docx files are recommended over .doc for better compatibility."
+        )
+    
     def _convert_docx_to_pdf(self, input_file: Path, output_file: Path) -> Tuple[bool, str]:
-        """Convert DOCX to PDF using pypandoc"""
+        """Convert DOCX to PDF - try multiple methods"""
+        # First try: python-docx (most reliable for .docx)
+        try:
+            from docx import Document
+            
+            doc = Document(str(input_file))
+            full_text = ""
+            temp_dir = output_file.parent / f"temp_{input_file.stem}"
+            temp_dir.mkdir(exist_ok=True)
+            image_files = []
+            
+            # Extract text from paragraphs
+            for paragraph in doc.paragraphs:
+                full_text += paragraph.text + "\n"
+            
+            # Extract text from tables
+            for table in doc.tables:
+                for row in table.rows:
+                    row_text = "\t".join([cell.text for cell in row.cells])
+                    full_text += row_text + "\n"
+                full_text += "\n"
+            
+            # Extract images
+            try:
+                img_counter = 0
+                for rel in doc.part.rels.values():
+                    if "image" in rel.target_ref:
+                        img_counter += 1
+                        img_data = rel.target_part.blob
+                        img_path = temp_dir / f"image_{img_counter}.png"
+                        with open(img_path, 'wb') as f:
+                            f.write(img_data)
+                        image_files.append(str(img_path))
+            except Exception as e:
+                print(f"Image extraction warning: {e}", file=sys.stderr)
+            
+            # Convert to PDF
+            if _save_text_images_to_pdf_korean(full_text, image_files, output_file):
+                # Cleanup
+                import shutil
+                if temp_dir.exists():
+                    shutil.rmtree(temp_dir)
+                return True, str(output_file)
+                
+        except ImportError:
+            print("python-docx not installed, trying pandoc...", file=sys.stderr)
+        except Exception as e:
+            print(f"python-docx failed: {e}, trying pandoc...", file=sys.stderr)
+        
+        # Second try: pypandoc (if python-docx fails)
         try:
             import subprocess
             
@@ -434,7 +575,7 @@ class FileConverter:
                 return False, "Failed to save PDF"
                 
         except Exception as e:
-            return False, f"DOCX conversion error: {str(e)}"
+            return False, f"DOCX conversion error: {str(e)}.\nPlease install python-docx: pip install python-docx"
 
     def _convert_excel_to_pdf(self, input_file: Path, output_file: Path) -> Tuple[bool, str]:
         """Convert Excel to PDF using openpyxl"""

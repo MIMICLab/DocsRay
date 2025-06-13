@@ -17,7 +17,7 @@ from docsray.scripts.file_converter import FileConverter
 app = FastAPI(
     title="DocsRay API",
     description="Universal Document Question-Answering System API",
-    version="1.5.3"
+    version="1.5.4"
 )
 
 # Global variables to store the current document data
