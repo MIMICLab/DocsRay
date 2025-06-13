@@ -1,6 +1,5 @@
 # DocsRay 
 [![PyPI Status](https://badge.fury.io/py/docsray.svg)](https://badge.fury.io/py/docsray)
-[![Python Version](https://img.shields.io/pypi/pyversions/docsray)](https://pypi.org/project/docsray/)
 [![license](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/MIMICLab/DocsRay/blob/main/LICENSE)
 [![Downloads](https://pepy.tech/badge/docsray)](https://pepy.tech/project/docsray)
 
