@@ -43,7 +43,7 @@ docsray web  # Launch Web UI
 - **Multimodal AI**: Visual content analysis using Gemma-3-4B's image recognition capabilities
 - **Hybrid OCR System**: Intelligent selection between AI-powered OCR and traditional Pytesseract
 - **Adaptive Performance**: Automatically optimizes based on available system resources
-- **Multi-Model Support**: Uses BGE-M3, E5-Large, Gemma-3-1B, and Gemma-3-4B models
+- **Multi-Model Support**: Uses BGE-M3, E5-Large, and Gemma-3-4B models
 - **MCP Integration**: Seamless integration with Claude Desktop
 - **Multiple Interfaces**: Web UI, API server, CLI, and MCP server
 - **Directory Management**: Advanced PDF directory handling and caching
