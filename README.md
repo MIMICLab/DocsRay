@@ -5,8 +5,6 @@
 
 A powerful Universal Document Question-Answering System that uses advanced embedding models and multimodal LLMs with Coarse-to-Fine search (RAG) approach. Features seamless MCP (Model Context Protocol) integration with Claude Desktop, comprehensive directory management capabilities, visual content analysis, and intelligent hybrid OCR system.
 
-## Try It Online
-- [Demo on H100 GPU](https://docsray.com/) 
 
 ## 🚀 Quick Start
 
