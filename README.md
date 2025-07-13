@@ -38,10 +38,10 @@ docsray web  # Launch Web UI
 ## 📋 Features
 
 - **Advanced RAG System**: Coarse-to-Fine search for accurate document retrieval
-- **Multimodal AI**: Visual content analysis using Gemma-3-4B's image recognition capabilities
+- **Multimodal AI**: Visual content analysis using Gemma-3-12B's image recognition capabilities
 - **Hybrid OCR System**: Intelligent selection between AI-powered OCR and traditional Pytesseract
 - **Adaptive Performance**: Automatically optimizes based on available system resources
-- **Multi-Model Support**: Uses BGE-M3, E5-Large, and Gemma-3-4B models
+- **Multi-Model Support**: Uses BGE-M3, E5-Large, and Gemma-3-12B models
 - **MCP Integration**: Seamless integration with Claude Desktop
 - **Multiple Interfaces**: Web UI, API server, CLI, and MCP server
 - **Directory Management**: Advanced PDF directory handling and caching
@@ -106,7 +106,7 @@ For Microsoft Word .doc files (legacy format), DocsRay will attempt multiple con
 **Note**: The newer .docx format is strongly recommended over .doc for better compatibility and features.
 
 ### Hybrid OCR System
-DocsRay now features an AI-OCR powered by Gemma3-4b.
+DocsRay now features an AI-OCR powered by Gemma3-12B.
 You can also choose to use Tesseract OCR simply by installing:
 
 ```bash
@@ -437,7 +437,7 @@ DocsRay uses the following models (automatically downloaded):
 |-------|------|---------|
 | bge-m3 | 1.7GB | Multilingual embedding model |
 | multilingual-e5-Large | 1.2GB | Multilingual embedding model |
-| Gemma-3-4B | 4.1GB | Main answer generation & visual analysis |
+| Gemma-3-12B | 4.1GB | Main answer generation & visual analysis |
 
 **Total storage requirement**: ~8GB
 
@@ -800,7 +800,7 @@ This project is licensed under the MIT License. See [LICENSE](LICENSE) file for 
 **Note**: Individual model licenses may have different requirements:
 - BAAI/bge-m3: MIT License
 - intfloat/multilingual-e5-large: MIT License
-- gemma-3-4B-it: Gemma Terms of Use
+- gemma-3-12B-it: Gemma Terms of Use
 
 ## 🤝 Support
 

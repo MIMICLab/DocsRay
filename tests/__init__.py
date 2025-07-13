@@ -1,3 +1,0 @@
-"""
-DocsRay test suite
-"""

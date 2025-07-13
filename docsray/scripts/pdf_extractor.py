@@ -22,6 +22,7 @@ if USE_TESSERACT:
 
 # LLM for outline generation and image analysis
 from docsray.inference.llm_model import local_llm
+
 from docsray.scripts.file_converter import FileConverter
 from pathlib import Path
 
@@ -100,89 +101,163 @@ def extract_content(file_path: str,
 # Alias for backward compatibility
 extract_document_content = extract_content
 
-def extract_images_from_page(page, min_width: int = 100, min_height: int = 100, min_area_ratio: float = 0.02) -> List[Tuple[Image.Image, fitz.Rect]]:
+def is_vector_component_image(pil_img: Image.Image, page_rect: fitz.Rect) -> bool:
+    """
+    Determine if an image is likely a component of vector graphics rather than a standalone image.
+    """
+    # Very small images are likely vector components
+    if pil_img.width < 50 or pil_img.height < 50:
+        return True
+    
+    # Images that are mostly one color (like fills or simple shapes)
+    try:
+        # Convert to RGB if needed
+        if pil_img.mode != 'RGB':
+            img_rgb = pil_img.convert('RGB')
+        else:
+            img_rgb = pil_img
+        
+        # Sample pixels to check color diversity
+        import random
+        pixels = []
+        width, height = img_rgb.size
+        sample_size = min(100, width * height // 10)  # Sample up to 100 pixels
+        
+        for _ in range(sample_size):
+            x = random.randint(0, width - 1)
+            y = random.randint(0, height - 1)
+            pixels.append(img_rgb.getpixel((x, y)))
+        
+        # Check color diversity
+        unique_colors = set(pixels)
+        color_diversity = len(unique_colors) / len(pixels)
+        
+        # If very low color diversity, likely a vector component
+        if color_diversity < 0.1:  # Less than 10% unique colors
+            return True
+            
+        # Check if it's mostly white/transparent (common in vector graphics)
+        white_count = sum(1 for r, g, b in pixels if r > 240 and g > 240 and b > 240)
+        if white_count / len(pixels) > 0.8:  # More than 80% white
+            return True
+            
+    except Exception:
+        # If color analysis fails, fall back to size-based decision
+        pass
+    
+    # Check aspect ratio - very thin images might be lines or borders
+    aspect_ratio = max(pil_img.width, pil_img.height) / min(pil_img.width, pil_img.height)
+    if aspect_ratio > 10:  # Very elongated
+        return True
+    
+    return False
+
+def extract_images_from_page(page, min_width: int = 100, min_height: int = 100, filter_vector_components: bool = False) -> List[Image.Image]:
     """
     Extract images from a PDF page that meet minimum size requirements.
-    Filters out small icons and UI elements.
-    
-    Args:
-        page: PyMuPDF page object
-        min_width: Minimum width in pixels
-        min_height: Minimum height in pixels
-        min_area_ratio: Minimum ratio of image area to page area
-    
-    Returns:
-        List of PIL Image objects
+    Returns list of PIL Images sorted by position.
     """
     images = []
-    page_area = page.rect.width * page.rect.height
     
     try:
         image_list = page.get_images()
     except Exception as e:
-        print(f"⚠️  Failed to get images from page: {e}", file=sys.stderr)
+        print(f"⚠️  Failed to get images from page {page.number + 1}: {e}", file=sys.stderr)
         return images
+    
+    image_positions = []  # Store (image, rect) for sorting
     
     for img_index, img in enumerate(image_list):
         # Get image xref
         xref = img[0]
+        pix = None
         
         try:
-            # Get image position on page first to check size
-            img_rects = page.get_image_rects(xref)
-            if not img_rects:
-                continue
-                
-            rect = img_rects[0]
-            rect_area = rect.width * rect.height
-            
-            # Skip if image takes up too little of the page (likely an icon)
-            if rect_area / page_area < min_area_ratio:
-                continue
-            
-            # Extract image
+            # Extract image with better error handling
             pix = fitz.Pixmap(page.parent, xref)
             
-            # Check pixel dimensions
-            if pix.width < min_width or pix.height < min_height:
+            # Check if pixmap is valid
+            if pix.width == 0 or pix.height == 0:
                 continue
+                
+            # Convert to PIL Image
+            if pix.n - pix.alpha < 4:  # GRAY or RGB
+                pil_img = Image.open(io.BytesIO(pix.pil_tobytes(format="PNG")))
+            else:  # CMYK: convert to RGB first
+                pix_rgb = fitz.Pixmap(fitz.csRGB, pix)
+                pil_img = Image.open(io.BytesIO(pix_rgb.pil_tobytes(format="PNG")))
+                pix_rgb = None  # Clean up immediately
             
-            # Check aspect ratio to filter out UI elements (very thin or tall images)
-            aspect_ratio = pix.width / pix.height
-            if aspect_ratio > 10 or aspect_ratio < 0.1:
-                continue
-            
-            pil_img = Image.open(io.BytesIO(pix.pil_tobytes(format="PNG")))
-            images.append((pil_img, rect))
-            
+            # Check size requirements
+            if pil_img.width >= min_width and pil_img.height >= min_height:
+                # Additional filtering for vector components if requested
+                if filter_vector_components and is_vector_component_image(pil_img, page.rect):
+                    print(f"    Filtered out vector component image {img_index} ({pil_img.width}x{pil_img.height})", file=sys.stderr)
+                    pil_img.close()
+                    continue
+                
+                # Get image position on page
+                try:
+                    img_rects = page.get_image_rects(xref)
+                    if img_rects:
+                        image_positions.append((pil_img, img_rects[0]))
+                    else:
+                        # If no position info, add to end
+                        image_positions.append((pil_img, fitz.Rect(999, 999, 999, 999)))
+                except Exception as e:
+                    print(f"⚠️  Failed to get image position for image {img_index}: {e}", file=sys.stderr)
+                    # Add image without position info
+                    image_positions.append((pil_img, fitz.Rect(999, 999, 999, 999)))
+            else:
+                # Image too small, close it
+                pil_img.close()
+                
         except Exception as e:
-            print(f"⚠️  Failed to extract image {img_index}: {e}", file=sys.stderr)
+            print(f"⚠️  Failed to extract image {img_index} from page {page.number + 1}: {e}", file=sys.stderr)
             continue
+        finally:
+            # Clean up pixmap
+            if pix:
+                pix = None
     
-    # Sort by position (top to bottom, left to right)
-    images.sort(key=lambda x: (x[1].y0, x[1].x0))
+    # Sort images by position (top-to-bottom, left-to-right)
+    image_positions.sort(key=lambda x: (x[1].y0, x[1].x0))
+    images = [img for img, rect in image_positions]
     
-    # Return only the images (without rectangles)
-    return [img for img, rect in images]
+    return images
 
 
 def analyze_image_with_llm(images: list, page_num: int) -> str:
     """
     Use multimodal LLM to analyze and describe images.
     """
+    if not images:
+        return ""
     
-    # Prepare multimodal prompt based on content type
-    prompt = """Describe all images in left-to-right, top-to-bottom order:
+    # Different prompts based on number of images
+    if len(images) == 1:
+        prompt = """Describe this visual content. If it's a chart, graph, or diagram, explain what data or information it shows. If it's a photo or illustration, describe what it depicts. Be concise but informative."""
+    else:
+        prompt = f"""Describe these {len(images)} visual elements in order:
 
-    Figure 1: [description]
-    Figure 2: [description]
-    Figure N: [description]
+Figure 1: [description]
+Figure 2: [description]
+Figure N: [description]
 
-Start immediately with "Figure 1: ". No introduction needed."""
+For each figure, identify if it's a chart/graph/diagram (and what data it shows) or a photo/illustration (and what it depicts). Start immediately with "Figure 1:"."""
     
-    response = local_llm.generate(prompt, images=images)
-    
-    return f"\n\n[Visual Content - Page {page_num + 1}]\n{response}\n\n"
+    try:
+        # Use the large model for better image understanding
+        response = local_llm.generate(prompt, images=images)
+        
+        # Clean up the response
+        cleaned_response = local_llm.strip_response(response)
+        
+        return f"\n\n[Visual Content - Page {page_num + 1}]\n{cleaned_response}\n\n"
+        
+    except Exception as e:
+        print(f"⚠️  LLM analysis failed for page {page_num + 1}: {e}", file=sys.stderr)
+        return f"\n\n[Visual Content - Page {page_num + 1}]\n[{len(images)} visual element(s) found but analysis failed]\n\n"
 
 def ocr_with_llm(image: Image.Image, page_num: int) -> str:
     """
@@ -196,97 +271,245 @@ def ocr_with_llm(image: Image.Image, page_num: int) -> str:
     extracted_text = local_llm.strip_response(response)
     return extracted_text.strip()
 
+def detect_tables(page) -> List[fitz.Rect]:
+    """
+    Detect table structures on a page using text alignment patterns.
+    """
+    tables = []
+    
+    try:
+        # Get text blocks with position information
+        text_dict = page.get_text("dict")
+        
+        # Extract lines from blocks
+        all_lines = []
+        for block in text_dict["blocks"]:
+            if "lines" in block:
+                for line in block["lines"]:
+                    bbox = fitz.Rect(line["bbox"])
+                    text = ""
+                    for span in line["spans"]:
+                        text += span["text"] + " "
+                    if text.strip():
+                        all_lines.append({
+                            "bbox": bbox,
+                            "text": text.strip(),
+                            "y": bbox.y0
+                        })
+        
+        if len(all_lines) < 3:
+            return tables
+        
+        # Group lines by approximate Y position (rows)
+        all_lines.sort(key=lambda x: x["y"])
+        rows = []
+        current_row = []
+        current_y = None
+        tolerance = 5  # pixels
+        
+        for line in all_lines:
+            if current_y is None or abs(line["y"] - current_y) <= tolerance:
+                current_row.append(line)
+                current_y = line["y"] if current_y is None else current_y
+            else:
+                if len(current_row) >= 2:  # At least 2 columns
+                    rows.append(current_row)
+                current_row = [line]
+                current_y = line["y"]
+        
+        if len(current_row) >= 2:
+            rows.append(current_row)
+        
+        # Look for table patterns (at least 3 rows with similar column structure)
+        if len(rows) >= 3:
+            # Find consistent column positions
+            column_positions = []
+            for row in rows[:5]:  # Check first 5 rows
+                positions = sorted([line["bbox"].x0 for line in row])
+                column_positions.append(positions)
+            
+            # Check if we have consistent column structure
+            if len(set(len(pos) for pos in column_positions)) == 1:  # Same number of columns
+                # Calculate table bounding box
+                min_x = min(min(line["bbox"].x0 for line in row) for row in rows)
+                max_x = max(max(line["bbox"].x1 for line in row) for row in rows)
+                min_y = min(min(line["bbox"].y0 for line in row) for row in rows)
+                max_y = max(max(line["bbox"].y1 for line in row) for row in rows)
+                
+                table_rect = fitz.Rect(min_x - 5, min_y - 5, max_x + 5, max_y + 5)
+                
+                # Ensure minimum table size
+                if table_rect.width > 100 and table_rect.height > 50:
+                    tables.append(table_rect)
+                    print(f"  Detected table: {table_rect.width:.0f}x{table_rect.height:.0f} with {len(rows)} rows", file=sys.stderr)
+        
+    except Exception as e:
+        print(f"⚠️  Table detection failed: {e}", file=sys.stderr)
+    
+    return tables
+
 def analyze_visual_content(page, page_num: int) -> str:
     """
     Analyze visual content (images, charts, tables) on a page using multimodal LLM.
-    First checks for vector graphics to avoid capturing embedded icons.
     """
     visual_graphics = []
     visual_description = ""
-    has_complex_vector_graphics = False
     
-    # First, check for vector graphics (drawings)
+    # First, detect and capture tables
+    try:
+        tables = detect_tables(page)
+        for table_rect in tables:
+            try:
+                # Render table area as image
+                zoom = min(2.0, 800 / max(table_rect.width, table_rect.height))
+                mat = fitz.Matrix(zoom, zoom)
+                pix = page.get_pixmap(matrix=mat, clip=table_rect, alpha=False)
+                
+                if pix.width > 0 and pix.height > 0:
+                    table_img = Image.open(io.BytesIO(pix.pil_tobytes(format="PNG")))
+                    visual_graphics.append(table_img)
+                    print(f"  Captured table as image on page {page_num + 1}", file=sys.stderr)
+                    pix = None  # Clean up immediately
+                    
+            except Exception as e:
+                print(f"⚠️  Failed to capture table on page {page_num + 1}: {e}", file=sys.stderr)
+                
+    except Exception as e:
+        print(f"⚠️  Table detection failed on page {page_num + 1}: {e}", file=sys.stderr)
+    
+    # Then, analyze vector graphics to understand the drawing structure
+    vector_img = None
+    has_complex_vectors = False
+    
     try:
         drawings = page.get_drawings()
+        
+        if drawings:
+            # Count different types of drawing elements
+            # PyMuPDF returns drawing types as "f" (fill), "s" (stroke), "fs" (fill+stroke)
+            # We need to look at the items within each drawing to count lines, curves, rects
+            lines = 0
+            curves = 0
+            rects = 0
+            
+            for drawing in drawings:
+                items = drawing.get("items", [])
+                for item in items:
+                    if isinstance(item, tuple) and len(item) >= 2:
+                        cmd = item[0]
+                        if cmd == "l":  # line
+                            lines += 1
+                        elif cmd == "c":  # curve
+                            curves += 1
+                        elif cmd == "re":  # rectangle
+                            rects += 1
+            
+            # Debug: print drawing details if any drawings exist
+            total_drawings = len(drawings)
+            if total_drawings > 0:
+                print(f"  Detected {total_drawings} drawing paths on page {page_num + 1} (lines: {lines}, curves: {curves}, rects: {rects})", file=sys.stderr)
+            
+            # Only analyze complex drawings to avoid processing simple borders
+            # Also check that we actually found some drawing commands
+            total_commands = lines + curves + rects
+            if total_commands > 0 and (lines > 15 or curves > 8 or rects > 8):
+                has_complex_vectors = True
+                print(f"  Processing as complex vector graphics", file=sys.stderr)
+            elif total_drawings > 10:  # Many paths but few drawing commands - still might be complex
+                # Check if we have many paths with fills/strokes that could be vector graphics
+                has_complex_vectors = True
+                print(f"  Processing as complex vector graphics (many paths detected)", file=sys.stderr)
+                
+                # Get the bounding box of all drawings
+                try:
+                    all_rects = []
+                    for d in drawings:
+                        if "rect" in d and d["rect"]:
+                            all_rects.append(fitz.Rect(d["rect"]))
+                    
+                    if all_rects:
+                        # Union of all drawing rectangles
+                        bbox = all_rects[0]
+                        for r in all_rects[1:]:
+                            bbox = bbox | r  # Union operation
+                        
+                        # Only render if bbox is reasonable size
+                        if bbox.width > 50 and bbox.height > 50:
+                            print(f"  Rendered vector graphics area: {int(bbox.width)}x{int(bbox.height)} pixels", file=sys.stderr)
+                            # Calculate appropriate zoom
+                            max_dimension = max(bbox.width, bbox.height)
+                            zoom = min(2.0, 800 / max_dimension) if max_dimension > 0 else 1.0
+                            
+                            mat = fitz.Matrix(zoom, zoom)
+                            pix = page.get_pixmap(matrix=mat, clip=bbox, alpha=False)
+                            
+                            if pix.width > 0 and pix.height > 0:
+                                vector_img = Image.open(io.BytesIO(pix.pil_tobytes(format="PNG")))
+                                visual_graphics.append(vector_img)
+                                pix = None  # Clean up immediately
+                                
+                except Exception as e:
+                    print(f"⚠️  Failed to render drawings as image on page {page_num + 1}: {e}", file=sys.stderr)
+                    
     except Exception as e:
         print(f"⚠️  Failed to get drawings from page {page_num + 1}: {e}", file=sys.stderr)
-        drawings = []
     
-    if drawings:
-        # Count different types of drawing elements
-        lines = sum(1 for d in drawings if d["type"] == "l")
-        curves = sum(1 for d in drawings if d["type"] == "c")
-        rects = sum(1 for d in drawings if d["type"] == "r")
-        fills = sum(1 for d in drawings if d["type"] == "f")
-        strokes = sum(1 for d in drawings if d["type"] == "s")
-        
-        # Total number of drawing elements
-        total_drawings = len(drawings)
-        
-        # Check if this is a complex vector graphic (chart, diagram, etc.)
-        # Need significant number of actual drawing operations, not just fills
-        has_significant_paths = lines > 10 or curves > 5 or (lines + curves) > 8
-        has_significant_shapes = rects > 10 or (rects > 5 and fills > 3)
-        has_many_elements = total_drawings > 20
-        
-        if has_significant_paths or has_significant_shapes or has_many_elements:
-            has_complex_vector_graphics = True
-            print(f"  Detected complex vector graphics on page {page_num + 1} (lines: {lines}, curves: {curves}, rects: {rects}, fills: {fills}, total: {total_drawings})", file=sys.stderr)
+    # Extract standalone images (but filter out vector graphic components if complex vectors exist)
+    try:
+        if has_complex_vectors:
+            # When complex vectors exist, be very selective about images to avoid duplicates
+            print(f"  Using strict filtering to avoid vector component images", file=sys.stderr)
+            images = extract_images_from_page(page, min_width=120, min_height=120, filter_vector_components=True)
             
-            # For complex vector graphics, render the entire drawing area as one image
-            all_rects = [fitz.Rect(d["rect"]) for d in drawings]
-            if all_rects:
-                # Union of all drawing rectangles
-                bbox = all_rects[0]
-                for r in all_rects[1:]:
-                    bbox = bbox | r  # Union operation
-                
-                # Check if the bounding box is reasonable (not too small, not entire page)
-                page_rect = page.rect
-                bbox_area = bbox.width * bbox.height
-                page_area = page_rect.width * page_rect.height
-                
-                # Only render if the graphics area is significant but not the entire page
-                if bbox_area > 100 and bbox_area < page_area * 0.9:
-                    # Expand bbox slightly to capture full graphics
-                    bbox.x0 = max(bbox.x0 - 5, page_rect.x0)
-                    bbox.y0 = max(bbox.y0 - 5, page_rect.y0)
-                    bbox.x1 = min(bbox.x1 + 5, page_rect.x1)
-                    bbox.y1 = min(bbox.y1 + 5, page_rect.y1)
-                    
+            # Additional size-based filtering for very complex vector pages
+            filtered_images = []
+            for img in images:
+                # Only include images that are significantly large and likely to be standalone content
+                pixel_count = img.width * img.height
+                if pixel_count > 30000:  # Minimum 30k pixels (e.g., 200x150)
+                    # Check if image area is reasonable compared to page
                     try:
-                        # Render the area as image
-                        zoom = min(2.0, 800 / max(bbox.width, bbox.height))
-                        mat = fitz.Matrix(zoom, zoom)
-                        pix = page.get_pixmap(matrix=mat, clip=bbox)
-                        vector_img = Image.open(io.BytesIO(pix.pil_tobytes(format="PNG")))
-                        visual_graphics.append(vector_img)
-                        print(f"  Rendered vector graphics area: {bbox.width:.0f}x{bbox.height:.0f} pixels", file=sys.stderr)
-                    except Exception as e:
-                        print(f"⚠️  Failed to render drawings as image on page {page_num + 1}: {e}", file=sys.stderr)
+                        img_rects = page.get_image_rects(img)  # This might not work, but try
+                        # If we can't get rect info, include the image anyway
+                        filtered_images.append(img)
+                    except:
+                        # Include image if we can't determine position
+                        filtered_images.append(img)
                 else:
-                    # Graphics too small or covers entire page, treat as regular page
-                    has_complex_vector_graphics = False
-                    print(f"  Vector graphics area not suitable for separate rendering (area ratio: {bbox_area/page_area:.2f})", file=sys.stderr)
-    
-    # Extract individual images
-    # If we have complex vector graphics, be more strict about image filtering
-    if has_complex_vector_graphics:
-        # Use stricter filtering for pages with vector graphics
-        images = extract_images_from_page(page, min_width=150, min_height=150, min_area_ratio=0.05)
-        if images:
-            print(f"  Found {len(images)} significant images alongside vector graphics", file=sys.stderr)
-            visual_graphics += images
-    else:
-        # Normal image extraction for pages without complex vector graphics
-        images = extract_images_from_page(page)
+                    img.close()  # Clean up small images
+            images = filtered_images
+        else:
+            # No complex vectors, extract all reasonable-sized images with light filtering
+            images = extract_images_from_page(page, min_width=100, min_height=100, filter_vector_components=True)
+        
         if images:
             print(f"  Found {len(images)} standalone images on page {page_num + 1}", file=sys.stderr)
-            visual_graphics += images
+            visual_graphics.extend(images)
+        else:
+            print(f"  No standalone images found on page {page_num + 1}", file=sys.stderr)
+            
+    except Exception as e:
+        print(f"⚠️  Failed to extract images from page {page_num + 1}: {e}", file=sys.stderr)
     
-    # Analyze all visual content together
-    if len(visual_graphics) > 0:
-        visual_description += analyze_image_with_llm(visual_graphics, page_num)
+    # Analyze all visual content if any found
+    if visual_graphics:
+        try:
+            # Sort by type: vector graphics first, then images
+            vector_graphics = [vector_img] if vector_img else []
+            standalone_images = [img for img in visual_graphics if img != vector_img]
+            
+            # Analyze in order: charts/diagrams first, then photos/images
+            ordered_graphics = vector_graphics + standalone_images
+            
+            visual_description = analyze_image_with_llm(ordered_graphics, page_num)
+        except Exception as e:
+            print(f"⚠️  Failed to analyze visual content on page {page_num + 1}: {e}", file=sys.stderr)
+            visual_description = f"\n\n[Page: {page_num + 1}]\n[Visual content found but analysis failed]\n\n"
+        finally:
+            # Clean up images to free memory
+            for img in visual_graphics:
+                if hasattr(img, 'close'):
+                    img.close()
     
     return visual_description
 
@@ -405,23 +628,55 @@ def ocr_page_with_llm(page, dpi_fast: int = 150, dpi_scan: int = 300) -> str:
       • else and page.width < 600 pt → 300
       • otherwise → 150
     """
+    pix = None
+    img = None
+    
     try:
-        has_text = bool(page.get_text("text").strip())
-    except Exception:
-        has_text = False
+        # Check if page has embedded text
+        try:
+            has_text = bool(page.get_text("text").strip())
+        except Exception:
+            has_text = False
 
-    dpi = dpi_fast if has_text else (dpi_scan if page.rect.width < 600 else dpi_fast)
-    zoom = dpi / 72
+        # Choose appropriate DPI
+        dpi = dpi_fast if has_text else (dpi_scan if page.rect.width < 600 else dpi_fast)
+        zoom = dpi / 72
+        
+        # Limit zoom to prevent excessive memory usage
+        zoom = min(zoom, 4.0)  # Max 4x zoom
 
-    try:
+        # Render page to image
         pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom), alpha=False)
+        
+        # Check if pixmap is valid
+        if pix.width == 0 or pix.height == 0:
+            return ""
+            
+        # Convert to PIL Image
         img = Image.open(io.BytesIO(pix.pil_tobytes(format="PNG")))
+        
+        # Perform OCR
+        if USE_TESSERACT:
+            try:
+                text = pytesseract.image_to_string(img, config='--oem 3 --psm 6')
+            except Exception as e:
+                print(f"⚠️  Tesseract OCR failed on page {page.number + 1}: {e}", file=sys.stderr)
+                # Fallback to LLM OCR
+                text = ocr_with_llm(img, page.number)
+        else:
+            text = ocr_with_llm(img, page.number)
+            
+        return text.strip() if text else ""
+        
     except Exception as e:
         print(f"⚠️  Failed to render page {page.number + 1} for OCR: {e}", file=sys.stderr)
         return ""
-
-    text = pytesseract.image_to_string(img) if USE_TESSERACT else ocr_with_llm(img, page.number)
-    return text.strip()
+    finally:
+        # Clean up resources
+        if img:
+            img.close()
+        if pix:
+            pix = None
       
     
 def extract_text_blocks_for_layout(page) -> pd.DataFrame:
@@ -432,17 +687,39 @@ def extract_text_blocks_for_layout(page) -> pd.DataFrame:
     try:
         words = page.get_text("words")
     except Exception as e:
-        print(f"⚠️  Failed to extract text blocks from page: {e}", file=sys.stderr)
+        print(f"⚠️  Failed to extract text blocks from page {page.number + 1}: {e}", file=sys.stderr)
         return pd.DataFrame(columns=["x0", "y0", "x1", "y1", "text"])
     
     if not words:
         return pd.DataFrame(columns=["x0", "y0", "x1", "y1", "text"])
     
-    df = pd.DataFrame(
-        words,
-        columns=["x0", "y0", "x1", "y1", "text", "_b", "_l", "_w"]
-    )[["x0", "y0", "x1", "y1", "text"]]
-    return df
+    try:
+        # Handle different word tuple lengths (PyMuPDF versions may vary)
+        if len(words) > 0:
+            first_word = words[0]
+            if len(first_word) >= 5:
+                # Standard format: (x0, y0, x1, y1, text, block_no, line_no, word_no)
+                df = pd.DataFrame(
+                    words,
+                    columns=["x0", "y0", "x1", "y1", "text", "_b", "_l", "_w"]
+                )[["x0", "y0", "x1", "y1", "text"]]
+            else:
+                # Minimal format: (x0, y0, x1, y1, text)
+                df = pd.DataFrame(
+                    words,
+                    columns=["x0", "y0", "x1", "y1", "text"]
+                )
+        else:
+            return pd.DataFrame(columns=["x0", "y0", "x1", "y1", "text"])
+        
+        # Filter out empty text
+        df = df[df['text'].str.strip() != '']
+        
+        return df
+        
+    except Exception as e:
+        print(f"⚠️  Failed to process text blocks from page {page.number + 1}: {e}", file=sys.stderr)
+        return pd.DataFrame(columns=["x0", "y0", "x1", "y1", "text"])
 
 def is_multicol(df: pd.DataFrame, page_width: float, gap_ratio_thr: float = 0.15) -> bool:
     """Return True if the page likely has multiple text columns."""
@@ -510,6 +787,9 @@ def extract_pdf_content(pdf_path: str,
         print(f"Visual analysis enabled (every {visual_analysis_interval} pages)", file=sys.stderr)
 
     for i in range(total_pages):
+        page = None
+        page_text = ""
+        
         try:
             page = doc[i]
         except Exception as e:
@@ -518,52 +798,107 @@ def extract_pdf_content(pdf_path: str,
             continue
         
         try:
-            raw_text = page.get_text("text").strip()
-        except Exception as e:
-            print(f"⚠️  Failed to extract text from page {i+1}: {e}", file=sys.stderr)
-            raw_text = ""
+            # Extract raw text
+            try:
+                raw_text = page.get_text("text").strip()
+            except Exception as e:
+                print(f"⚠️  Failed to extract text from page {i+1}: {e}", file=sys.stderr)
+                raw_text = ""
 
-        # Try to get text with layout information
-        if raw_text:
-            # Extract word positions for layout analysis
-            words_df = extract_text_blocks_for_layout(page)
-            
-            # Check if multi-column layout
-            if words_df.empty:
-                page_text = raw_text
-            elif is_multicol(words_df, page.rect.width):
-                words_df = assign_columns_kmeans(words_df, max_cols=3)
-                page_text = rebuild_text_from_columns(words_df)
+            # Process text with layout analysis if available
+            if raw_text:
+                try:
+                    # Extract word positions for layout analysis
+                    words_df = extract_text_blocks_for_layout(page)
+                    
+                    # Check if multi-column layout
+                    if words_df.empty:
+                        page_text = raw_text
+                    elif len(words_df) > 10 and is_multicol(words_df, page.rect.width):
+                        # Multi-column layout detected
+                        try:
+                            words_df = assign_columns_kmeans(words_df, max_cols=3)
+                            page_text = rebuild_text_from_columns(words_df)
+                        except Exception as e:
+                            print(f"⚠️  Multi-column processing failed on page {i+1}: {e}", file=sys.stderr)
+                            page_text = raw_text  # Fallback to raw text
+                    else:
+                        # Single column - use position-based ordering
+                        try:
+                            page_text = " ".join(
+                                w.text for _, w in
+                                words_df.sort_values(["y0", "x0"]).iterrows()
+                            )
+                        except Exception as e:
+                            print(f"⚠️  Position-based text ordering failed on page {i+1}: {e}", file=sys.stderr)
+                            page_text = raw_text  # Fallback to raw text
+                            
+                except Exception as e:
+                    print(f"⚠️  Layout analysis failed on page {i+1}: {e}", file=sys.stderr)
+                    page_text = raw_text  # Fallback to raw text
             else:
-                # Single column - use position-based ordering
-                page_text = " ".join(
-                    w.text for _, w in
-                    words_df.sort_values(["y0", "x0"]).iterrows()
-                )
-        else:
-            print(f"  Page {i+1}: No text found, performing OCR...", file=sys.stderr)
-            page_text = ocr_page_with_llm(page)
-    
-        # Analyze visual content if enabled
-        if analyze_visuals and (i % visual_analysis_interval == 0):
-            print(f"  Analyzing visual content on page {i+1}...", file=sys.stderr)
-            visual_content = analyze_visual_content(page, i)
+                # No embedded text found, perform OCR
+                print(f"  Page {i+1}: No embedded text found, performing OCR...", file=sys.stderr)
+                try:
+                    page_text = ocr_page_with_llm(page)
+                    if not page_text.strip():
+                        print(f"  Page {i+1}: OCR produced no text", file=sys.stderr)
+                except Exception as e:
+                    print(f"⚠️  OCR failed on page {i+1}: {e}", file=sys.stderr)
+                    page_text = ""
+        
+            # Analyze visual content if enabled
+            if analyze_visuals and (i % visual_analysis_interval == 0):
+                print(f"  Analyzing visual content on page {i+1}...", file=sys.stderr)
+                try:
+                    visual_content = analyze_visual_content(page, i)
+                    if visual_content:
+                        page_text += visual_content
+                except Exception as e:
+                    print(f"⚠️  Visual analysis failed on page {i+1}: {e}", file=sys.stderr)
+        
+        except Exception as e:
+            print(f"⚠️  Page processing failed on page {i+1}: {e}", file=sys.stderr)
+            page_text = ""
+        
+        finally:
+            # Always append the result (even if empty)
+            pages_text.append(page_text)
             
-            if visual_content:
-                page_text += visual_content
-        
-        pages_text.append(page_text)
-        
-        # Clean up any created image objects
-        if 'page' in locals():
-            del page
-        gc.collect()
-        # Progress indicator
-        if (i + 1) % 10 == 0:
-            print(f"  Processed {i + 1}/{total_pages} pages...", file=sys.stderr)
+            # Clean up page resources
+            if page:
+                page = None
+                
+            # More frequent garbage collection and memory management
+            if (i + 1) % 3 == 0:
+                gc.collect()
+                
+            # Progress indicator
+            if (i + 1) % 5 == 0:
+                print(f"  Processed {i + 1}/{total_pages} pages...", file=sys.stderr)
 
     print("Building document structure...", file=sys.stderr)
-    sections = build_sections_from_layout(pages_text)
+    
+    try:
+        sections = build_sections_from_layout(pages_text)
+    except Exception as e:
+        print(f"⚠️  Failed to build document structure: {e}", file=sys.stderr)
+        # Create a simple fallback section
+        sections = [{
+            "title": "Full Document",
+            "start_page": 1,
+            "end_page": total_pages,
+            "method": "Fallback"
+        }]
+    
+    # Clean up document resources
+    try:
+        doc.close()
+    except Exception as e:
+        print(f"⚠️  Failed to close PDF document: {e}", file=sys.stderr)
+    
+    # Final garbage collection
+    gc.collect()
     
     return {
         "file_path": pdf_path,

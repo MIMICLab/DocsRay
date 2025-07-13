@@ -6,7 +6,7 @@ from llama_cpp import Llama
 import os
 import sys
 from pathlib import Path
-from docsray.config import FAST_MODE, STANDARD_MODE, FULL_FEATURE_MODE, MAX_TOKENS
+from docsray.config import FAST_MODE, STANDARD_MODE, FULL_FEATURE_MODE, MAX_TOKENS, MODEL_SIZE
 from docsray.config import ALL_MODELS, FAST_MODELS, STANDARD_MODELS, FULL_FEATURE_MODELS
 
 import base64
@@ -14,13 +14,15 @@ import io
 from PIL import Image
 from contextlib import redirect_stderr
 from docsray.inference.gemma3_handler import Gemma3ChatHandler, merge_images_to_grid
-def get_gemma_model_paths(mode_models):
+def get_gemma_model_paths(mode_models, model_size="4b"):
     model_path = None
     mmproj_path = None
+    model_prefix = f"gemma-3-{model_size}-it"
+    
     for model in mode_models:
-        if "gemma-3-4b-it" in model["file"] and "mmproj" not in model["file"]:
+        if model_prefix in model["file"] and "mmproj" not in model["file"]:
             model_path = str(model["dir"] / model["file"])
-        elif "gemma-3-4b-it" in model["file"]:
+        elif model_prefix in model["file"] and "mmproj" in model["file"]:
             mmproj_path = str(model["dir"] / model["file"])
     
     return model_path, mmproj_path
@@ -151,14 +153,17 @@ elif torch.backends.mps.is_available():
 else:
     device = "cpu"
 
-def get_llm_models():
+def get_llm_models(model_size=None):
     """Get or create the LLM model instances"""
+    # Use provided model_size or fall back to config
+    size = model_size or MODEL_SIZE
+    
     if FAST_MODE:
-        model_path, mmproj_path = get_gemma_model_paths(FAST_MODELS)
+        model_path, mmproj_path = get_gemma_model_paths(FAST_MODELS, size)
     elif STANDARD_MODE: 
-        model_path, mmproj_path = get_gemma_model_paths(STANDARD_MODELS)
+        model_path, mmproj_path = get_gemma_model_paths(STANDARD_MODELS, size)
     else:
-        model_path, mmproj_path = get_gemma_model_paths(FULL_FEATURE_MODELS)
+        model_path, mmproj_path = get_gemma_model_paths(FULL_FEATURE_MODELS, size)
             
     local_llm = LocalLLM(model_name=model_path, mmproj_name=mmproj_path, device=device, is_multimodal=True)
     

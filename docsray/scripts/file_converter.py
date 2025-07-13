@@ -50,35 +50,61 @@ def _save_text_images_to_pdf_korean(text: str, image_paths: List[str], output_fi
         korean_fonts = [
             # Windows
             "C:/Windows/Fonts/malgun.ttf",  # Malgun Gothic
+            "C:/Windows/Fonts/malgunbd.ttf",  # Malgun Gothic Bold
             "C:/Windows/Fonts/gulim.ttc",   # Gulim
             "C:/Windows/Fonts/batang.ttc",  # Batang
+            "C:/Windows/Fonts/NanumGothic.ttf",
             # macOS
             "/System/Library/Fonts/AppleSDGothicNeo.ttc",
+            "/System/Library/Fonts/AppleGothic.ttf",
             "/Library/Fonts/NanumGothic.ttf",
+            "/System/Library/Fonts/Helvetica.ttc",  # Fallback
             # Linux
             "/usr/share/fonts/truetype/nanum/NanumGothic.ttf",
             "/usr/share/fonts/truetype/fonts-nanum/NanumGothic.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",  # Fallback
         ]
         
         font_registered = False
-        font_name = "NanumGothic"
+        font_name = "KoreanFont"
         
         for font_path in korean_fonts:
             if os.path.exists(font_path):
                 try:
                     pdfmetrics.registerFont(TTFont(font_name, font_path))
                     font_registered = True
+                    print(f"Registered Korean font: {font_path}", file=sys.stderr)
                     break
-                except:
+                except Exception as e:
+                    print(f"Failed to register font {font_path}: {e}", file=sys.stderr)
                     continue
         
         if not font_registered:
-            # Fallback: download and use a free Korean font
-            import urllib.request
-            font_url = "https://github.com/google/fonts/raw/main/ofl/nanumgothic/NanumGothic-Regular.ttf"
-            font_path = output_file.parent / "NanumGothic.ttf"
-            urllib.request.urlretrieve(font_url, font_path)
-            pdfmetrics.registerFont(TTFont(font_name, str(font_path)))
+            try:
+                # Fallback: download and use a free Korean font
+                import urllib.request
+                font_url = "https://github.com/google/fonts/raw/main/ofl/nanumgothic/NanumGothic-Regular.ttf"
+                font_dir = output_file.parent / "fonts"
+                font_dir.mkdir(exist_ok=True)
+                font_path = font_dir / "NanumGothic.ttf"
+                
+                if not font_path.exists():
+                    print(f"Downloading Korean font...", file=sys.stderr)
+                    urllib.request.urlretrieve(font_url, font_path)
+                
+                pdfmetrics.registerFont(TTFont(font_name, str(font_path)))
+                font_registered = True
+                print(f"Downloaded and registered Korean font", file=sys.stderr)
+            except Exception as e:
+                print(f"Failed to download Korean font: {e}", file=sys.stderr)
+                # Use default font
+                font_name = "Helvetica"
+                font_registered = True
+        
+        if not font_registered:
+            # Last resort: use Helvetica
+            font_name = "Helvetica"
+            print(f"Using fallback font: Helvetica", file=sys.stderr)
         
         # Create PDF
         c = canvas.Canvas(str(output_file), pagesize=A4)
@@ -87,47 +113,94 @@ def _save_text_images_to_pdf_korean(text: str, image_paths: List[str], output_fi
         # Set font with Korean support
         c.setFont(font_name, 12)
         
-        # Add text
+        # Add text with better handling
         y = height - 50
+        line_height = 18
+        max_chars_per_line = 70
+        
         for line in text.split('\n'):
             if y < 50:  # New page if needed
                 c.showPage()
                 c.setFont(font_name, 12)
                 y = height - 50
             
-            # Handle long lines
-            if len(line) > 80:
+            # Skip empty lines but add some space
+            if not line.strip():
+                y -= line_height // 2
+                continue
+            
+            # Handle long lines by wrapping
+            if len(line) > max_chars_per_line:
                 words = line.split()
                 current_line = ""
                 for word in words:
-                    if len(current_line + word) < 80:
-                        current_line += word + " "
+                    test_line = current_line + (" " if current_line else "") + word
+                    if len(test_line) <= max_chars_per_line:
+                        current_line = test_line
                     else:
-                        c.drawString(50, y, current_line.strip())
-                        y -= 20
-                        current_line = word + " "
+                        if current_line:
+                            try:
+                                c.drawString(50, y, current_line)
+                            except Exception as e:
+                                # Handle text encoding issues
+                                safe_text = current_line.encode('utf-8', errors='replace').decode('utf-8')
+                                c.drawString(50, y, safe_text)
+                            y -= line_height
+                            if y < 50:
+                                c.showPage()
+                                c.setFont(font_name, 12)
+                                y = height - 50
+                        current_line = word
+                
                 if current_line:
-                    c.drawString(50, y, current_line.strip())
-                    y -= 20
+                    try:
+                        c.drawString(50, y, current_line)
+                    except Exception as e:
+                        safe_text = current_line.encode('utf-8', errors='replace').decode('utf-8')
+                        c.drawString(50, y, safe_text)
+                    y -= line_height
             else:
-                c.drawString(50, y, line)
-                y -= 20
+                try:
+                    c.drawString(50, y, line)
+                except Exception as e:
+                    # Handle text encoding issues
+                    safe_text = line.encode('utf-8', errors='replace').decode('utf-8')
+                    c.drawString(50, y, safe_text)
+                y -= line_height
         
-        # Add images
-        for img_path in image_paths:
+        # Add images with better error handling
+        for i, img_path in enumerate(image_paths):
             if os.path.exists(img_path):
                 try:
                     c.showPage()
                     img = ImageReader(img_path)
-                    c.drawImage(img, 50, 50, width=width-100, height=height-100, preserveAspectRatio=True)
-                except:
-                    pass
+                    
+                    # Calculate image dimensions to fit page
+                    max_width = width - 100
+                    max_height = height - 100
+                    
+                    c.drawImage(img, 50, 50, 
+                              width=max_width, height=max_height, 
+                              preserveAspectRatio=True, mask='auto')
+                    
+                    print(f"Added image {i+1}/{len(image_paths)}: {os.path.basename(img_path)}", file=sys.stderr)
+                except Exception as e:
+                    print(f"Failed to add image {img_path}: {e}", file=sys.stderr)
+                    # Add a placeholder text for failed images
+                    try:
+                        c.showPage()
+                        c.setFont(font_name, 12)
+                        c.drawString(50, height/2, f"[Image could not be displayed: {os.path.basename(img_path)}]")
+                    except:
+                        pass
         
         c.save()
         return True
         
     except Exception as e:
         print(f"PDF creation error: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc(file=sys.stderr)
         return False
             
 class FileConverter:
@@ -219,10 +292,8 @@ class FileConverter:
         print(f"Converting {self.SUPPORTED_FORMATS[file_ext]} file to PDF...", file=sys.stderr)
         
         # Office documents
-        if file_ext == '.docx':
+        if file_ext in ['.docx', '.doc']:
             return self._convert_docx_to_pdf(input_file, output_path)
-        elif file_ext == '.doc':
-            return self._convert_doc_to_pdf(input_file, output_path)
         elif file_ext in ['.xlsx', '.xls']:
             return self._convert_excel_to_pdf(input_file, output_path)
         elif file_ext in ['.pptx', '.ppt']:
@@ -246,7 +317,7 @@ class FileConverter:
         
         # Fallback: try pandoc for anything else
         else:
-            return self._convert_with_pandoc(input_file, output_path)
+            return self._convert_with_pandoc_simple(input_file, output_path)
         
     # ------------------------------------------------------------------
     # HWPX → PDF  (zip + XML)  — text + images via BeautifulSoup + ReportLab
@@ -388,194 +459,309 @@ class FileConverter:
             print(f"[Error] {error_msg}", file=sys.stderr)
             return False, error_msg
 
-    def _convert_doc_to_pdf(self, input_file: Path, output_file: Path) -> Tuple[bool, str]:
-        """Convert DOC (legacy format) to PDF"""
-        # First try: Use python-docx2txt (no external dependencies)
-        try:
-            import docx2txt
-            
-            # Extract text
-            text = docx2txt.process(str(input_file))
-            
-            # Extract images
-            temp_dir = output_file.parent / f"temp_{input_file.stem}"
-            temp_dir.mkdir(exist_ok=True)
-            
-            # docx2txt extracts images to a directory
-            images_dir = temp_dir / "images"
-            images_dir.mkdir(exist_ok=True)
-            
-            # Extract with images
-            text_with_images = docx2txt.process(str(input_file), str(images_dir))
-            
-            # Find extracted images
-            image_files = []
-            if images_dir.exists():
-                for img_file in images_dir.iterdir():
-                    if img_file.suffix.lower() in ['.png', '.jpg', '.jpeg', '.gif', '.bmp']:
-                        image_files.append(str(img_file))
-            
-            # Convert to PDF
-            if _save_text_images_to_pdf_korean(text, image_files, output_file):
-                # Cleanup
-                import shutil
-                if temp_dir.exists():
-                    shutil.rmtree(temp_dir)
-                return True, str(output_file)
-            else:
-                return False, "Failed to save PDF"
-                
-        except ImportError:
-            # docx2txt not installed, try alternative methods
-            pass
-        except Exception as e:
-            print(f"docx2txt failed: {e}", file=sys.stderr)
-        
-        # Second try: Use python-docx (may work for some .doc files)
-        try:
-            from docx import Document
-            
-            doc = Document(str(input_file))
-            full_text = ""
-            
-            for paragraph in doc.paragraphs:
-                full_text += paragraph.text + "\n"
-            
-            # Extract tables
-            for table in doc.tables:
-                for row in table.rows:
-                    row_text = "\t".join([cell.text for cell in row.cells])
-                    full_text += row_text + "\n"
-                full_text += "\n"
-            
-            if full_text.strip():
-                if _save_text_images_to_pdf_korean(full_text, [], output_file):
-                    return True, str(output_file)
-        except Exception as e:
-            print(f"python-docx failed: {e}", file=sys.stderr)
-        
-        # Third try: Use pandoc if available
-        try:
-            # Check if pandoc is available
-            pypandoc.get_pandoc_version()
-            
-            # Try to convert
-            text = pypandoc.convert_file(str(input_file), 'plain')
-            
-            if text and _save_text_images_to_pdf_korean(text, [], output_file):
-                return True, str(output_file)
-        except Exception as e:
-            print(f"Pandoc failed: {e}", file=sys.stderr)
-        
-        # All methods failed
-        return False, (
-            "Failed to convert .doc file. This is a legacy format that requires special handling.\n\n"
-            "Please try one of the following:\n"
-            "1. Save the file as .docx format in Microsoft Word and upload again\n"
-            "2. Install docx2txt: pip install docx2txt\n"
-            "3. Install python-docx: pip install python-docx\n"
-            "4. Convert to PDF manually and upload the PDF\n\n"
-            "Note: .docx files are recommended over .doc for better compatibility."
-        )
-    
     def _convert_docx_to_pdf(self, input_file: Path, output_file: Path) -> Tuple[bool, str]:
-        """Convert DOCX to PDF - try multiple methods"""
-        # First try: python-docx (most reliable for .docx)
-        try:
-            from docx import Document
-            
-            doc = Document(str(input_file))
-            full_text = ""
-            temp_dir = output_file.parent / f"temp_{input_file.stem}"
-            temp_dir.mkdir(exist_ok=True)
-            image_files = []
-            
-            # Extract text from paragraphs
-            for paragraph in doc.paragraphs:
-                full_text += paragraph.text + "\n"
-            
-            # Extract text from tables
-            for table in doc.tables:
-                for row in table.rows:
-                    row_text = "\t".join([cell.text for cell in row.cells])
-                    full_text += row_text + "\n"
-                full_text += "\n"
-            
-            # Extract images
-            try:
-                img_counter = 0
-                for rel in doc.part.rels.values():
-                    if "image" in rel.target_ref:
-                        img_counter += 1
-                        img_data = rel.target_part.blob
-                        img_path = temp_dir / f"image_{img_counter}.png"
-                        with open(img_path, 'wb') as f:
-                            f.write(img_data)
-                        image_files.append(str(img_path))
-            except Exception as e:
-                print(f"Image extraction warning: {e}", file=sys.stderr)
-            
-            # Convert to PDF
-            if _save_text_images_to_pdf_korean(full_text, image_files, output_file):
-                # Cleanup
-                import shutil
-                if temp_dir.exists():
-                    shutil.rmtree(temp_dir)
-                return True, str(output_file)
-                
-        except ImportError:
-            print("python-docx not installed, trying pandoc...", file=sys.stderr)
-        except Exception as e:
-            print(f"python-docx failed: {e}, trying pandoc...", file=sys.stderr)
+        """Convert DOCX/DOC to PDF with multiple fallback methods"""
+        temp_dir = None
         
-        # Second try: pypandoc (if python-docx fails)
         try:
-            import subprocess
-            
-            # Ensure pandoc is downloaded
-            pypandoc.ensure_pandoc_installed()
-            
             # Create temp directory
             temp_dir = output_file.parent / f"temp_{input_file.stem}"
             temp_dir.mkdir(exist_ok=True)
             
-            # Extract text using pypandoc
+            # Check if it's a .doc file (legacy format)
+            if input_file.suffix.lower() == '.doc':
+                # Try pure Python OLE parser
+                try:
+                    success, result = self._convert_doc_with_olefile(input_file, output_file, temp_dir)
+                    if success:
+                        return success, result
+                    print(f"olefile method failed: {result}", file=sys.stderr)
+                except Exception as e:
+                    print(f"olefile method error: {e}", file=sys.stderr)
+                
+                # .doc conversion failed
+                return False, f"Legacy .doc format could not be processed. Please convert your file to .docx format and try again. You can use Microsoft Word, Google Docs, or LibreOffice to convert .doc to .docx."
+            
+            # Method 1: Try python-docx for DOCX files
+            if input_file.suffix.lower() == '.docx':
+                try:
+                    success, result = self._convert_docx_with_python_docx(input_file, output_file, temp_dir)
+                    if success:
+                        return success, result
+                    print(f"python-docx method failed: {result}", file=sys.stderr)
+                except Exception as e:
+                    print(f"python-docx method error: {e}", file=sys.stderr)
+            
+            # Method 2: Try pypandoc (supports .docx only)
+            if input_file.suffix.lower() == '.docx':
+                try:
+                    success, result = self._convert_with_pypandoc(input_file, output_file, temp_dir)
+                    if success:
+                        return success, result
+                    print(f"pypandoc method failed: {result}", file=sys.stderr)
+                except Exception as e:
+                    print(f"pypandoc method error: {e}", file=sys.stderr)
+            
+            # Method 3: Try direct pandoc subprocess (docx only)
+            if input_file.suffix.lower() == '.docx':
+                try:
+                    success, result = self._convert_with_pandoc_subprocess(input_file, output_file, temp_dir)
+                    if success:
+                        return success, result
+                    print(f"pandoc subprocess method failed: {result}", file=sys.stderr)
+                except Exception as e:
+                    print(f"pandoc subprocess method error: {e}", file=sys.stderr)
+            
+            # All methods failed
+            return False, f"All conversion methods failed for {input_file.suffix} file. Please ensure pandoc is installed and the file is not corrupted."
+                
+        except Exception as e:
+            return False, f"Document conversion error: {str(e)}"
+        finally:
+            # Cleanup temp directory
+            if temp_dir and temp_dir.exists():
+                try:
+                    import shutil
+                    shutil.rmtree(temp_dir)
+                except Exception as e:
+                    print(f"Cleanup warning: {e}", file=sys.stderr)
+    
+    def _convert_doc_with_olefile(self, input_file: Path, output_file: Path, temp_dir: Path) -> Tuple[bool, str]:
+        """Convert .doc using pure Python olefile parser"""
+        try:
+            # Try to import olefile
             try:
-                full_text = pypandoc.convert_file(str(input_file), 'plain')
-            except Exception as e:
-                return False, f"Pandoc text extraction failed: {str(e)}"
+                import olefile
+            except ImportError:
+                return False, "olefile not available. Install with: pip install olefile"
             
-            # Extract images - still need subprocess for this
-            # Get pandoc path from pypandoc
-            pandoc_path = pypandoc.get_pandoc_path()
+            # Check if it's a valid OLE file
+            if not olefile.isOleFile(str(input_file)):
+                return False, "File is not a valid OLE document"
             
-            subprocess.run([
-                pandoc_path, str(input_file),
-                '-t', 'markdown',
-                '-o', str(temp_dir / 'dummy.md'),
-                '--extract-media', str(temp_dir)
-            ], capture_output=True)
+            # Open the OLE file
+            with olefile.OleFileIO(str(input_file)) as ole:
+                # Try to find WordDocument stream (contains the main text)
+                if ole._olestream_size('WordDocument') is None:
+                    return False, "No WordDocument stream found in .doc file"
+                
+                # Extract the WordDocument stream
+                word_stream = ole._olestream_data('WordDocument')
+                
+                # Basic text extraction (simplified approach)
+                # .doc format is complex, this is a basic attempt
+                text_content = ""
+                
+                # Try to extract readable text from the binary data
+                # This is a very basic approach - real .doc parsing is much more complex
+                try:
+                    # Look for text patterns in the binary data
+                    import re
+                    
+                    # Convert to string and extract readable text
+                    # This is a simplified approach and may miss formatting
+                    decoded_text = word_stream.decode('latin-1', errors='ignore')
+                    
+                    # Extract text using regex patterns
+                    # Look for sequences of printable characters
+                    text_matches = re.findall(r'[a-zA-Z가-힣\s.,!?;:()"\'-]{10,}', decoded_text)
+                    
+                    if text_matches:
+                        text_content = '\n'.join(text_matches)
+                        # Clean up the text
+                        text_content = re.sub(r'\s+', ' ', text_content)
+                        text_content = text_content.strip()
+                    
+                    if not text_content:
+                        # Try another approach with different encoding
+                        try:
+                            decoded_text = word_stream.decode('utf-8', errors='ignore')
+                            text_matches = re.findall(r'[a-zA-Z가-힣\s.,!?;:()"\'-]{10,}', decoded_text)
+                            if text_matches:
+                                text_content = '\n'.join(text_matches)
+                                text_content = re.sub(r'\s+', ' ', text_content)
+                                text_content = text_content.strip()
+                        except:
+                            pass
+                    
+                except Exception as e:
+                    print(f"Text extraction error: {e}", file=sys.stderr)
+                
+                if not text_content.strip():
+                    return False, "No readable text could be extracted from .doc file"
+                
+                # Convert extracted text to PDF
+                if _save_text_images_to_pdf_korean(text_content, [], output_file):
+                    return True, str(output_file)
+                else:
+                    return False, "Failed to save PDF from extracted text"
+                    
+        except Exception as e:
+            return False, f"olefile conversion error: {str(e)}"
+    
+    def _convert_docx_with_python_docx(self, input_file: Path, output_file: Path, temp_dir: Path) -> Tuple[bool, str]:
+        """Convert DOCX using python-docx library"""
+        try:
+            from docx import Document
+            from docx.shared import Inches
+            import io
             
-            # Find extracted images
+            # Load document
+            doc = Document(str(input_file))
+            
+            # Extract text
+            full_text = ""
             image_files = []
-            media_dir = temp_dir / "media"
-            if media_dir.exists():
-                for img_file in media_dir.rglob('*'):
-                    if img_file.suffix.lower() in ['.png', '.jpg', '.jpeg', '.gif', '.bmp']:
-                        image_files.append(str(img_file))
+            
+            for para in doc.paragraphs:
+                if para.text.strip():
+                    full_text += para.text + "\n\n"
+            
+            # Extract images from document
+            for rel in doc.part.rels.values():
+                if "image" in rel.target_ref:
+                    try:
+                        image_data = rel.target_part.blob
+                        
+                        # Determine image extension
+                        if image_data[:8] == b"\x89PNG\r\n\x1a\n":
+                            ext = ".png"
+                        elif image_data[:2] == b"\xff\xd8":
+                            ext = ".jpg"
+                        elif image_data[:6] == b"GIF87a" or image_data[:6] == b"GIF89a":
+                            ext = ".gif"
+                        else:
+                            ext = ".png"  # Default
+                        
+                        img_path = temp_dir / f"extracted_img_{len(image_files)}{ext}"
+                        with open(img_path, 'wb') as f:
+                            f.write(image_data)
+                        image_files.append(str(img_path))
+                    except Exception as e:
+                        print(f"Image extraction warning: {e}", file=sys.stderr)
+            
+            # Extract tables
+            for table in doc.tables:
+                full_text += "\n[Table]\n"
+                for row in table.rows:
+                    row_text = " | ".join([cell.text for cell in row.cells])
+                    full_text += row_text + "\n"
+                full_text += "\n"
+            
+            if not full_text.strip():
+                full_text = "No readable text content found in document."
             
             # Use Korean PDF function
             if _save_text_images_to_pdf_korean(full_text, image_files, output_file):
-                # Cleanup
-                import shutil
-                if temp_dir.exists():
-                    shutil.rmtree(temp_dir)
+                return True, str(output_file)
+            else:
+                return False, "Failed to save PDF"
+                
+        except ImportError:
+            return False, "python-docx not available. Install with: pip install python-docx"
+        except Exception as e:
+            return False, f"python-docx conversion failed: {str(e)}"
+    
+    def _convert_with_pypandoc(self, input_file: Path, output_file: Path, temp_dir: Path) -> Tuple[bool, str]:
+        """Convert using pypandoc library"""
+        try:
+            # Ensure pandoc is available
+            pypandoc.ensure_pandoc_installed()
+            
+            # Extract text using pypandoc
+            full_text = pypandoc.convert_file(str(input_file), 'plain', encoding='utf-8')
+            
+            if not full_text.strip():
+                return False, "No text content extracted"
+            
+            # Extract images using pypandoc
+            image_files = []
+            try:
+                # Get pandoc path from pypandoc
+                pandoc_path = pypandoc.get_pandoc_path()
+                
+                import subprocess
+                result = subprocess.run([
+                    pandoc_path, str(input_file),
+                    '-t', 'markdown',
+                    '-o', str(temp_dir / 'dummy.md'),
+                    '--extract-media', str(temp_dir)
+                ], capture_output=True, text=True, timeout=30)
+                
+                # Find extracted images
+                media_dir = temp_dir / "media"
+                if media_dir.exists():
+                    for img_file in media_dir.rglob('*'):
+                        if img_file.suffix.lower() in ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tiff']:
+                            image_files.append(str(img_file))
+            except Exception as e:
+                print(f"Image extraction warning: {e}", file=sys.stderr)
+            
+            # Use Korean PDF function
+            if _save_text_images_to_pdf_korean(full_text, image_files, output_file):
                 return True, str(output_file)
             else:
                 return False, "Failed to save PDF"
                 
         except Exception as e:
-            return False, f"DOCX conversion error: {str(e)}.\nPlease install python-docx: pip install python-docx"
+            return False, f"pypandoc conversion failed: {str(e)}"
+    
+    def _convert_with_pandoc_subprocess(self, input_file: Path, output_file: Path, temp_dir: Path) -> Tuple[bool, str]:
+        """Convert using pandoc subprocess directly"""
+        try:
+            import subprocess
+            import shutil
+            
+            # Check if pandoc is available
+            if not shutil.which('pandoc'):
+                return False, "pandoc not found in PATH. Please install pandoc."
+            
+            # Extract text
+            result = subprocess.run([
+                'pandoc', str(input_file), 
+                '-t', 'plain',
+                '--wrap=none'
+            ], capture_output=True, text=True, timeout=60)
+            
+            if result.returncode != 0:
+                error_msg = result.stderr.strip() if result.stderr else "pandoc text extraction failed"
+                return False, f"pandoc error: {error_msg}"
+            
+            full_text = result.stdout
+            if not full_text.strip():
+                return False, "No text content extracted by pandoc"
+            
+            # Extract images
+            image_files = []
+            try:
+                result = subprocess.run([
+                    'pandoc', str(input_file),
+                    '-t', 'markdown',
+                    '-o', str(temp_dir / 'dummy.md'),
+                    '--extract-media', str(temp_dir)
+                ], capture_output=True, text=True, timeout=60)
+                
+                # Find extracted images
+                media_dir = temp_dir / "media"
+                if media_dir.exists():
+                    for img_file in media_dir.rglob('*'):
+                        if img_file.suffix.lower() in ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tiff']:
+                            image_files.append(str(img_file))
+            except Exception as e:
+                print(f"Image extraction warning: {e}", file=sys.stderr)
+            
+            # Use Korean PDF function
+            if _save_text_images_to_pdf_korean(full_text, image_files, output_file):
+                return True, str(output_file)
+            else:
+                return False, "Failed to save PDF"
+                
+        except subprocess.TimeoutExpired:
+            return False, "pandoc conversion timed out (file may be too large or corrupted)"
+        except FileNotFoundError:
+            return False, "pandoc executable not found. Please install pandoc."
+        except Exception as e:
+            return False, f"pandoc subprocess failed: {str(e)}"
 
     def _convert_excel_to_pdf(self, input_file: Path, output_file: Path) -> Tuple[bool, str]:
         """Convert Excel to PDF using openpyxl"""
@@ -872,50 +1058,75 @@ class FileConverter:
     
     def _convert_with_pandoc_simple(self, input_file: Path, output_file: Path) -> Tuple[bool, str]:
         """Convert documents using Pandoc without LaTeX"""
+        temp_dir = None
         try:
             import subprocess
+            import shutil
+            
+            # Check if pandoc is available
+            if not shutil.which('pandoc'):
+                return False, "pandoc not found in PATH. Please install pandoc."
             
             # Create temp directory for extracted images
             temp_dir = output_file.parent / f"temp_{input_file.stem}"
             temp_dir.mkdir(exist_ok=True)
             
-            # Extract text
+            # Extract text with better error handling
             result = subprocess.run([
-                'pandoc', str(input_file), '-t', 'plain'
-            ], capture_output=True, text=True)
+                'pandoc', str(input_file), 
+                '-t', 'plain',
+                '--wrap=none'
+            ], capture_output=True, text=True, timeout=60)
             
             if result.returncode != 0:
-                return False, "Pandoc text extraction failed"
+                error_msg = result.stderr.strip() if result.stderr else "pandoc text extraction failed"
+                return False, f"pandoc error: {error_msg}"
             
             full_text = result.stdout
+            if not full_text.strip():
+                return False, "No text content extracted by pandoc"
             
-            # Extract images
-            subprocess.run([
-                'pandoc', str(input_file),
-                '-t', 'markdown',
-                '-o', str(temp_dir / 'dummy.md'),
-                '--extract-media', str(temp_dir)
-            ], capture_output=True)
-            
-            # Find extracted images
+            # Extract images with timeout
             image_files = []
-            media_dir = temp_dir / "media"
-            if media_dir.exists():
-                for img_file in media_dir.rglob('*'):
-                    if img_file.suffix.lower() in ['.png', '.jpg', '.jpeg', '.gif', '.bmp']:
-                        image_files.append(str(img_file))
+            try:
+                result = subprocess.run([
+                    'pandoc', str(input_file),
+                    '-t', 'markdown',
+                    '-o', str(temp_dir / 'dummy.md'),
+                    '--extract-media', str(temp_dir)
+                ], capture_output=True, text=True, timeout=60)
+                
+                # Find extracted images
+                media_dir = temp_dir / "media"
+                if media_dir.exists():
+                    for img_file in media_dir.rglob('*'):
+                        if img_file.suffix.lower() in ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tiff']:
+                            image_files.append(str(img_file))
+            except subprocess.TimeoutExpired:
+                print(f"Image extraction timed out, continuing without images", file=sys.stderr)
+            except Exception as e:
+                print(f"Image extraction warning: {e}", file=sys.stderr)
             
             # 한글 지원 PDF 함수 사용
             if _save_text_images_to_pdf_korean(full_text, image_files, output_file):
-                # Cleanup
-                import shutil
-                shutil.rmtree(temp_dir)
                 return True, str(output_file)
             else:
                 return False, "Failed to save PDF"
                 
+        except subprocess.TimeoutExpired:
+            return False, "pandoc conversion timed out (file may be too large or corrupted)"
+        except FileNotFoundError:
+            return False, "pandoc executable not found. Please install pandoc."
         except Exception as e:
             return False, f"Conversion error: {str(e)}"
+        finally:
+            # Cleanup temp directory
+            if temp_dir and temp_dir.exists():
+                try:
+                    import shutil
+                    shutil.rmtree(temp_dir)
+                except Exception as e:
+                    print(f"Cleanup warning: {e}", file=sys.stderr)
 
 def convert_file_to_pdf(input_path: str, output_dir: Optional[str] = None) -> Tuple[bool, str]:
     """
@@ -947,7 +1158,7 @@ if __name__ == "__main__":
     success, result = converter.convert_to_pdf(args.input_file, args.output)
     
     if success:
-        print(f"✅ Converted successfully: {result}, file=sys.stderr")
+        print(f"✅ Converted successfully: {result}", file=sys.stderr)
     else:
         print(f"❌ Conversion failed: {result}", file=sys.stderr)
         sys.exit(1)

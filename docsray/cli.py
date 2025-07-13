@@ -12,6 +12,8 @@ import concurrent.futures
 from pathlib import Path
 from docsray.config import FAST_MODE
 from docsray.post_install import hotfix_check
+import requests
+import json
 
 
 class ProcessingTimeoutError(Exception):
@@ -53,6 +55,9 @@ Examples:
   
   # Ask a question
   docsray ask "What is the main topic?" --doc document
+  
+  # Run performance test
+  docsray perf-test /path/to/document "What is this about?" --port 8000
         """
     )
     
@@ -71,6 +76,8 @@ Examples:
                            help="Max restart attempts (default: 5)")
     mcp_parser.add_argument("--retry-delay", type=int, default=5,
                            help="Delay between restarts in seconds (default: 5)")
+    mcp_parser.add_argument("--model-size", choices=["4b", "12b"], default="4b",
+                           help="Gemma model size to use (default: 4b)")
     
     # Web interface command
     web_parser = subparsers.add_parser("web", help="Start web interface")
@@ -87,6 +94,8 @@ Examples:
                            help="Max restart attempts (default: 5)")
     web_parser.add_argument("--retry-delay", type=int, default=5,
                            help="Delay between restarts in seconds (default: 5)")
+    web_parser.add_argument("--model-size", choices=["4b", "12b"], default="4b",
+                           help="Gemma model size to use (default: 4b)")
     
     # API server command
     api_parser = subparsers.add_parser("api", help="Start API server")
@@ -97,6 +106,8 @@ Examples:
     api_parser.add_argument("--reload", action="store_true", help="Enable hot reload for development")
     api_parser.add_argument("--timeout", type=int, default=300,
                            help="Document processing timeout in seconds (default: 300)")
+    api_parser.add_argument("--model-size", choices=["4b", "12b"], default="4b",
+                           help="Gemma model size to use (default: 4b)")
     
     # Configure Claude command
     config_parser = subparsers.add_parser("configure-claude", help="Configure Claude Desktop")
@@ -108,11 +119,23 @@ Examples:
                             help="Disable visual content analysis")
     process_parser.add_argument("--timeout", type=int, default=300,
                             help="Processing timeout in seconds (default: 300)")
+    process_parser.add_argument("--model-size", choices=["4b", "12b"], default="4b",
+                            help="Gemma model size to use (default: 4b)")
 
     # Ask question command
     ask_parser = subparsers.add_parser("ask", help="Ask a question about a document")
     ask_parser.add_argument("question", help="Question to ask")
     ask_parser.add_argument("--doc", required=True, help="Document file name")
+    ask_parser.add_argument("--model-size", choices=["4b", "12b"], default="4b",
+                         help="Gemma model size to use (default: 4b)")
+    
+    # Performance test command
+    perf_parser = subparsers.add_parser("perf-test", help="Run performance test against API")
+    perf_parser.add_argument("document_path", help="Path to document file")
+    perf_parser.add_argument("question", help="Question to ask")
+    perf_parser.add_argument("--port", type=int, default=8000, help="API server port (default: 8000)")
+    perf_parser.add_argument("--host", default="localhost", help="API server host (default: localhost)")
+    perf_parser.add_argument("--iterations", type=int, default=1, help="Number of test iterations (default: 1)")
     
     args = parser.parse_args()
     
@@ -124,6 +147,9 @@ Examples:
             download_models()
     
     elif args.command == "mcp":
+        # Set model size environment variable
+        os.environ["DOCSRAY_MODEL_SIZE"] = args.model_size
+        
         if args.auto_restart:
             # Use auto-restart wrapper
             from docsray.auto_restart import SimpleServiceMonitor
@@ -148,6 +174,9 @@ Examples:
             asyncio.run(mcp_main())
     
     elif args.command == "web":
+        # Set model size environment variable
+        os.environ["DOCSRAY_MODEL_SIZE"] = args.model_size
+        
         if args.auto_restart:
             # Use auto-restart wrapper
             from docsray.auto_restart import SimpleServiceMonitor
@@ -199,6 +228,9 @@ Examples:
 
     
     elif args.command == "api":
+        # Set model size environment variable
+        os.environ["DOCSRAY_MODEL_SIZE"] = args.model_size
+        
         from docsray.app import main as api_main
         sys.argv = ["docsray-api", "--host", args.host, "--port", str(args.port)]
         if args.doc:
@@ -215,10 +247,19 @@ Examples:
         configure_claude_desktop()
     
     elif args.command == "process":
+        # Set model size environment variable
+        os.environ["DOCSRAY_MODEL_SIZE"] = args.model_size
+        
         process_pdf_cli(args.pdf_path, args.no_visuals, args.timeout)
     
     elif args.command == "ask":
+        # Set model size environment variable
+        os.environ["DOCSRAY_MODEL_SIZE"] = args.model_size
+        
         ask_question_cli(args.question, args.doc)
+    
+    elif args.command == "perf-test":
+        run_performance_test(args.document_path, args.question, args.host, args.port, args.iterations)
     
     else:
         if hotfix_check():
@@ -521,6 +562,97 @@ def ask_question_cli(question: str, pdf_name: str):
     except Exception as e:
         print(f"❌ Failed to get answer: {e}", file=sys.stderr)
         return
+
+def run_performance_test(document_path: str, question: str, host: str, port: int, iterations: int):
+    """Run performance test against the API server"""
+    if not os.path.exists(document_path):
+        print(f"❌ Document file not found: {document_path}", file=sys.stderr)
+        return
+    
+    # Get absolute path
+    doc_path = str(Path(document_path).resolve())
+    
+    # Check if API is running
+    api_url = f"http://{host}:{port}"
+    try:
+        response = requests.get(f"{api_url}/health", timeout=5)
+        if response.status_code != 200:
+            raise Exception(f"Health check failed with status {response.status_code}")
+        print(f"✅ API server is healthy at {api_url}", file=sys.stderr)
+    except Exception as e:
+        print(f"❌ Cannot connect to API server at {api_url}", file=sys.stderr)
+        print(f"   Error: {e}", file=sys.stderr)
+        print(f"💡 Please start the API server first:", file=sys.stderr)
+        print(f"   docsray api --port {port}", file=sys.stderr)
+        return
+    
+    # Run performance test
+    print(f"\n🏃 Running performance test...", file=sys.stderr)
+    print(f"📄 Document: {document_path}", file=sys.stderr)
+    print(f"❓ Question: {question}", file=sys.stderr)
+    print(f"🔄 Iterations: {iterations}", file=sys.stderr)
+    print(f"🌐 API URL: {api_url}/ask", file=sys.stderr)
+    
+    times = []
+    
+    for i in range(iterations):
+        print(f"\n--- Iteration {i+1}/{iterations} ---", file=sys.stderr)
+        start_time = time.time()
+        
+        try:
+            # Send request to API
+            payload = {
+                "document_path": doc_path,
+                "question": question,
+                "use_coarse_search": True
+            }
+            
+            response = requests.post(
+                f"{api_url}/ask",
+                json=payload,
+                timeout=300  # 5 minute timeout
+            )
+            
+            if response.status_code != 200:
+                print(f"❌ Request failed with status {response.status_code}", file=sys.stderr)
+                print(f"   Response: {response.text}", file=sys.stderr)
+                continue
+            
+            elapsed_time = time.time() - start_time
+            times.append(elapsed_time)
+            
+            # Parse response
+            result = response.json()
+            
+            print(f"⏱️  Time: {elapsed_time:.2f} seconds", file=sys.stderr)
+            print(f"\n💡 Answer:", file=sys.stderr)
+            print(result["answer"], file=sys.stderr)
+            print(f"\n📚 References:", file=sys.stderr)
+            print(result["references"], file=sys.stderr)
+            
+        except requests.exceptions.Timeout:
+            print(f"❌ Request timed out after 300 seconds", file=sys.stderr)
+        except Exception as e:
+            print(f"❌ Error during request: {e}", file=sys.stderr)
+    
+    # Print summary statistics
+    if times:
+        avg_time = sum(times) / len(times)
+        min_time = min(times)
+        max_time = max(times)
+        
+        print(f"\n📊 Performance Summary:", file=sys.stderr)
+        print(f"   Successful requests: {len(times)}/{iterations}", file=sys.stderr)
+        print(f"   Average time: {avg_time:.2f} seconds", file=sys.stderr)
+        print(f"   Min time: {min_time:.2f} seconds", file=sys.stderr)
+        print(f"   Max time: {max_time:.2f} seconds", file=sys.stderr)
+        
+        if len(times) > 1:
+            # First request is usually slower due to cache
+            avg_cached = sum(times[1:]) / len(times[1:])
+            print(f"   Average (cached): {avg_cached:.2f} seconds", file=sys.stderr)
+    else:
+        print(f"\n❌ All requests failed", file=sys.stderr)
 
 if __name__ == "__main__":
     main()

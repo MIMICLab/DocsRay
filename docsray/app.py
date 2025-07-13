@@ -20,11 +20,8 @@ app = FastAPI(
     version="1.5.4"
 )
 
-# Global variables to store the current document data
-current_chatbot: Optional[PDFChatBot] = None
-current_document_name: Optional[str] = None
-current_sections: Optional[list] = None
-current_chunk_index: Optional[list] = None
+# Cache for processed documents
+document_cache: Dict[str, Dict[str, Any]] = {}
 temp_files_to_cleanup: set = set()  # Track temporary files
 
 def cleanup_temp_files():
@@ -109,55 +106,24 @@ def process_document_file(document_path: str) -> tuple[list, list, Optional[str]
                 pass
         raise RuntimeError(f"Failed to process document: {str(e)}")
 
-def initialize_chatbot(document_path: str, system_prompt: Optional[str] = None):
-    """
-    Initialize the chatbot with a document file.
-    Supports PDF, DOCX, XLSX, PPTX, HWP, images, and other formats.
-    
-    Args:
-        document_path: Path to the document file
-        system_prompt: Optional custom system prompt
-    """
-    global current_chatbot, current_document_name, current_sections, current_chunk_index
-    
-    try:
-        # Process the document
-        sections, chunk_index, temp_file = process_document_file(document_path)
-        
-        # Store global state
-        current_sections = sections
-        current_chunk_index = chunk_index
-        current_document_name = os.path.basename(document_path)
-        
-        # Create chatbot
-        current_chatbot = PDFChatBot(
-            sections=sections, 
-            chunk_index=chunk_index, 
-            system_prompt=system_prompt
-        )
-        
-        print(f"✅ Chatbot initialized with document: {current_document_name}")
-        
-    except Exception as e:
-        print(f"❌ Failed to initialize chatbot: {e}")
-        raise
+# Removed initialize_chatbot function as it's no longer needed
 
 @app.get("/")
 async def root():
     """Root endpoint with API information."""
     return {
         "message": "DocsRay Universal Document Question-Answering API",
-        "version": "1.5.2",
-        "current_document": current_document_name,
-        "status": "ready" if current_chatbot else "no_document_loaded",
+        "version": "1.5.4",
+        "status": "ready",
+        "cached_documents": len(document_cache),
         "supported_formats": [
             "PDF", "Word (DOCX/DOC)", "Excel (XLSX/XLS)", 
             "PowerPoint (PPTX/PPT)", "HWP/HWPX", "Images (PNG/JPG/etc)", "Text"
         ],
         "endpoints": {
-            "POST /ask": "Ask a question about the loaded document",
-            "GET /info": "Get information about the current document",
-            "POST /reload": "Reload document with new system prompt",
+            "POST /ask": "Ask a question about any document",
+            "GET /cache/info": "Get information about cached documents",
+            "POST /cache/clear": "Clear document cache",
             "GET /health": "Health check",
             "GET /supported-formats": "Get list of supported file formats"
         }
@@ -168,8 +134,8 @@ async def health_check():
     """Health check endpoint."""
     return {
         "status": "healthy",
-        "document_loaded": current_chatbot is not None,
-        "current_document": current_document_name
+        "cached_documents_count": len(document_cache),
+        "cache_size_mb": sum(len(str(v)) for v in document_cache.values()) / (1024 * 1024)
     }
 
 @app.get("/supported-formats")
@@ -183,62 +149,93 @@ async def get_supported_formats():
         "total": len(formats) + 1  # +1 for PDF
     }
 
-@app.get("/info")
-async def get_document_info():
-    """Get information about the currently loaded document."""
-    if not current_chatbot:
-        raise HTTPException(status_code=404, detail="No document loaded")
-    
-    # Determine file type
-    file_ext = Path(current_document_name).suffix.lower()
-    converter = FileConverter()
-    file_type = converter.SUPPORTED_FORMATS.get(file_ext, "PDF" if file_ext == ".pdf" else "Unknown")
+@app.get("/cache/info")
+async def get_cache_info():
+    """Get information about cached documents."""
+    cache_info = []
+    for path, data in document_cache.items():
+        file_ext = Path(data["document_name"]).suffix.lower()
+        converter = FileConverter()
+        file_type = converter.SUPPORTED_FORMATS.get(file_ext, "PDF" if file_ext == ".pdf" else "Unknown")
+        
+        cache_info.append({
+            "document_path": path,
+            "document_name": data["document_name"],
+            "document_type": file_type,
+            "sections_count": len(data["sections"]),
+            "chunks_count": len(data["chunk_index"])
+        })
     
     return {
-        "document_name": current_document_name,
-        "document_type": file_type,
-        "sections_count": len(current_sections) if current_sections else 0,
-        "chunks_count": len(current_chunk_index) if current_chunk_index else 0,
-        "status": "loaded"
+        "cached_documents": cache_info,
+        "total_count": len(document_cache)
     }
 
 @app.post("/ask")
 async def ask_question(
-    question: str = Body(..., embed=True),
-    use_coarse_search: bool = Body(True, embed=True)
+    document_path: str = Body(...),
+    question: str = Body(...),
+    use_coarse_search: bool = Body(True)
 ):
     """
-    Ask a question about the loaded document.
+    Ask a question about a document.
 
     Args:
+        document_path: Path to the document file
         question: The user's question
         use_coarse_search: Whether to use coarse-to-fine search (default: True)
 
     Returns:
         JSON response with answer and references
     """
-    if not current_chatbot:
-        raise HTTPException(
-            status_code=404, 
-            detail="No document loaded. Please start the server with a document file."
-        )
-    
     if not question.strip():
         raise HTTPException(status_code=400, detail="Question cannot be empty")
     
+    if not os.path.exists(document_path):
+        raise HTTPException(status_code=404, detail=f"Document file not found: {document_path}")
+    
     try:
+        # Check if document is already cached
+        doc_path_str = str(Path(document_path).resolve())
+        
+        if doc_path_str not in document_cache:
+            # Process document if not cached
+            print(f"📄 Processing new document: {document_path}")
+            sections, chunk_index, temp_file = process_document_file(document_path)
+            
+            # Create chatbot and cache it
+            chatbot = PDFChatBot(
+                sections=sections,
+                chunk_index=chunk_index
+            )
+            
+            document_cache[doc_path_str] = {
+                "chatbot": chatbot,
+                "sections": sections,
+                "chunk_index": chunk_index,
+                "document_name": os.path.basename(document_path)
+            }
+        else:
+            print(f"📚 Using cached document: {document_path}")
+        
+        # Get cached data
+        cached_data = document_cache[doc_path_str]
+        chatbot = cached_data["chatbot"]
+        document_name = cached_data["document_name"]
+        
         # Get answer from chatbot
         fine_only = not use_coarse_search
-        answer_output, reference_output = current_chatbot.answer(
+        answer_output, reference_output = chatbot.answer(
             question, 
             fine_only=fine_only
         )
         
         return {
+            "document_path": document_path,
+            "document_name": document_name,
             "question": question,
             "answer": answer_output,
             "references": reference_output,
-            "document_name": current_document_name,
             "search_method": "coarse-to-fine" if use_coarse_search else "fine-only"
         }
         
@@ -248,40 +245,19 @@ async def ask_question(
             detail=f"Error processing question: {str(e)}"
         )
 
-@app.post("/reload")
-async def reload_document(
-    system_prompt: Optional[str] = Body(None, embed=True)
-):
+@app.post("/cache/clear")
+async def clear_cache():
     """
-    Reload the current document with a new system prompt.
-    
-    Args:
-        system_prompt: Optional new system prompt
+    Clear the document cache.
     """
-    if not current_sections or not current_chunk_index:
-        raise HTTPException(status_code=404, detail="No document data available to reload")
+    global document_cache
+    count = len(document_cache)
+    document_cache.clear()
     
-    global current_chatbot
-    
-    try:
-        # Recreate chatbot with new system prompt
-        current_chatbot = PDFChatBot(
-            sections=current_sections,
-            chunk_index=current_chunk_index,
-            system_prompt=system_prompt
-        )
-        
-        return {
-            "message": "Document reloaded successfully",
-            "document_name": current_document_name,
-            "system_prompt_updated": system_prompt is not None
-        }
-        
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error reloading document: {str(e)}"
-        )
+    return {
+        "message": "Cache cleared successfully",
+        "documents_cleared": count
+    }
 
 @app.on_event("shutdown")
 async def shutdown_event():
@@ -300,31 +276,29 @@ def main():
                        help="Document processing timeout in seconds (default: 300)") 
     args = parser.parse_args()
     
-    # Initialize chatbot if document path is provided
+    print("🚀 Starting DocsRay API server...")
+    print("📝 Server accepts document paths with each request")
+    print("💾 Documents will be cached after first processing")
+    
+    # Pre-load document if provided
     if args.doc:
         doc_path = Path(args.doc).resolve()
-        print(f"🚀 Starting DocsRay API server...")
-        print(f"📄 Loading document: {doc_path}")
-        
-        # Check file format
-        converter = FileConverter()
-        file_ext = doc_path.suffix.lower()
-        if converter.is_supported(str(doc_path)) or file_ext == '.pdf':
-            file_type = converter.SUPPORTED_FORMATS.get(file_ext, "PDF" if file_ext == ".pdf" else "Unknown")
-            print(f"📋 File type: {file_type}")
-        else:
-            print(f"❌ Unsupported file format: {file_ext}")
-            print(f"💡 Supported formats: PDF, {', '.join(converter.SUPPORTED_FORMATS.keys())}")
-            return
+        print(f"📄 Pre-loading document: {doc_path}")
         
         try:
-            initialize_chatbot(str(doc_path), args.system_prompt)
+            sections, chunk_index, temp_file = process_document_file(str(doc_path))
+            chatbot = PDFChatBot(sections=sections, chunk_index=chunk_index)
+            
+            document_cache[str(doc_path)] = {
+                "chatbot": chatbot,
+                "sections": sections,
+                "chunk_index": chunk_index,
+                "document_name": os.path.basename(str(doc_path))
+            }
+            print(f"✅ Document pre-loaded successfully")
         except Exception as e:
-            print(f"❌ Failed to load document: {e}")
-            print("💡 Server will start without a loaded document")
-    else:
-        print("🚀 Starting DocsRay API server without document")
-        print("💡 Use the /reload endpoint or restart with --doc argument to load a document")
+            print(f"⚠️  Failed to pre-load document: {e}")
+            print("💡 Document will be processed on first request")
     
     print(f"🌐 Server will be available at: http://{args.host}:{args.port}")
     print(f"📚 API documentation: http://{args.host}:{args.port}/docs")

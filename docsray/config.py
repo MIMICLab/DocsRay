@@ -110,7 +110,7 @@ ALL_MODELS = [
         "url": "https://huggingface.co/tgisaturday/Docsray/resolve/main/multilingual-e5-large-gguf/multilingual-e5-large-F16.gguf",
         "required": ["FULL_FEATURE_MODE"]
     },
-    {
+        {
         "dir": MODEL_DIR / "gemma-3-4b-it-GGUF",
         "file": "gemma-3-4b-it-Q4_K_M.gguf",
         "url": "https://huggingface.co/tgisaturday/Docsray/resolve/main/gemma-3-4b-it-GGUF/gemma-3-4b-it-Q4_K_M.gguf",
@@ -133,6 +133,30 @@ ALL_MODELS = [
         "file": "mmproj-gemma-3-4b-it-F16.gguf",
         "url": "https://huggingface.co/tgisaturday/Docsray/resolve/main/gemma-3-4b-it-GGUF/mmproj-gemma-3-4b-it-F16.gguf",
         "required": ["FAST_MODE", "STANDARD_MODE", "FULL_FEATURE_MODE"]
+    },
+    {
+        "dir": MODEL_DIR / "gemma-3-12b-it-GGUF",
+        "file": "gemma-3-12b-it-Q4_K_M.gguf",
+        "url": "https://huggingface.co/tgisaturday/Docsray/resolve/main/gemma-3-12b-it-GGUF/gemma-3-12b-it-Q4_K_M.gguf",
+        "required": ["FAST_MODE"]
+    },
+    {
+        "dir": MODEL_DIR / "gemma-3-12b-it-GGUF",
+        "file": "gemma-3-12b-it-Q8_0.gguf",
+        "url": "https://huggingface.co/tgisaturday/Docsray/resolve/main/gemma-3-12b-it-GGUF/gemma-3-12b-it-Q8_0.gguf",
+        "required": ["STANDARD_MODE"]
+    },
+    {
+        "dir": MODEL_DIR / "gemma-3-12b-it-GGUF",
+        "file": "gemma-3-12b-it-F16.gguf",
+        "url": "https://huggingface.co/tgisaturday/Docsray/resolve/main/gemma-3-12b-it-GGUF/gemma-3-12b-it-F16.gguf",
+        "required": ["FULL_FEATURE_MODE"]
+    },
+    {
+        "dir": MODEL_DIR / "gemma-3-12b-it-GGUF",
+        "file": "mmproj-gemma-3-12b-it-F16.gguf",
+        "url": "https://huggingface.co/tgisaturday/Docsray/resolve/main/gemma-3-12b-it-GGUF/mmproj-gemma-3-12b-it-F16.gguf",
+        "required": ["FAST_MODE", "STANDARD_MODE", "FULL_FEATURE_MODE"]
     }
 ]
 
@@ -145,6 +169,9 @@ for model in ALL_MODELS:
         FULL_FEATURE_MODELS.append(model)
 
 DISABLE_VISUAL_ANALYSIS = os.environ.get("DOCSRAY_DISABLE_VISUALS", "0") == "1"
+
+# Model size selection: "4b" or "12b"
+MODEL_SIZE = os.environ.get("DOCSRAY_MODEL_SIZE", "4b")
 
 
 if os.environ.get("DOCSRAY_DEBUG", "0") == "1":
