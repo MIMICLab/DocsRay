@@ -10,10 +10,8 @@ import signal
 import threading
 import concurrent.futures
 from pathlib import Path
-from docsray.config import FAST_MODE
 from docsray.post_install import hotfix_check
 import requests
-import json
 
 
 class ProcessingTimeoutError(Exception):
