@@ -25,8 +25,9 @@ pip install docsray
 # 1-2. llama_cpp_python rebuild (recommended for CUDA)
 #CMAKE_ARGS="-DGGML_CUDA=on" pip install llama-cpp-python --upgrade --force-reinstall --no-cache-dir
 
-# 2. Download required models (approximately 8GB)
-docsray download-models
+# 2. Download required models
+# Choose model type: lite (4b, ~3GB), base (12b, ~8GB), or pro (27b, ~16GB)
+docsray download-models --model-type lite  # Default: lite
 
 # 3. Configure Claude Desktop integration (optional)
 docsray configure-claude
@@ -41,7 +42,7 @@ docsray web  # Launch Web UI
 - **Multimodal AI**: Visual content analysis using Gemma-3-12B's image recognition capabilities
 - **Hybrid OCR System**: Intelligent selection between AI-powered OCR and traditional Pytesseract
 - **Adaptive Performance**: Automatically optimizes based on available system resources
-- **Multi-Model Support**: Uses BGE-M3, E5-Large, and Gemma-3-12B models
+- **Multi-Model Support**: Uses BGE-M3, E5-Large, and Gemma-3 (4B/12B/27B) models with flexible selection
 - **MCP Integration**: Seamless integration with Claude Desktop
 - **Multiple Interfaces**: Web UI, API server, CLI, and MCP server
 - **Directory Management**: Advanced PDF directory handling and caching
@@ -49,6 +50,33 @@ docsray web  # Launch Web UI
 - **Smart Resource Management**: FAST_MODE, Standard, and FULL_FEATURE_MODE based on system specs
 - **Universal Document Support**: Automatically converts 30+ file formats to PDF for processing
 - **Smart File Conversion**: Handles Office documents, images, HTML, Markdown, and more
+
+## 🎯 What's New in v1.6.0
+### Enhanced Model Selection & API Improvements
+- **Model Type Selection**: Choose between `lite` (4b), `base` (12b), and `pro` (27b) models using `--model-type` option
+- **Selective Model Downloads**: Download only the model type you need with `docsray download-models --model-type [lite|base|pro]`
+- **Enhanced API**: API now accepts document paths per request with automatic processing and caching
+- **Performance Testing**: New `perf-test` command for API performance benchmarking
+- **Improved Resource Management**: Embedding models always downloaded, LLM models downloaded selectively
+- **Consistent CLI Interface**: Unified file path arguments across all commands (no more `--doc` flag)
+
+### Usage Examples
+```bash
+# Download only lite (4b) models
+docsray download-models --model-type lite
+
+# Use base (12b) models for web interface
+docsray web --model-type base
+
+# Process documents with model selection
+docsray process document.pdf --model-type pro
+
+# Ask questions with consistent syntax
+docsray ask document.pdf "What is this about?" --model-type base
+
+# Performance test with API
+docsray perf-test document.pdf "What is this about?" --iterations 5
+```
 
 ## 🎯 What's New in v1.4.0
 ### Universal Document Support
@@ -123,8 +151,8 @@ Automatically detects system resources and optimizes performance:
 |--------------|------------|--------------|--------------|------------|
 |  CPU  | FAST (Q4) | ✅ | ✅ | 8K | 
 | < 16GB | FAST (Q4) | ✅ | ✅ | 8K |
-| 16-24GB | STANDARD (Q8) | ✅ | ✅ | 16K |
-| > 24GB | FULL_FEATURE (F16) | ✅ | ✅  | 32K |
+| 16-32GB | STANDARD (Q8) | ✅ | ✅ | 16K |
+| > 32GB | FULL_FEATURE (F16) | ✅ | ✅  | 32K |
 
 
 ### Enhanced MCP Commands
@@ -195,14 +223,14 @@ docsray download-models --check
 # Process a PDF with visual analysis
 docsray process /path/to/document
 
-# Ask questions about a processed PDF
-docsray ask "What is the main topic?" --doc document.pdf
+# Ask questions about a processed document
+docsray ask document.pdf "What is the main topic?"
 
 # Start web interface
 docsray web
 
 # Start API server
-docsray api --doc /path/to/document.pdf --port 8000
+docsray api --port 8000
 
 # Start MCP server
 docsray mcp
@@ -225,19 +253,28 @@ Features:
 ### API Server
 
 ```bash
-docsray api --doc /path/to/document
+docsray api --port 8000
 ```
+
+**New in v1.6.0**: API now accepts document paths with each request for better flexibility.
 
 Example API usage:
 
 ```bash
-# Ask a question
+# Ask a question about any document
 curl -X POST http://localhost:8000/ask \
   -H "Content-Type: application/json" \
-  -d '{"question": "What does the chart on page 5 show?"}'
+  -d '{
+    "document_path": "/path/to/document.pdf",
+    "question": "What does the chart on page 5 show?",
+    "use_coarse_search": true
+  }'
 
-# Get PDF info
-curl http://localhost:8000/info
+# Get cache information
+curl http://localhost:8000/cache/info
+
+# Clear document cache
+curl -X POST http://localhost:8000/cache/clear
 ```
 
 ### Python API
@@ -715,7 +752,7 @@ for i, page_text in enumerate(extracted["pages_text"]):
 #!/bin/bash
 for pdf in *.pdf; do
     echo "Processing $pdf with visual analysis..."
-    docsray process "$pdf" --analyze-visuals
+    docsray process "$pdf"
 done
 ```
 

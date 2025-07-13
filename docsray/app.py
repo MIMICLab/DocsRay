@@ -17,7 +17,7 @@ from docsray.scripts.file_converter import FileConverter
 app = FastAPI(
     title="DocsRay API",
     description="Universal Document Question-Answering System API",
-    version="1.5.4"
+    version="1.6.0"
 )
 
 # Cache for processed documents
@@ -113,7 +113,7 @@ async def root():
     """Root endpoint with API information."""
     return {
         "message": "DocsRay Universal Document Question-Answering API",
-        "version": "1.5.4",
+        "version": "1.6.0",
         "status": "ready",
         "cached_documents": len(document_cache),
         "supported_formats": [
@@ -269,8 +269,6 @@ def main():
     parser = argparse.ArgumentParser(description="Launch DocsRay API server")
     parser.add_argument("--host", default="0.0.0.0", help="Host address")
     parser.add_argument("--port", type=int, default=8000, help="Port number")
-    parser.add_argument("--doc", "--pdf", type=str, help="Path to document file to load")
-    parser.add_argument("--system-prompt", type=str, help="Custom system prompt")
     parser.add_argument("--reload", action="store_true", help="Enable hot reload for development")
     parser.add_argument("--timeout", type=int, default=300, 
                        help="Document processing timeout in seconds (default: 300)") 
@@ -279,26 +277,7 @@ def main():
     print("🚀 Starting DocsRay API server...")
     print("📝 Server accepts document paths with each request")
     print("💾 Documents will be cached after first processing")
-    
-    # Pre-load document if provided
-    if args.doc:
-        doc_path = Path(args.doc).resolve()
-        print(f"📄 Pre-loading document: {doc_path}")
-        
-        try:
-            sections, chunk_index, temp_file = process_document_file(str(doc_path))
-            chatbot = PDFChatBot(sections=sections, chunk_index=chunk_index)
-            
-            document_cache[str(doc_path)] = {
-                "chatbot": chatbot,
-                "sections": sections,
-                "chunk_index": chunk_index,
-                "document_name": os.path.basename(str(doc_path))
-            }
-            print(f"✅ Document pre-loaded successfully")
-        except Exception as e:
-            print(f"⚠️  Failed to pre-load document: {e}")
-            print("💡 Document will be processed on first request")
+    print("🔄 Use --reload for development mode (hot reload enabled)")
     
     print(f"🌐 Server will be available at: http://{args.host}:{args.port}")
     print(f"📚 API documentation: http://{args.host}:{args.port}/docs")

@@ -6,7 +6,7 @@ from llama_cpp import Llama
 import os
 import sys
 from pathlib import Path
-from docsray.config import FAST_MODE, STANDARD_MODE, FULL_FEATURE_MODE, MAX_TOKENS, MODEL_SIZE
+from docsray.config import FAST_MODE, STANDARD_MODE, FULL_FEATURE_MODE, MAX_TOKENS, MODEL_SIZE, MODEL_TYPE, MODEL_TYPE_TO_SIZE
 from docsray.config import ALL_MODELS, FAST_MODELS, STANDARD_MODELS, FULL_FEATURE_MODELS
 
 import base64
@@ -153,10 +153,17 @@ elif torch.backends.mps.is_available():
 else:
     device = "cpu"
 
-def get_llm_models(model_size=None):
+def get_llm_models(model_size=None, model_type=None):
     """Get or create the LLM model instances"""
-    # Use provided model_size or fall back to config
-    size = model_size or MODEL_SIZE
+    # Use provided model_size/type or fall back to environment variable
+    if model_type:
+        size = MODEL_TYPE_TO_SIZE.get(model_type, "4b")
+    elif model_size:
+        size = model_size
+    else:
+        # Check environment variable first, then fall back to config
+        env_model_type = os.environ.get("DOCSRAY_MODEL_TYPE", "lite")
+        size = MODEL_TYPE_TO_SIZE.get(env_model_type, "4b")
     
     if FAST_MODE:
         model_path, mmproj_path = get_gemma_model_paths(FAST_MODELS, size)

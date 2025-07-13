@@ -75,7 +75,7 @@ else:
     if available_gb < min_available_gb * 2:
         FAST_MODE = True
         MAX_TOKENS = MAX_TOKENS // 4
-    elif available_gb < min_available_gb * 3:
+    elif available_gb < min_available_gb * 4:
         STANDARD_MODE = True
         MAX_TOKENS = MAX_TOKENS // 2         
     else:
@@ -134,7 +134,7 @@ ALL_MODELS = [
         "url": "https://huggingface.co/tgisaturday/Docsray/resolve/main/gemma-3-4b-it-GGUF/mmproj-gemma-3-4b-it-F16.gguf",
         "required": ["FAST_MODE", "STANDARD_MODE", "FULL_FEATURE_MODE"]
     },
-    {
+        {
         "dir": MODEL_DIR / "gemma-3-12b-it-GGUF",
         "file": "gemma-3-12b-it-Q4_K_M.gguf",
         "url": "https://huggingface.co/tgisaturday/Docsray/resolve/main/gemma-3-12b-it-GGUF/gemma-3-12b-it-Q4_K_M.gguf",
@@ -144,20 +144,33 @@ ALL_MODELS = [
         "dir": MODEL_DIR / "gemma-3-12b-it-GGUF",
         "file": "gemma-3-12b-it-Q8_0.gguf",
         "url": "https://huggingface.co/tgisaturday/Docsray/resolve/main/gemma-3-12b-it-GGUF/gemma-3-12b-it-Q8_0.gguf",
-        "required": ["STANDARD_MODE"]
-    },
-    {
-        "dir": MODEL_DIR / "gemma-3-12b-it-GGUF",
-        "file": "gemma-3-12b-it-F16.gguf",
-        "url": "https://huggingface.co/tgisaturday/Docsray/resolve/main/gemma-3-12b-it-GGUF/gemma-3-12b-it-F16.gguf",
-        "required": ["FULL_FEATURE_MODE"]
+        "required": ["STANDARD_MODE","FULL_FEATURE_MODE"]
     },
     {
         "dir": MODEL_DIR / "gemma-3-12b-it-GGUF",
         "file": "mmproj-gemma-3-12b-it-F16.gguf",
         "url": "https://huggingface.co/tgisaturday/Docsray/resolve/main/gemma-3-12b-it-GGUF/mmproj-gemma-3-12b-it-F16.gguf",
         "required": ["FAST_MODE", "STANDARD_MODE", "FULL_FEATURE_MODE"]
+    },
+    {
+        "dir": MODEL_DIR / "gemma-3-27b-it-GGUF",
+        "file": "gemma-3-27b-it-Q4_K_M.gguf",
+        "url": "https://huggingface.co/tgisaturday/Docsray/resolve/main/gemma-3-27b-it-GGUF/gemma-3-27b-it-Q4_K_M.gguf",
+        "required": ["FAST_MODE"]
+    },
+    {
+        "dir": MODEL_DIR / "gemma-3-27b-it-GGUF",
+        "file": "gemma-3-27b-it-Q8_0.gguf",
+        "url": "https://huggingface.co/tgisaturday/Docsray/resolve/main/gemma-3-27b-it-GGUF/gemma-3-27b-it-Q8_0.gguf",
+        "required": ["STANDARD_MODE","FULL_FEATURE_MODE"]
+    },
+    {
+        "dir": MODEL_DIR / "gemma-3-27b-it-GGUF",
+        "file": "mmproj-gemma-3-27b-it-F16.gguf",
+        "url": "https://huggingface.co/tgisaturday/Docsray/resolve/main/gemma-3-12b-it-GGUF/mmproj-gemma-3-12b-it-F16.gguf",
+        "required": ["FAST_MODE", "STANDARD_MODE", "FULL_FEATURE_MODE"]
     }
+    
 ]
 
 for model in ALL_MODELS:
@@ -170,8 +183,18 @@ for model in ALL_MODELS:
 
 DISABLE_VISUAL_ANALYSIS = os.environ.get("DOCSRAY_DISABLE_VISUALS", "0") == "1"
 
-# Model size selection: "4b" or "12b"
-MODEL_SIZE = os.environ.get("DOCSRAY_MODEL_SIZE", "4b")
+# Model type selection: "lite", "base", or "pro"
+MODEL_TYPE = os.environ.get("DOCSRAY_MODEL_TYPE", "lite")
+
+# Model type to size mapping
+MODEL_TYPE_TO_SIZE = {
+    "lite": "4b",
+    "base": "12b", 
+    "pro": "27b"
+}
+
+# Get actual model size from type
+MODEL_SIZE = MODEL_TYPE_TO_SIZE.get(MODEL_TYPE, "4b")
 
 
 if os.environ.get("DOCSRAY_DEBUG", "0") == "1":

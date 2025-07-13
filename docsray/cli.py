@@ -44,8 +44,8 @@ Examples:
   # Start web interface with custom timeout
   docsray web --timeout 600
   
-  # Start API server with a document
-  docsray api --doc /path/to/document --port 8000
+  # Start API server
+  docsray api --port 8000
   
   # Configure Claude Desktop
   docsray configure-claude
@@ -54,7 +54,7 @@ Examples:
   docsray process /path/to/document --timeout 300
   
   # Ask a question
-  docsray ask "What is the main topic?" --doc document
+  docsray ask document.pdf "What is the main topic?"
   
   # Run performance test
   docsray perf-test /path/to/document "What is this about?" --port 8000
@@ -66,6 +66,9 @@ Examples:
     # Download models command
     download_parser = subparsers.add_parser("download-models", help="Download required models")
     download_parser.add_argument("--check", action="store_true", help="Check model status only")
+    download_parser.add_argument("--model-type", choices=["lite", "base", "pro"], default="lite",
+                                help="Model type to download: lite(4b), base(12b), pro(27b) (default: lite)")
+    download_parser.add_argument("--force", action="store_true", help="Force re-download existing models")
     
     # MCP server command
     mcp_parser = subparsers.add_parser("mcp", help="Start MCP server")
@@ -76,8 +79,8 @@ Examples:
                            help="Max restart attempts (default: 5)")
     mcp_parser.add_argument("--retry-delay", type=int, default=5,
                            help="Delay between restarts in seconds (default: 5)")
-    mcp_parser.add_argument("--model-size", choices=["4b", "12b"], default="4b",
-                           help="Gemma model size to use (default: 4b)")
+    mcp_parser.add_argument("--model-type", choices=["lite", "base", "pro"], default="lite",
+                           help="Model type to use: lite(4b), base(12b), pro(27b) (default: lite)")
     
     # Web interface command
     web_parser = subparsers.add_parser("web", help="Start web interface")
@@ -94,44 +97,42 @@ Examples:
                            help="Max restart attempts (default: 5)")
     web_parser.add_argument("--retry-delay", type=int, default=5,
                            help="Delay between restarts in seconds (default: 5)")
-    web_parser.add_argument("--model-size", choices=["4b", "12b"], default="4b",
-                           help="Gemma model size to use (default: 4b)")
+    web_parser.add_argument("--model-type", choices=["lite", "base", "pro"], default="lite",
+                           help="Model type to use: lite(4b), base(12b), pro(27b) (default: lite)")
     
     # API server command
     api_parser = subparsers.add_parser("api", help="Start API server")
     api_parser.add_argument("--port", type=int, default=8000, help="Port number")
     api_parser.add_argument("--host", default="0.0.0.0", help="Host address")
-    api_parser.add_argument("--doc", type=str, help="Path to document file to load")
-    api_parser.add_argument("--system-prompt", type=str, help="Custom system prompt")
     api_parser.add_argument("--reload", action="store_true", help="Enable hot reload for development")
     api_parser.add_argument("--timeout", type=int, default=300,
                            help="Document processing timeout in seconds (default: 300)")
-    api_parser.add_argument("--model-size", choices=["4b", "12b"], default="4b",
-                           help="Gemma model size to use (default: 4b)")
+    api_parser.add_argument("--model-type", choices=["lite", "base", "pro"], default="lite",
+                           help="Model type to use: lite(4b), base(12b), pro(27b) (default: lite)")
     
     # Configure Claude command
     config_parser = subparsers.add_parser("configure-claude", help="Configure Claude Desktop")
     
     # Process Document command
     process_parser = subparsers.add_parser("process", help="Process a document file")
-    process_parser.add_argument("pdf_path", help="Path to document file")
+    process_parser.add_argument("file_path", help="Path to document file")
     process_parser.add_argument("--no-visuals", action="store_true", 
                             help="Disable visual content analysis")
     process_parser.add_argument("--timeout", type=int, default=300,
                             help="Processing timeout in seconds (default: 300)")
-    process_parser.add_argument("--model-size", choices=["4b", "12b"], default="4b",
-                            help="Gemma model size to use (default: 4b)")
+    process_parser.add_argument("--model-type", choices=["lite", "base", "pro"], default="lite",
+                            help="Model type to use: lite(4b), base(12b), pro(27b) (default: lite)")
 
     # Ask question command
     ask_parser = subparsers.add_parser("ask", help="Ask a question about a document")
+    ask_parser.add_argument("file_path", help="Path to document file")
     ask_parser.add_argument("question", help="Question to ask")
-    ask_parser.add_argument("--doc", required=True, help="Document file name")
-    ask_parser.add_argument("--model-size", choices=["4b", "12b"], default="4b",
-                         help="Gemma model size to use (default: 4b)")
+    ask_parser.add_argument("--model-type", choices=["lite", "base", "pro"], default="lite",
+                         help="Model type to use: lite(4b), base(12b), pro(27b) (default: lite)")
     
     # Performance test command
     perf_parser = subparsers.add_parser("perf-test", help="Run performance test against API")
-    perf_parser.add_argument("document_path", help="Path to document file")
+    perf_parser.add_argument("file_path", help="Path to document file")
     perf_parser.add_argument("question", help="Question to ask")
     perf_parser.add_argument("--port", type=int, default=8000, help="API server port (default: 8000)")
     perf_parser.add_argument("--host", default="localhost", help="API server host (default: localhost)")
@@ -140,15 +141,18 @@ Examples:
     args = parser.parse_args()
     
     if args.command == "download-models":
+        # Set model type environment variable for download
+        os.environ["DOCSRAY_MODEL_TYPE"] = args.model_type
+        
         from docsray.download_models import download_models, check_models
         if args.check:
-            check_models()
+            check_models(model_type=args.model_type)
         else:
-            download_models()
+            download_models(model_type=args.model_type, force=args.force)
     
     elif args.command == "mcp":
-        # Set model size environment variable
-        os.environ["DOCSRAY_MODEL_SIZE"] = args.model_size
+        # Set model type environment variable
+        os.environ["DOCSRAY_MODEL_TYPE"] = args.model_type
         
         if args.auto_restart:
             # Use auto-restart wrapper
@@ -174,8 +178,8 @@ Examples:
             asyncio.run(mcp_main())
     
     elif args.command == "web":
-        # Set model size environment variable
-        os.environ["DOCSRAY_MODEL_SIZE"] = args.model_size
+        # Set model type environment variable
+        os.environ["DOCSRAY_MODEL_TYPE"] = args.model_type
         
         if args.auto_restart:
             # Use auto-restart wrapper
@@ -228,15 +232,11 @@ Examples:
 
     
     elif args.command == "api":
-        # Set model size environment variable
-        os.environ["DOCSRAY_MODEL_SIZE"] = args.model_size
+        # Set model type environment variable
+        os.environ["DOCSRAY_MODEL_TYPE"] = args.model_type
         
         from docsray.app import main as api_main
         sys.argv = ["docsray-api", "--host", args.host, "--port", str(args.port)]
-        if args.doc:
-            sys.argv.extend(["--doc", args.doc])
-        if args.system_prompt:
-            sys.argv.extend(["--system-prompt", args.system_prompt])
         if args.timeout:
             sys.argv.extend(["--timeout", str(args.timeout)])
         if args.reload:
@@ -247,19 +247,19 @@ Examples:
         configure_claude_desktop()
     
     elif args.command == "process":
-        # Set model size environment variable
-        os.environ["DOCSRAY_MODEL_SIZE"] = args.model_size
+        # Set model type environment variable
+        os.environ["DOCSRAY_MODEL_TYPE"] = args.model_type
         
-        process_pdf_cli(args.pdf_path, args.no_visuals, args.timeout)
+        process_pdf_cli(args.file_path, args.no_visuals, args.timeout)
     
     elif args.command == "ask":
-        # Set model size environment variable
-        os.environ["DOCSRAY_MODEL_SIZE"] = args.model_size
+        # Set model type environment variable
+        os.environ["DOCSRAY_MODEL_TYPE"] = args.model_type
         
-        ask_question_cli(args.question, args.doc)
+        ask_question_cli(args.question, args.file_path)
     
     elif args.command == "perf-test":
-        run_performance_test(args.document_path, args.question, args.host, args.port, args.iterations)
+        run_performance_test(args.file_path, args.question, args.host, args.port, args.iterations)
     
     else:
         if hotfix_check():
@@ -396,7 +396,7 @@ def configure_claude_desktop():
         print("\n💡 You can manually create the config file with:", file=sys.stderr)
         print(json.dumps(config, indent=2), file=sys.stderr)
 
-def process_pdf_with_timeout(pdf_path: str, analyze_visuals: bool, timeout: int):
+def process_pdf_with_timeout(file_path: str, analyze_visuals: bool, timeout: int):
     """Process doc with optional timeout handling"""
     def _process():
         from docsray.scripts import pdf_extractor, chunker, build_index, section_rep_builder
@@ -404,7 +404,7 @@ def process_pdf_with_timeout(pdf_path: str, analyze_visuals: bool, timeout: int)
         # Extract
         print("📖 Extracting content...", file=sys.stderr)
         extracted = pdf_extractor.extract_content(
-            pdf_path,
+            file_path,
             analyze_visuals=analyze_visuals
         )
 
@@ -443,13 +443,13 @@ def process_pdf_with_timeout(pdf_path: str, analyze_visuals: bool, timeout: int)
         print("⏰ No timeout limit set", file=sys.stderr)
         return _process()
 
-def process_pdf_cli(pdf_path: str, no_visuals: bool = False, timeout: int = 300):
+def process_pdf_cli(file_path: str, no_visuals: bool = False, timeout: int = 300):
     """Process a doc file from command line with timeout"""
-    if not os.path.exists(pdf_path):
-        print(f"❌ File not found: {pdf_path}")
+    if not os.path.exists(file_path):
+        print(f"❌ File not found: {file_path}")
         return
     
-    print(f"📄 Processing: {pdf_path}", file=sys.stderr)
+    print(f"📄 Processing: {file_path}", file=sys.stderr)
     
     # Visual analysis 
     analyze_visuals = not no_visuals 
@@ -462,7 +462,7 @@ def process_pdf_cli(pdf_path: str, no_visuals: bool = False, timeout: int = 300)
     
     try:
         # Process with timeout
-        sections, chunk_index = process_pdf_with_timeout(pdf_path, analyze_visuals, timeout)
+        sections, chunk_index = process_pdf_with_timeout(file_path, analyze_visuals, timeout)
         
         elapsed_time = time.time() - start_time
         print(f"✅ Processing complete!", file=sys.stderr)
@@ -472,7 +472,7 @@ def process_pdf_cli(pdf_path: str, no_visuals: bool = False, timeout: int = 300)
         
         # Save cache (optional)
         try:
-            save_cache(pdf_path, sections, chunk_index)
+            save_cache(file_path, sections, chunk_index)
             print(f"💾 Cache saved for future use", file=sys.stderr)
         except Exception as e:
             print(f"⚠️  Warning: Could not save cache: {e}", file=sys.stderr)
@@ -489,7 +489,7 @@ def process_pdf_cli(pdf_path: str, no_visuals: bool = False, timeout: int = 300)
         print(f"Error: {e}", file=sys.stderr)
         return
 
-def save_cache(pdf_path: str, sections, chunks):
+def save_cache(file_path: str, sections, chunks):
     """Save processed data to cache"""
     import json
     import pickle
@@ -500,38 +500,38 @@ def save_cache(pdf_path: str, sections, chunks):
     cache_dir.mkdir(parents=True, exist_ok=True)
     
     # Use doc filename without extension as base name
-    pdf_name = Path(pdf_path).stem
+    file_name = Path(file_path).stem
     
     # Save sections as JSON
-    sec_path = cache_dir / f"{pdf_name}_sections.json"
+    sec_path = cache_dir / f"{file_name}_sections.json"
     with open(sec_path, "w") as f:
         json.dump(sections, f, indent=2)
     
     # Save chunk index as pickle
-    idx_path = cache_dir / f"{pdf_name}_index.pkl"
+    idx_path = cache_dir / f"{file_name}_index.pkl"
     with open(idx_path, "wb") as f:
         pickle.dump(chunks, f)
     
     print(f"📁 Cache saved to: {cache_dir}", file=sys.stderr)
 
-def ask_question_cli(question: str, pdf_name: str):
+def ask_question_cli(question: str, file_path: str):
     """Ask a question about a doc from command line"""
     from docsray.chatbot import PDFChatBot
     import json
     
     # Look for cached data
     cache_dir = Path.home() / ".docsray" / "cache"
-    pdf_name_stem = Path(pdf_name).stem  # 또는 pdf_name.split('.')[0]
-    sec_path = cache_dir / f"{pdf_name_stem}_sections.json"
-    idx_path = cache_dir / f"{pdf_name_stem}_index.pkl"
+    file_name_stem = Path(file_path).stem
+    sec_path = cache_dir / f"{file_name_stem}_sections.json"
+    idx_path = cache_dir / f"{file_name_stem}_index.pkl"
 
     if not sec_path.exists() or not idx_path.exists():
-        print(f"❌ No cached data for {pdf_name}. Please process the document first:", file=sys.stderr)
-        print(f'docsray process "{pdf_name}"', file=sys.stderr)
+        print(f"❌ No cached data for {file_path}. Please process the document first:", file=sys.stderr)
+        print(f'docsray process "{file_path}"', file=sys.stderr)
         return
     
     # Load data
-    print(f"📁 Loading cached data for {pdf_name}...", file=sys.stderr)
+    print(f"📁 Loading cached data for {file_path}...", file=sys.stderr)
     try:
         with open(sec_path, "r") as f:
             sections = json.load(f)
@@ -542,7 +542,7 @@ def ask_question_cli(question: str, pdf_name: str):
             
     except Exception as e:
         print(f"❌ Failed to load cached data: {e}", file=sys.stderr)
-        print(f'💡 Try reprocessing the document: docsray process "{pdf_name}"', file=sys.stderr)
+        print(f'💡 Try reprocessing the document: docsray process "{file_path}"', file=sys.stderr)
         return
     
     # Create chatbot and get answer
@@ -563,14 +563,14 @@ def ask_question_cli(question: str, pdf_name: str):
         print(f"❌ Failed to get answer: {e}", file=sys.stderr)
         return
 
-def run_performance_test(document_path: str, question: str, host: str, port: int, iterations: int):
+def run_performance_test(file_path: str, question: str, host: str, port: int, iterations: int):
     """Run performance test against the API server"""
-    if not os.path.exists(document_path):
-        print(f"❌ Document file not found: {document_path}", file=sys.stderr)
+    if not os.path.exists(file_path):
+        print(f"❌ Document file not found: {file_path}", file=sys.stderr)
         return
     
     # Get absolute path
-    doc_path = str(Path(document_path).resolve())
+    doc_path = str(Path(file_path).resolve())
     
     # Check if API is running
     api_url = f"http://{host}:{port}"
@@ -588,7 +588,7 @@ def run_performance_test(document_path: str, question: str, host: str, port: int
     
     # Run performance test
     print(f"\n🏃 Running performance test...", file=sys.stderr)
-    print(f"📄 Document: {document_path}", file=sys.stderr)
+    print(f"📄 Document: {file_path}", file=sys.stderr)
     print(f"❓ Question: {question}", file=sys.stderr)
     print(f"🔄 Iterations: {iterations}", file=sys.stderr)
     print(f"🌐 API URL: {api_url}/ask", file=sys.stderr)
