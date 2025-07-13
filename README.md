@@ -3,6 +3,8 @@
 [![license](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/MIMICLab/DocsRay/blob/main/LICENSE)
 [![Downloads](https://pepy.tech/badge/docsray)](https://pepy.tech/project/docsray)
 
+**[🌐 Live Demo (Base Model)](https://docsray.com/)**
+
 A powerful Universal Document Question-Answering System that uses advanced embedding models and multimodal LLMs with Coarse-to-Fine search (RAG) approach. Features seamless MCP (Model Context Protocol) integration with Claude Desktop, comprehensive directory management capabilities, visual content analysis, and intelligent hybrid OCR system.
 
 ## 🚀 Quick Start
@@ -223,6 +225,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🔗 Links
 
+- **Live Demo (Base Model)**: https://docsray.com/
 - **PyPI Package**: https://pypi.org/project/docsray/
 - **Documentation**: https://github.com/your-repo/DocsRay
 - **Issues & Support**: https://github.com/your-repo/DocsRay/issues
