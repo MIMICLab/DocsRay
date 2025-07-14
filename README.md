@@ -13,6 +13,18 @@ A powerful Universal Document Question-Answering System that uses advanced embed
 # 1. Install DocsRay
 pip install docsray
 
+# 1-1. Tesseract OCR (optional)
+# For faster OCR, install Tesseract with appropriate language pack.
+
+#pip install pytesseract
+#sudo apt-get install tesseract-ocr   # Debian/Ubuntu
+#sudo apt-get install tesseract-ocr-kor
+#brew install tesseract-ocr   # MacOS
+#brew install tesseract-ocr-kor
+
+# 1-2. llama_cpp_python rebuild (recommended for CUDA)
+#CMAKE_ARGS="-DGGML_CUDA=on" pip install llama-cpp-python --upgrade --force-reinstall --no-cache-dir
+
 # 2. Download models (choose your preferred size)
 docsray download-models --model-type lite   # 4b model (~3GB)
 # docsray download-models --model-type base  # 12b model (~8GB) 
