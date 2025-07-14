@@ -13,10 +13,10 @@ from docsray.inference.llm_model import local_llm
 from docsray.config import FAST_MODE, STANDARD_MODE, FULL_FEATURE_MODE
 
 DEFAULT_SYSTEM_PROMPT = (
-    "You are a document-grounded assistant.\n"
-    "• Use ONLY the information provided in <Document Context> as evidence.\n"
-    "• When quoting, silently repair broken lines or spacing caused by chunking.\n"
-    "• Answer in the same language as the question.\n\n"
+    "■ Basic Principles\n"
+    "1) Check document context first, then use reliable knowledge if needed.\n"
+    "2) Provide accurate information without unnecessary disclaimers.\n"
+    "3) Always respond in the same language as the user's question.\n\n"
 )
 
 class PDFChatBot:
