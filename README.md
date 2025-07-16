@@ -23,7 +23,7 @@ pip install docsray
 #brew install tesseract-ocr-kor
 
 # 1-2. llama_cpp_python rebuild (recommended for CUDA)
-#CMAKE_ARGS="-DGGML_CUDA=on" pip install llama-cpp-python --upgrade --force-reinstall --no-cache-dir
+#CMAKE_ARGS="-DGGML_CUDA=on" pip install llama-cpp-python==0.3.9 --upgrade --force-reinstall --no-cache-dir
 
 # 2. Download models (choose your preferred size)
 docsray download-models --model-type lite   # 4b model (~3GB)

@@ -6,7 +6,7 @@ pdfplumber>=0.10.0
 tiktoken>=0.5.0
 
 # Machine Learning and AI
-llama-cpp-python>=0.2.0
+llama-cpp-python==0.3.9
 torch>=2.0.0
 protobuf>=4.0.0
 

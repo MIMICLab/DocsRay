@@ -17,7 +17,7 @@ from docsray.scripts.file_converter import FileConverter
 app = FastAPI(
     title="DocsRay API",
     description="Universal Document Question-Answering System API",
-    version="1.6.0"
+    version="1.6.2"
 )
 
 # Cache for processed documents
