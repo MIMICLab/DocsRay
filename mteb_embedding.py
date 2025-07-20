@@ -1,15 +1,10 @@
 from __future__ import annotations
 import mteb
-from mteb.encoder_interface import PromptType
 import numpy as np
-import os
 from sentence_transformers import SentenceTransformer
 import torch
 import numpy as np
-from typing import List, Union, Dict
-from mteb.model_meta import ModelMeta
-
-from functools import partial
+from typing import List
 
 EPS = 1e-8              
 
@@ -143,7 +138,7 @@ class DocsrayEmbedding:
         sentences: list[str],
         *,
         task_name: str,
-        prompt_type: PromptType | None = None,
+        prompt_type=None,
         **kwargs
     ) -> np.ndarray:
         # your custom implementation here
