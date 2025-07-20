@@ -1,6 +1,5 @@
 from __future__ import annotations
 import mteb
-from mteb.models.wrapper import Wrapper
 from mteb.encoder_interface import PromptType
 import numpy as np
 import os
