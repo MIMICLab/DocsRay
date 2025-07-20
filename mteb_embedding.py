@@ -126,11 +126,9 @@ class EmbeddingModel:
     
 
 
-class DocsrayWrapper(Wrapper):
+class DocsrayEmbedding:
     def __init__(self):
         super().__init__()
-        # your custom implementation here
-
         # Global instance
         if torch.cuda.is_available():
             device = "cuda"
@@ -154,7 +152,7 @@ class DocsrayWrapper(Wrapper):
 
 if __name__ == "__main__":
     # Example usage
-    model = DocsrayWrapper()
+    model = DocsrayEmbedding()
     benchmark = mteb.get_benchmark("MTEB(Multilingual, v2)")
     tasks = mteb.get_tasks(tasks=benchmark)
     evaluation = mteb.MTEB(tasks=tasks)
