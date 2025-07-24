@@ -82,8 +82,9 @@ class EmbeddingModel:
 
         emb_1 = self.model_1.create_embedding(text_1)["data"][0]["embedding"]
         emb_2 = self.model_2.create_embedding(text_2)["data"][0]["embedding"] 
-        emb = np.add(emb_1, emb_2) 
+        emb = np.concatenate([emb_1, emb_2])
         emb = _l2_normalize(emb)
+
         return emb
 
     def get_embeddings(self, texts: list, is_query: bool = False):
@@ -98,8 +99,9 @@ class EmbeddingModel:
 
         embs_1 = [self.model_1.create_embedding(t)["data"][0]["embedding"] for t in texts_1]
         embs_2 = [self.model_2.create_embedding(t)["data"][0]["embedding"] for t in texts_2]
-        embs = np.add(_l2_normalize(embs_1), _l2_normalize(embs_2))  # element-wise sum
-        embs = _l2_normalize(embs)       
+        embs = [np.concatenate([e1, e2]) for e1, e2 in zip(embs_1, embs_2)]
+        embs = _l2_normalize(embs)   
+
         return embs
 
 
