@@ -2,6 +2,7 @@
 [![PyPI Status](https://badge.fury.io/py/docsray.svg)](https://badge.fury.io/py/docsray)
 [![license](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/MIMICLab/DocsRay/blob/main/LICENSE)
 [![Downloads](https://pepy.tech/badge/docsray)](https://pepy.tech/project/docsray)
+[![Verified on MseeP](https://mseep.ai/badge.svg)](https://mseep.ai/app/f6dfcc65-8ee3-4ad1-9101-88b6dbdcf37b)
 
 **[🌐 Live Demo (Base Model)](https://docsray.com/)**
 
@@ -239,8 +240,6 @@ We welcome contributions! Please check our [GitHub repository](https://github.co
 ## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/mimiclab-docsray-badge.png)](https://mseep.ai/app/mimiclab-docsray)
 
 ## 🔗 Links
 
