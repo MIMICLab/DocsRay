@@ -50,9 +50,14 @@ docsray api                                 # Start API server
 - **📁 Universal Document Support**: 30+ file formats with automatic conversion
 - **🌍 Multi-Language**: Korean, English, and other languages supported
 
-## 🎯 What's New in v1.6.0
+## 🎯 What's New in v1.7.0
 
-### Enhanced Model Selection & API
+### Breaking Change: Enhanced Embedding Method
+- **Improved Embedding Synthesis**: Changed from element-wise addition to concatenation for better semantic representation
+- **IMPORTANT**: This change requires reindexing of existing documents as embedding dimensions have doubled
+- **Better Accuracy**: Concatenation preserves more information from both embedding models
+
+### Previous v1.6.0 Features
 - **Model Type Selection**: Choose between `lite` (4b), `base` (12b), and `pro` (27b) models
 - **Selective Downloads**: Download only the model type you need
 - **Enhanced API**: Accepts document paths per request with automatic caching
