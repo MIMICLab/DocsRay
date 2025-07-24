@@ -1,5 +1,3 @@
-[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/mimiclab-docsray-badge.png)](https://mseep.ai/app/mimiclab-docsray)
-
 # DocsRay 
 [![PyPI Status](https://badge.fury.io/py/docsray.svg)](https://badge.fury.io/py/docsray)
 [![license](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/MIMICLab/DocsRay/blob/main/LICENSE)
@@ -241,6 +239,8 @@ We welcome contributions! Please check our [GitHub repository](https://github.co
 ## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/mimiclab-docsray-badge.png)](https://mseep.ai/app/mimiclab-docsray)
 
 ## 🔗 Links
 
