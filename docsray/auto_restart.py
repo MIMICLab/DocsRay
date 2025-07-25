@@ -15,6 +15,8 @@ import signal
 import socket
 import errno
 import shutil
+import threading
+import requests
 
 try:
     import psutil  # pure‑Python, fallback when lsof is absent
@@ -54,6 +56,11 @@ def get_port_from_args(cmd: list, default: int = 44665) -> int:
             return int(cmd[idx + 1])
         except (ValueError, IndexError):
             pass
+    
+    # Check if this is an API service (default port 8000)
+    if any("docsray.app" in arg for arg in cmd):
+        return 8000
+    
     return default
 
 
@@ -99,21 +106,73 @@ def kill_port_holders(port: int):
 class SimpleServiceMonitor:
     """Simple but working service monitor"""
     
-    def __init__(self, service_name, command_args, max_retries=5, retry_delay=5):
+    def __init__(self, service_name, command_args, max_retries=None, retry_delay=5, request_timeout=None, port=None):
         self.service_name = service_name
         self.command_args = command_args
-        self.max_retries = max_retries
+        self.max_retries = max_retries  # None means unlimited retries
         self.retry_delay = retry_delay
+        self.request_timeout = request_timeout  # Timeout for API requests
+        self.port = port  # Port for health checks
         self.logger = setup_logging(service_name)
         self.retry_count = 0
+        self.last_activity_time = None
+        self.monitoring_thread = None
+        self.should_stop_monitoring = False
+        self.process = None
+        
+    def monitor_api_activity(self):
+        """Monitor API activity and kill process if timeout exceeded"""
+        if not self.request_timeout or not self.port:
+            return
+            
+        self.logger.info(f"📡 Starting API activity monitor (timeout: {self.request_timeout}s)")
+        
+        while not self.should_stop_monitoring:
+            try:
+                # Check if process is still running
+                if self.process and self.process.poll() is not None:
+                    break
+                
+                # Try to get current activity status from API
+                try:
+                    response = requests.get(f"http://localhost:{self.port}/activity", timeout=5)
+                    if response.status_code == 200:
+                        data = response.json()
+                        if data.get("processing"):
+                            # API is processing a request
+                            start_time = data.get("start_time", time.time())
+                            elapsed = time.time() - start_time
+                            
+                            if elapsed > self.request_timeout:
+                                self.logger.error(f"⏰ Request timeout exceeded ({elapsed:.1f}s > {self.request_timeout}s)")
+                                self.logger.info("🔨 Killing process due to timeout...")
+                                if self.process:
+                                    self.process.kill()
+                                break
+                            else:
+                                self.logger.debug(f"Request in progress: {elapsed:.1f}s / {self.request_timeout}s")
+                except requests.exceptions.RequestException:
+                    # API might not be ready yet or doesn't have activity endpoint
+                    pass
+                
+                time.sleep(10)  # Check every 10 seconds
+                
+            except Exception as e:
+                self.logger.error(f"Error in activity monitor: {e}")
+                time.sleep(10)
+        
+        self.logger.info("📡 API activity monitor stopped")
         
     def run(self):
         """Main run loop - keeps restarting the service"""
         self.logger.info(f"🚀 Starting {self.service_name} monitor")
         self.logger.info(f"Command: {' '.join(self.command_args)}")
-        self.logger.info(f"Max retries: {self.max_retries}, Retry delay: {self.retry_delay}s")
+        if self.max_retries is None:
+            self.logger.info(f"Max retries: unlimited, Retry delay: {self.retry_delay}s")
+        else:
+            self.logger.info(f"Max retries: {self.max_retries}, Retry delay: {self.retry_delay}s")
         
-        while self.retry_count < self.max_retries:
+        while self.max_retries is None or self.retry_count < self.max_retries:
             try:
                 # Set environment variable to indicate auto-restart mode
                 env = os.environ.copy()
@@ -126,16 +185,23 @@ class SimpleServiceMonitor:
                 self.logger.info(f"Starting {self.service_name} (attempt {self.retry_count + 1}/{self.max_retries})")
                 
                 # Run the service
-                process = subprocess.Popen(
+                self.process = subprocess.Popen(
                     self.command_args,
                     env=env
                 )
+                
+                # Start monitoring thread for API timeout if applicable
+                self.should_stop_monitoring = False
+                if self.request_timeout and self.port and "api" in str(self.command_args):
+                    self.monitoring_thread = threading.Thread(target=self.monitor_api_activity)
+                    self.monitoring_thread.daemon = True
+                    self.monitoring_thread.start()
                 
                 # --- Wait with watchdog ---
                 start_ts = time.time()
                 exit_code = None
                 while True:
-                    exit_code = process.poll()
+                    exit_code = self.process.poll()
                     if exit_code is not None:
                         # Child exited normally or via os._exit
                         break
@@ -143,18 +209,23 @@ class SimpleServiceMonitor:
                     # Hung‑process watchdog
                     if time.time() - start_ts > PROCESS_WATCHDOG_TIMEOUT:
                         self.logger.error("Watchdog timeout – child appears hung, terminating…")
-                        process.terminate()
+                        self.process.terminate()
                         try:
-                            exit_code = process.wait(timeout=10)
+                            exit_code = self.process.wait(timeout=10)
                         except subprocess.TimeoutExpired:
                             self.logger.error("Graceful terminate failed – killing…")
-                            process.kill()
-                            exit_code = process.wait(timeout=5)
+                            self.process.kill()
+                            exit_code = self.process.wait(timeout=5)
                         # Mark forced kill with special code
                         exit_code = 99
                         break
 
                     time.sleep(5)
+                
+                # Stop monitoring thread
+                self.should_stop_monitoring = True
+                if self.monitoring_thread and self.monitoring_thread.is_alive():
+                    self.monitoring_thread.join(timeout=5)
                 
                 self.logger.info(f"{self.service_name} exited with code: {exit_code}")
                 
@@ -176,24 +247,25 @@ class SimpleServiceMonitor:
                     self.logger.error(f"Service crashed with exit code {exit_code}")
                     self.retry_count += 1
                 
-                if self.retry_count < self.max_retries:
+                if self.max_retries is None or self.retry_count < self.max_retries:
                     self.logger.info(f"Waiting {self.retry_delay} seconds before restart...")
                     time.sleep(self.retry_delay)
                 
             except KeyboardInterrupt:
                 self.logger.info("Received keyboard interrupt, stopping...")
-                if process and process.poll() is None:
-                    process.terminate()
-                    process.wait()
+                self.should_stop_monitoring = True
+                if self.process and self.process.poll() is None:
+                    self.process.terminate()
+                    self.process.wait()
                 break
                 
             except Exception as e:
                 self.logger.error(f"Unexpected error: {e}")
                 self.retry_count += 1
-                if self.retry_count < self.max_retries:
+                if self.max_retries is None or self.retry_count < self.max_retries:
                     time.sleep(self.retry_delay)
         
-        if self.retry_count >= self.max_retries:
+        if self.max_retries is not None and self.retry_count >= self.max_retries:
             self.logger.error(f"Max retries ({self.max_retries}) reached. Giving up.")
         
         self.logger.info("Monitor stopped")
@@ -211,8 +283,8 @@ def main():
     parser.add_argument(
         "--max-retries",
         type=int,
-        default=5,
-        help="Maximum number of restart attempts (default: 5)"
+        default=None,
+        help="Maximum number of restart attempts (unlimited if not specified)"
     )
     parser.add_argument(
         "--retry-delay",

@@ -4,8 +4,10 @@ import uvicorn
 import json
 import os
 import argparse
+import time
 from pathlib import Path
 from typing import Optional, Dict, Any
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Body, HTTPException
 import tempfile
 import atexit
@@ -14,15 +16,30 @@ from docsray.chatbot import PDFChatBot
 from docsray.scripts import pdf_extractor, chunker, build_index, section_rep_builder
 from docsray.scripts.file_converter import FileConverter
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    yield
+    # Shutdown
+    cleanup_temp_files()
+
 app = FastAPI(
     title="DocsRay API",
     description="Universal Document Question-Answering System API",
-    version="1.6.2"
+    version="1.6.2",
+    lifespan=lifespan
 )
 
 # Cache for processed documents
 document_cache: Dict[str, Dict[str, Any]] = {}
 temp_files_to_cleanup: set = set()  # Track temporary files
+
+# Activity tracking for timeout monitoring
+current_activity = {
+    "processing": False,
+    "start_time": None,
+    "request_path": None
+}
 
 def cleanup_temp_files():
     """Clean up temporary files on exit"""
@@ -149,6 +166,16 @@ async def get_supported_formats():
         "total": len(formats) + 1  # +1 for PDF
     }
 
+@app.get("/activity")
+async def get_activity():
+    """Get current processing activity status for timeout monitoring."""
+    return {
+        "processing": current_activity["processing"],
+        "start_time": current_activity["start_time"],
+        "request_path": current_activity["request_path"],
+        "elapsed": time.time() - current_activity["start_time"] if current_activity["start_time"] else 0
+    }
+
 @app.get("/cache/info")
 async def get_cache_info():
     """Get information about cached documents."""
@@ -194,6 +221,14 @@ async def ask_question(
     if not os.path.exists(document_path):
         raise HTTPException(status_code=404, detail=f"Document file not found: {document_path}")
     
+    # Set activity tracking
+    global current_activity
+    current_activity = {
+        "processing": True,
+        "start_time": time.time(),
+        "request_path": document_path
+    }
+    
     try:
         # Check if document is already cached
         doc_path_str = str(Path(document_path).resolve())
@@ -230,6 +265,13 @@ async def ask_question(
             fine_only=fine_only
         )
         
+        # Clear activity tracking
+        current_activity = {
+            "processing": False,
+            "start_time": None,
+            "request_path": None
+        }
+        
         return {
             "document_path": document_path,
             "document_name": document_name,
@@ -240,10 +282,23 @@ async def ask_question(
         }
         
     except Exception as e:
+        # Clear activity tracking on error
+        current_activity = {
+            "processing": False,
+            "start_time": None,
+            "request_path": None
+        }
         raise HTTPException(
             status_code=500, 
             detail=f"Error processing question: {str(e)}"
         )
+    finally:
+        # Ensure activity is cleared
+        current_activity = {
+            "processing": False,
+            "start_time": None,
+            "request_path": None
+        }
 
 @app.post("/cache/clear")
 async def clear_cache():
@@ -259,25 +314,17 @@ async def clear_cache():
         "documents_cleared": count
     }
 
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Clean up temporary files on shutdown"""
-    cleanup_temp_files()
 
 def main():
     """Entry point for docsray-api command"""
     parser = argparse.ArgumentParser(description="Launch DocsRay API server")
     parser.add_argument("--host", default="0.0.0.0", help="Host address")
     parser.add_argument("--port", type=int, default=8000, help="Port number")
-    parser.add_argument("--reload", action="store_true", help="Enable hot reload for development")
-    parser.add_argument("--timeout", type=int, default=300, 
-                       help="Document processing timeout in seconds (default: 300)") 
     args = parser.parse_args()
     
     print("🚀 Starting DocsRay API server...")
     print("📝 Server accepts document paths with each request")
     print("💾 Documents will be cached after first processing")
-    print("🔄 Use --reload for development mode (hot reload enabled)")
     
     print(f"🌐 Server will be available at: http://{args.host}:{args.port}")
     print(f"📚 API documentation: http://{args.host}:{args.port}/docs")
@@ -288,7 +335,6 @@ def main():
         app, 
         host=args.host, 
         port=args.port,
-        reload=args.reload
     )
 
 if __name__ == "__main__":

@@ -69,8 +69,8 @@ TEMP_DIR.mkdir(exist_ok=True)
 
 # Session timeout (24 hours)
 SESSION_TIMEOUT = 86400
-PAGE_LIMIT = 5
-PDF_PROCESS_TIMEOUT = 300
+PAGE_LIMIT = None  # None means process all pages
+PDF_PROCESS_TIMEOUT = None  # None means no timeout
 # Error recovery settings
 MAX_MEMORY_PERCENT = 90  # Restart if memory usage exceeds this
 ERROR_THRESHOLD = 1  # Number of errors before restart
@@ -448,8 +448,8 @@ def create_session_dir() -> Path:
 def process_document_with_timeout(file_path: str, session_dir: Path, analyze_visuals: bool = True, progress_callback=None) -> Tuple[list, list, str]:
     """Process a document file with optional timeout handling"""
     
-    # If timeout is disabled (0 or negative), run without timeout
-    if PDF_PROCESS_TIMEOUT <= 0:
+    # If timeout is disabled (None or 0 or negative), run without timeout
+    if PDF_PROCESS_TIMEOUT is None or PDF_PROCESS_TIMEOUT <= 0:
         return _do_process_document(file_path, session_dir, analyze_visuals, progress_callback)
     
     # Otherwise, run with timeout
@@ -502,8 +502,8 @@ def _do_process_document(file_path: str, session_dir: Path, analyze_visuals: boo
             status_msg = f"📖 Extracting content from {file_name}..."
             if analyze_visuals:
                 status_msg += " (with visual analysis)"
-                # Only apply page_limit if it's greater than 0
-                if PAGE_LIMIT > 0:
+                # Only apply page_limit if it's set and greater than 0
+                if PAGE_LIMIT is not None and PAGE_LIMIT > 0:
                     extract_kwargs["page_limit"] = PAGE_LIMIT
                     status_msg += f"\n📄 Processing first {PAGE_LIMIT} pages"
                 else:
@@ -574,7 +574,7 @@ def _do_process_document(file_path: str, session_dir: Path, analyze_visuals: boo
         msg += f"⏱️ Processing time: {elapsed_time:.1f} seconds"
 
         # Add info about what limits were applied
-        if PAGE_LIMIT > 0:
+        if PAGE_LIMIT is not None and PAGE_LIMIT > 0:
             msg += f"\n📄 Processed first {PAGE_LIMIT} pages"
 
         if progress_callback is not None:
@@ -613,11 +613,11 @@ def load_document(file, analyze_visuals: bool, session_state: Dict, progress=gr.
     initial_message = f"📁 Copying {file_name} to session..."
     
     # Add page limit info if applicable
-    if PAGE_LIMIT > 0:
+    if PAGE_LIMIT is not None and PAGE_LIMIT > 0:
         initial_message += f"\n📄 Page Limit: First {PAGE_LIMIT} pages only"
     
     # Add timeout info if applicable  
-    if PDF_PROCESS_TIMEOUT > 0:
+    if PDF_PROCESS_TIMEOUT is not None and PDF_PROCESS_TIMEOUT > 0:
         initial_message += f"\n⏰ Timeout: {PDF_PROCESS_TIMEOUT//60} minutes max"
     else:
         initial_message += "\n⏰ No timeout limit"
@@ -1015,15 +1015,17 @@ def main():
     parser.add_argument("--share", action="store_true", help="Create public link")
     parser.add_argument("--port", type=int, default=44665, help="Port number")
     parser.add_argument("--host", type=str, default="0.0.0.0", help="Host address")
-    parser.add_argument("--timeout", type=int, default=120, help="PDF processing timeout in seconds")
-    parser.add_argument("--pages", type=int, default=5, help="Maximum pages to process during visual analysis") 
+    parser.add_argument("--timeout", type=int, default=None, help="PDF processing timeout in seconds (no timeout if not specified)")
+    parser.add_argument("--pages", type=int, default=None, help="Maximum pages to process during visual analysis (all pages if not specified)") 
     args = parser.parse_args()
     
     # Update global timeout if specified
     global PDF_PROCESS_TIMEOUT
-    PDF_PROCESS_TIMEOUT = args.timeout
+    if args.timeout is not None:
+        PDF_PROCESS_TIMEOUT = args.timeout
     global PAGE_LIMIT
-    PAGE_LIMIT = args.pages
+    if args.pages is not None:
+        PAGE_LIMIT = args.pages
     # Set wrapper environment variable if running under wrapper
     if '--wrapper' in sys.argv:
         os.environ['DOCSRAY_WRAPPER'] = '1'
@@ -1034,7 +1036,14 @@ def main():
     logger.info(f"🚀 Starting DocsRay Web Interface")
     logger.info(f"📍 Local URL: http://localhost:{args.port}")
     logger.info(f"🌐 Network URL: http://{args.host}:{args.port}")
-    logger.info(f"⏰ PDF Processing Timeout: {PDF_PROCESS_TIMEOUT} seconds")
+    if PDF_PROCESS_TIMEOUT is not None:
+        logger.info(f"⏰ PDF Processing Timeout: {PDF_PROCESS_TIMEOUT} seconds")
+    else:
+        logger.info(f"⏰ PDF Processing Timeout: No limit")
+    if PAGE_LIMIT is not None:
+        logger.info(f"📄 Page Limit: {PAGE_LIMIT} pages")
+    else:
+        logger.info(f"📄 Page Limit: No limit")
     
     try:
         demo.launch(

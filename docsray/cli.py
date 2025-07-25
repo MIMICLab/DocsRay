@@ -45,6 +45,9 @@ Examples:
   # Start API server
   docsray api --port 8000
   
+  # Start API server with auto-restart
+  docsray api --auto-restart
+  
   # Configure Claude Desktop
   docsray configure-claude
   
@@ -73,8 +76,8 @@ Examples:
     mcp_parser.add_argument("--port", type=int, help="Port number")
     mcp_parser.add_argument("--auto-restart", action="store_true", 
                            help="Enable auto-restart on errors")
-    mcp_parser.add_argument("--max-retries", type=int, default=5,
-                           help="Max restart attempts (default: 5)")
+    mcp_parser.add_argument("--max-retries", type=int, default=None,
+                           help="Max restart attempts (unlimited if not specified)")
     mcp_parser.add_argument("--retry-delay", type=int, default=5,
                            help="Delay between restarts in seconds (default: 5)")
     mcp_parser.add_argument("--model-type", choices=["lite", "base", "pro"], default="lite",
@@ -85,14 +88,14 @@ Examples:
     web_parser.add_argument("--share", action="store_true", help="Create public link")
     web_parser.add_argument("--port", type=int, default=44665, help="Port number")
     web_parser.add_argument("--host", default="0.0.0.0", help="Host address")
-    web_parser.add_argument("--timeout", type=int, default=120, 
-                           help="Document processing timeout in seconds (default: 120)")
-    web_parser.add_argument("--pages", type=int, default=5, 
-                           help="Maximum pages to process per document (default: 5)")
+    web_parser.add_argument("--timeout", type=int, default=None, 
+                           help="Document processing timeout in seconds (no timeout if not specified)")
+    web_parser.add_argument("--pages", type=int, default=None, 
+                           help="Maximum pages to process per document (all pages if not specified)")
     web_parser.add_argument("--auto-restart", action="store_true", 
                            help="Enable auto-restart on errors")
-    web_parser.add_argument("--max-retries", type=int, default=5,
-                           help="Max restart attempts (default: 5)")
+    web_parser.add_argument("--max-retries", type=int, default=None,
+                           help="Max restart attempts (unlimited if not specified)")
     web_parser.add_argument("--retry-delay", type=int, default=5,
                            help="Delay between restarts in seconds (default: 5)")
     web_parser.add_argument("--model-type", choices=["lite", "base", "pro"], default="lite",
@@ -102,9 +105,14 @@ Examples:
     api_parser = subparsers.add_parser("api", help="Start API server")
     api_parser.add_argument("--port", type=int, default=8000, help="Port number")
     api_parser.add_argument("--host", default="0.0.0.0", help="Host address")
-    api_parser.add_argument("--reload", action="store_true", help="Enable hot reload for development")
-    api_parser.add_argument("--timeout", type=int, default=300,
-                           help="Document processing timeout in seconds (default: 300)")
+    api_parser.add_argument("--auto-restart", action="store_true", 
+                           help="Enable auto-restart on errors")
+    api_parser.add_argument("--max-retries", type=int, default=None,
+                           help="Max restart attempts (unlimited if not specified)")
+    api_parser.add_argument("--retry-delay", type=int, default=5,
+                           help="Delay between restarts in seconds (default: 5)")
+    api_parser.add_argument("--timeout", type=int, default=None,
+                           help="Request timeout in seconds (triggers restart if exceeded, only with --auto-restart)")
     api_parser.add_argument("--model-type", choices=["lite", "base", "pro"], default="lite",
                            help="Model type to use: lite(4b), base(12b), pro(27b) (default: lite)")
     
@@ -192,9 +200,9 @@ Examples:
                 cmd.extend(["--host", args.host])
             if args.share:
                 cmd.append("--share")
-            if args.timeout != 120:
+            if args.timeout is not None:
                 cmd.extend(["--timeout", str(args.timeout)])
-            if args.pages != 5:
+            if args.pages is not None:
                 cmd.extend(["--pages", str(args.pages)])
                 
             monitor = SimpleServiceMonitor(
@@ -205,7 +213,10 @@ Examples:
             )
             
             print("🚀 Starting DocsRay Web Interface with auto-restart enabled", file=sys.stderr)
-            print(f"♻️  Max retries: {args.max_retries}", file=sys.stderr)
+            if args.max_retries:
+                print(f"♻️  Max retries: {args.max_retries}", file=sys.stderr)
+            else:
+                print(f"♻️  Max retries: unlimited", file=sys.stderr)
             print(f"⏱️  Retry delay: {args.retry_delay} seconds", file=sys.stderr)
             
             try:
@@ -222,9 +233,9 @@ Examples:
                 sys.argv.extend(["--port", str(args.port)])
             if args.host:
                 sys.argv.extend(["--host", args.host])
-            if args.timeout:
+            if args.timeout is not None:
                 sys.argv.extend(["--timeout", str(args.timeout)])
-            if args.pages:
+            if args.pages is not None:
                 sys.argv.extend(["--pages", str(args.pages)])
             web_main()
 
@@ -233,13 +244,45 @@ Examples:
         # Set model type environment variable
         os.environ["DOCSRAY_MODEL_TYPE"] = args.model_type
         
-        from docsray.app import main as api_main
-        sys.argv = ["docsray-api", "--host", args.host, "--port", str(args.port)]
-        if args.timeout:
-            sys.argv.extend(["--timeout", str(args.timeout)])
-        if args.reload:
-            sys.argv.append("--reload")
-        api_main()
+        if args.auto_restart:
+            # Use auto-restart wrapper
+            from docsray.auto_restart import SimpleServiceMonitor
+            
+            # Build command for API service
+            cmd = [sys.executable, "-m", "docsray.app"]
+            os.environ["DOCSRAY_AUTO_RESTART"] = "1"
+            if args.port != 8000:
+                cmd.extend(["--port", str(args.port)])
+            if args.host != "0.0.0.0":
+                cmd.extend(["--host", args.host])
+                
+            monitor = SimpleServiceMonitor(
+                service_name="DocsRay API",
+                command_args=cmd,
+                max_retries=args.max_retries,
+                retry_delay=args.retry_delay,
+                request_timeout=args.timeout,
+                port=args.port
+            )
+            
+            print("🚀 Starting DocsRay API Server with auto-restart enabled", file=sys.stderr)
+            if args.max_retries:
+                print(f"♻️  Max retries: {args.max_retries}", file=sys.stderr)
+            else:
+                print(f"♻️  Max retries: unlimited", file=sys.stderr)
+            print(f"⏱️  Retry delay: {args.retry_delay} seconds", file=sys.stderr)
+            if args.timeout is not None:
+                print(f"⏰  Request timeout: {args.timeout} seconds", file=sys.stderr)
+            
+            try:
+                monitor.run()
+            except KeyboardInterrupt:
+                print("\n🛑 API Server stopped by user", file=sys.stderr)
+        else:
+            # Direct start without auto-restart
+            from docsray.app import main as api_main
+            sys.argv = ["docsray-api", "--host", args.host, "--port", str(args.port)]
+            api_main()
     
     elif args.command == "configure-claude":
         configure_claude_desktop()
