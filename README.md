@@ -51,19 +51,19 @@ docsray api                                 # Start API server
 - **📁 Universal Document Support**: 30+ file formats with automatic conversion
 - **🌍 Multi-Language**: Korean, English, and other languages supported
 
-## 🎯 What's New in v1.7.0
+## 🎯 What's New in v1.7.1
 
-### Breaking Change: Enhanced Embedding Method
-- **Improved Embedding Synthesis**: Changed from element-wise addition to concatenation for better semantic representation
-- **IMPORTANT**: This change requires reindexing of existing documents as embedding dimensions have doubled
+### Auto-Restart and Timeout Features
+- **Auto-Restart Support**: Web, API, and MCP servers now support automatic restart on crashes
+- **Optional Timeout**: `--timeout` parameter only applies when explicitly specified
+- **Optional Page Limits**: `--pages` parameter only applies when explicitly specified  
+- **Request Timeout for API**: API server can auto-restart if request processing exceeds timeout
+- **Unlimited Retries**: `--max-retries` is optional; if not specified, servers will retry indefinitely
+
+### v1.7.0: Breaking Change - Enhanced Embedding Method
+- **Improved Embedding Synthesis**: Changed from element-wise addition to concatenation
+- **IMPORTANT**: This change requires reindexing of existing documents
 - **Better Accuracy**: Concatenation preserves more information from both embedding models
-
-### Previous v1.6.0 Features
-- **Model Type Selection**: Choose between `lite` (4b), `base` (12b), and `pro` (27b) models
-- **Selective Downloads**: Download only the model type you need
-- **Enhanced API**: Accepts document paths per request with automatic caching
-- **Performance Testing**: New `perf-test` command for API benchmarking
-- **Unified CLI**: Consistent file path arguments across all commands
 
 ## 📖 Usage Guide
 
@@ -99,14 +99,20 @@ docsray ask report.docx "Summarize the conclusions" --model-type pro
 docsray web
 
 # Advanced options
-docsray web --model-type base --port 8080 --timeout 300
-docsray web --auto-restart --max-retries 5
+docsray web --model-type base --port 8080
+docsray web --auto-restart                    # Auto-restart with unlimited retries
+docsray web --auto-restart --max-retries 5    # Auto-restart with 5 retry limit
+docsray web --timeout 300 --pages 10          # Process max 10 pages, 5min timeout
 ```
 
 ### API Server
 ```bash
 # Start API server
 docsray api --port 8000
+
+# With auto-restart and timeout
+docsray api --auto-restart                     # Unlimited retries
+docsray api --auto-restart --timeout 600       # 10min timeout per request
 
 # API accepts document paths per request
 curl -X POST http://localhost:8000/ask \
@@ -175,14 +181,6 @@ chatbot = PDFChatBot(sections, chunk_index)
 answer, references = chatbot.answer("What are the key points?")
 ```
 
-### Auto-Restart Features
-```bash
-# Web interface with auto-restart
-docsray web --auto-restart --max-retries 10 --retry-delay 5
-
-# MCP server with auto-restart
-docsray mcp --auto-restart --max-retries 5
-```
 
 ## 🔧 System Requirements
 
