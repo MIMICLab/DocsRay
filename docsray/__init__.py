@@ -2,7 +2,7 @@
 DocsRay - Document Question-Answering System with MCP Integration
 """
 
-__version__ = "1.6.1"
+__version__ = "1.7.2"
 __author__ = "Taehoon Kim"
 
 import os

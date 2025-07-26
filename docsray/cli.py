@@ -59,6 +59,9 @@ Examples:
   
   # Run performance test
   docsray perf-test /path/to/document "What is this about?" --port 8000
+  
+  # Run performance test with custom timeout
+  docsray perf-test /path/to/document "What is this about?" --timeout 600
         """
     )
     
@@ -143,6 +146,7 @@ Examples:
     perf_parser.add_argument("--port", type=int, default=8000, help="API server port (default: 8000)")
     perf_parser.add_argument("--host", default="localhost", help="API server host (default: localhost)")
     perf_parser.add_argument("--iterations", type=int, default=1, help="Number of test iterations (default: 1)")
+    perf_parser.add_argument("--timeout", type=int, default=None, help="Request timeout in seconds (no timeout if not specified)")
     
     args = parser.parse_args()
     
@@ -300,7 +304,7 @@ Examples:
         ask_question_cli(args.question, args.file_path)
     
     elif args.command == "perf-test":
-        run_performance_test(args.file_path, args.question, args.host, args.port, args.iterations)
+        run_performance_test(args.file_path, args.question, args.host, args.port, args.iterations, args.timeout)
     
     else:
         if hotfix_check():
@@ -604,7 +608,7 @@ def ask_question_cli(question: str, file_path: str):
         print(f"❌ Failed to get answer: {e}", file=sys.stderr)
         return
 
-def run_performance_test(file_path: str, question: str, host: str, port: int, iterations: int):
+def run_performance_test(file_path: str, question: str, host: str, port: int, iterations: int, timeout: int = None):
     """Run performance test against the API server"""
     if not os.path.exists(file_path):
         print(f"❌ Document file not found: {file_path}", file=sys.stderr)
@@ -651,7 +655,7 @@ def run_performance_test(file_path: str, question: str, host: str, port: int, it
             response = requests.post(
                 f"{api_url}/ask",
                 json=payload,
-                timeout=300  # 5 minute timeout
+                timeout=timeout  # Use provided timeout or None for no timeout
             )
             
             if response.status_code != 200:
@@ -672,7 +676,7 @@ def run_performance_test(file_path: str, question: str, host: str, port: int, it
             print(result["references"], file=sys.stderr)
             
         except requests.exceptions.Timeout:
-            print(f"❌ Request timed out after 300 seconds", file=sys.stderr)
+            print(f"❌ Request timed out after {timeout} seconds", file=sys.stderr)
         except Exception as e:
             print(f"❌ Error during request: {e}", file=sys.stderr)
     
