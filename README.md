@@ -33,10 +33,22 @@ pip install docsray
 # 2. Run manual setup
 docsray setup
 
+#(If above doesn't work)
+# 2-1. ffmpeg for Audio/Video processing (recommended)
+# macOS: brew install ffmpeg
+# Ubuntu/Debian: sudo apt update && sudo apt install ffmpeg
+# Windows: Download from https://ffmpeg.org/download.html
+
+# 2-2. CUDA support for faster processing
+# CMAKE_ARGS="-DGGML_CUDA=on" pip install llama-cpp-python==0.3.9 --upgrade --force-reinstall --no-cache-dir
+
+
 # 3. Download models (default: lite)
 docsray download-models --model-type lite   # 4b model (~3GB)
 # docsray download-models --model-type base  # 12b model (~8GB) 
 # docsray download-models --model-type pro   # 27b model (~16GB)
+
+
 ```
 
 ### Optional Components
@@ -45,17 +57,6 @@ docsray download-models --model-type lite   # 4b model (~3GB)
 # 1. Tesseract OCR (for enhanced OCR performance)
 # Ubuntu/Debian: sudo apt-get install tesseract-ocr tesseract-ocr-kor
 # macOS: brew install tesseract tesseract-lang
-
-# 2. ffmpeg for Audio/Video processing (recommended)
-# macOS: brew install ffmpeg
-# Ubuntu/Debian: sudo apt update && sudo apt install ffmpeg
-# Windows: Download from https://ffmpeg.org/download.html
-
-# 3. CUDA support for faster processing
-# CMAKE_ARGS="-DGGML_CUDA=on" pip install llama-cpp-python==0.3.9 --upgrade --force-reinstall --no-cache-dir
-
-# 4. Configure Claude Desktop integration
-docsray configure-claude
 ```
 
 ### Start Using DocsRay
@@ -63,6 +64,7 @@ docsray configure-claude
 ```bash
 docsray web                                 # Launch Web UI
 docsray api                                 # Start API server
+docsray configure-claude                    # MCP for Claude Desktop
 ```
 
 ## 📋 Core Features
