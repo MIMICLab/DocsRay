@@ -792,6 +792,8 @@ def get_supported_formats() -> str:
         "Office Documents": ['.docx', '.doc', '.xlsx', '.xls', '.pptx', '.ppt', 'hwp', 'hwpx'],
         "Text Files": ['.txt'],
         "Images": ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.tif', '.webp'],
+        "Audio": ['.mp3', '.wav', '.m4a', '.flac', '.ogg', '.wma', '.aac'],
+        "Video": ['.mp4', '.avi', '.mov', '.wmv', '.flv', '.mkv', '.webm', '.m4v', '.mpg', '.mpeg'],
         "PDF": ['.pdf']
     }
     
@@ -854,6 +856,8 @@ try:
                             ".pptx", ".ppt",
                             ".txt", 
                             ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tiff", ".tif", ".webp",
+                            ".mp3", ".wav", ".m4a", ".flac", ".ogg", ".wma", ".aac",
+                            ".mp4", ".avi", ".mov", ".wmv", ".flv", ".mkv", ".webm", ".m4v", ".mpg", ".mpeg",
                         ],
                         type="filepath",
                       )

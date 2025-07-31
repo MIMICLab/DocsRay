@@ -10,31 +10,57 @@ A powerful Universal Document Question-Answering System that uses advanced embed
 
 ## 🚀 Quick Start
 
+DocsRay now features automatic setup! Simply install and it will handle dependencies and download the lite model automatically.
+
+```bash
+# Install DocsRay
+pip install docsray
+```
+
+That's it! DocsRay will automatically:
+- Install system dependencies
+- Download the lite model (~3GB)
+- Configure the environment
+
+### Manual Setup (if automatic setup fails)
+
+If the automatic setup doesn't work properly, you can run the setup manually:
+
 ```bash
 # 1. Install DocsRay
 pip install docsray
 
-# 1-1. Tesseract OCR (optional)
-# For faster OCR, install Tesseract with appropriate language pack.
+# 2. Run manual setup
+docsray setup
 
-#pip install pytesseract
-#sudo apt-get install tesseract-ocr   # Debian/Ubuntu
-#sudo apt-get install tesseract-ocr-kor
-#brew install tesseract-ocr   # MacOS
-#brew install tesseract-ocr-kor
-
-# 1-2. llama_cpp_python rebuild (recommended for CUDA)
-#CMAKE_ARGS="-DGGML_CUDA=on" pip install llama-cpp-python==0.3.9 --upgrade --force-reinstall --no-cache-dir
-
-# 2. Download models (choose your preferred size)
+# 3. Download models (default: lite)
 docsray download-models --model-type lite   # 4b model (~3GB)
 # docsray download-models --model-type base  # 12b model (~8GB) 
 # docsray download-models --model-type pro   # 27b model (~16GB)
+```
 
-# 3. Configure Claude Desktop integration (optional)
+### Optional Components
+
+```bash
+# 1. Tesseract OCR (for enhanced OCR performance)
+# Ubuntu/Debian: sudo apt-get install tesseract-ocr tesseract-ocr-kor
+# macOS: brew install tesseract tesseract-lang
+
+# 2. ffmpeg for Audio/Video processing (recommended)
+# macOS: brew install ffmpeg
+# Ubuntu/Debian: sudo apt update && sudo apt install ffmpeg
+# Windows: Download from https://ffmpeg.org/download.html
+
+# 3. CUDA support for faster processing
+# CMAKE_ARGS="-DGGML_CUDA=on" pip install llama-cpp-python==0.3.9 --upgrade --force-reinstall --no-cache-dir
+
+# 4. Configure Claude Desktop integration
 docsray configure-claude
+```
 
-# 4. Start using DocsRay
+### Start Using DocsRay
+
+```bash
 docsray web                                 # Launch Web UI
 docsray api                                 # Start API server
 ```
@@ -51,7 +77,22 @@ docsray api                                 # Start API server
 - **📁 Universal Document Support**: 30+ file formats with automatic conversion
 - **🌍 Multi-Language**: Korean, English, and other languages supported
 
-## 🎯 What's New in v1.7.1
+## 🎯 What's New in v1.8.0
+
+### Video and Audio Input Support
+- **Video Processing**: Extract and analyze content from video files
+  - Automatic audio extraction from video formats
+  - Frame extraction for visual content analysis
+  - Support for MP4, AVI, MOV, and other common formats
+- **Audio Processing**: Direct transcription and analysis of audio files
+  - Speech-to-text using faster-whisper
+  - Support for MP3, WAV, M4A, and other audio formats
+- **Multimedia Pipeline**: Unified processing for all media types
+- **Automatic Setup**: DocsRay now automatically installs dependencies and downloads models on first run
+
+## 📰 Recent Updates
+
+### v1.7.1
 
 ### Auto-Restart and Timeout Features
 - **Auto-Restart Support**: Web, API, and MCP servers now support automatic restart on crashes
@@ -153,7 +194,9 @@ docsray mcp --auto-restart
 **Text Formats**: Plain Text (.txt), Markdown (.md), HTML (.html)  
 **Images**: JPEG, PNG, GIF, BMP, TIFF, WebP  
 **Korean Documents**: HWP (.hwp, .hwpx)  
-**PDFs**: Native PDF support with visual analysis
+**PDFs**: Native PDF support with visual analysis  
+**Audio**: MP3, WAV, M4A, FLAC, OGG, WMA, AAC (requires ffmpeg)  
+**Video**: MP4, AVI, MOV, WMV, FLV, MKV, WebM, M4V, MPG, MPEG (requires ffmpeg)
 
 ## 🛠️ Advanced Configuration
 

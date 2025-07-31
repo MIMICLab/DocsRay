@@ -152,7 +152,7 @@ def is_vector_component_image(pil_img: Image.Image, page_rect: fitz.Rect) -> boo
     
     return False
 
-def extract_images_from_page(page, min_width: int = 100, min_height: int = 100, filter_vector_components: bool = False) -> List[Image.Image]:
+def extract_images_from_page(page, min_width: int = 100, min_height: int = 100, filter_vector_components: bool = False) -> List[Tuple[Image.Image, fitz.Rect]]:
     """
     Extract images from a PDF page that meet minimum size requirements.
     Returns list of PIL Images sorted by position.
@@ -222,9 +222,8 @@ def extract_images_from_page(page, min_width: int = 100, min_height: int = 100, 
     
     # Sort images by position (top-to-bottom, left-to-right)
     image_positions.sort(key=lambda x: (x[1].y0, x[1].x0))
-    images = [img for img, rect in image_positions]
     
-    return images
+    return image_positions  # Return both images and their rectangles
 
 
 def analyze_image_with_llm(images: list, page_num: int) -> str:
@@ -354,8 +353,10 @@ def analyze_visual_content(page, page_num: int) -> str:
     """
     visual_graphics = []
     visual_description = ""
+    captured_regions = []  # Track regions already captured to avoid duplicates
     
     # First, detect and capture tables
+    table_rects = []
     try:
         tables = detect_tables(page)
         for table_rect in tables:
@@ -368,6 +369,8 @@ def analyze_visual_content(page, page_num: int) -> str:
                 if pix.width > 0 and pix.height > 0:
                     table_img = Image.open(io.BytesIO(pix.pil_tobytes(format="PNG")))
                     visual_graphics.append(table_img)
+                    captured_regions.append(table_rect)  # Track this region
+                    table_rects.append(table_rect)
                     print(f"  Captured table as image on page {page_num + 1}", file=sys.stderr)
                     pix = None  # Clean up immediately
                     
@@ -419,7 +422,8 @@ def analyze_visual_content(page, page_num: int) -> str:
                 # Check if we have many paths with fills/strokes that could be vector graphics
                 has_complex_vectors = True
                 print(f"  Processing as complex vector graphics (many paths detected)", file=sys.stderr)
-                
+            
+            if has_complex_vectors:
                 # Get the bounding box of all drawings
                 try:
                     all_rects = []
@@ -433,8 +437,21 @@ def analyze_visual_content(page, page_num: int) -> str:
                         for r in all_rects[1:]:
                             bbox = bbox | r  # Union operation
                         
-                        # Only render if bbox is reasonable size
-                        if bbox.width > 50 and bbox.height > 50:
+                        # Check if this vector area overlaps with any captured table
+                        overlaps_with_table = False
+                        for table_rect in table_rects:
+                            intersection = bbox & table_rect  # Intersection
+                            if intersection.width > 0 and intersection.height > 0:
+                                # Calculate overlap percentage
+                                overlap_area = intersection.width * intersection.height
+                                bbox_area = bbox.width * bbox.height
+                                if overlap_area / bbox_area > 0.5:  # More than 50% overlap
+                                    overlaps_with_table = True
+                                    print(f"  Vector graphics overlaps with table, skipping", file=sys.stderr)
+                                    break
+                        
+                        # Only render if bbox is reasonable size and doesn't overlap with tables
+                        if not overlaps_with_table and bbox.width > 50 and bbox.height > 50:
                             print(f"  Rendered vector graphics area: {int(bbox.width)}x{int(bbox.height)} pixels", file=sys.stderr)
                             # Calculate appropriate zoom
                             max_dimension = max(bbox.width, bbox.height)
@@ -446,6 +463,7 @@ def analyze_visual_content(page, page_num: int) -> str:
                             if pix.width > 0 and pix.height > 0:
                                 vector_img = Image.open(io.BytesIO(pix.pil_tobytes(format="PNG")))
                                 visual_graphics.append(vector_img)
+                                captured_regions.append(bbox)  # Track this region
                                 pix = None  # Clean up immediately
                                 
                 except Exception as e:
@@ -454,37 +472,48 @@ def analyze_visual_content(page, page_num: int) -> str:
     except Exception as e:
         print(f"⚠️  Failed to get drawings from page {page_num + 1}: {e}", file=sys.stderr)
     
-    # Extract standalone images (but filter out vector graphic components if complex vectors exist)
+    # Extract standalone images (but filter out ones that overlap with already captured regions)
     try:
         if has_complex_vectors:
             # When complex vectors exist, be very selective about images to avoid duplicates
             print(f"  Using strict filtering to avoid vector component images", file=sys.stderr)
-            images = extract_images_from_page(page, min_width=120, min_height=120, filter_vector_components=True)
-            
-            # Additional size-based filtering for very complex vector pages
-            filtered_images = []
-            for img in images:
-                # Only include images that are significantly large and likely to be standalone content
-                pixel_count = img.width * img.height
-                if pixel_count > 30000:  # Minimum 30k pixels (e.g., 200x150)
-                    # Check if image area is reasonable compared to page
-                    try:
-                        img_rects = page.get_image_rects(img)  # This might not work, but try
-                        # If we can't get rect info, include the image anyway
-                        filtered_images.append(img)
-                    except:
-                        # Include image if we can't determine position
-                        filtered_images.append(img)
-                else:
-                    img.close()  # Clean up small images
-            images = filtered_images
+            image_positions = extract_images_from_page(page, min_width=120, min_height=120, filter_vector_components=True)
         else:
             # No complex vectors, extract all reasonable-sized images with light filtering
-            images = extract_images_from_page(page, min_width=100, min_height=100, filter_vector_components=True)
+            image_positions = extract_images_from_page(page, min_width=100, min_height=100, filter_vector_components=True)
         
-        if images:
-            print(f"  Found {len(images)} standalone images on page {page_num + 1}", file=sys.stderr)
-            visual_graphics.extend(images)
+        # Filter out images that overlap with already captured regions
+        non_overlapping_images = []
+        for img, img_rect in image_positions:
+            overlaps = False
+            
+            # Check overlap with each captured region
+            for captured_rect in captured_regions:
+                intersection = img_rect & captured_rect  # Intersection
+                if intersection.width > 0 and intersection.height > 0:
+                    # Calculate overlap percentage relative to image area
+                    overlap_area = intersection.width * intersection.height
+                    img_area = img_rect.width * img_rect.height
+                    if overlap_area / img_area > 0.5:  # More than 50% of image overlaps
+                        overlaps = True
+                        print(f"  Image overlaps with captured region, skipping", file=sys.stderr)
+                        img.close()  # Clean up
+                        break
+            
+            if not overlaps:
+                # Additional size filtering for complex vector pages
+                if has_complex_vectors:
+                    pixel_count = img.width * img.height
+                    if pixel_count > 30000:  # Minimum 30k pixels
+                        non_overlapping_images.append(img)
+                    else:
+                        img.close()  # Clean up small images
+                else:
+                    non_overlapping_images.append(img)
+        
+        if non_overlapping_images:
+            print(f"  Found {len(non_overlapping_images)} standalone images on page {page_num + 1}", file=sys.stderr)
+            visual_graphics.extend(non_overlapping_images)
         else:
             print(f"  No standalone images found on page {page_num + 1}", file=sys.stderr)
             
@@ -777,6 +806,9 @@ def extract_pdf_content(pdf_path: str,
         print(f"❌ Failed to open PDF file: {e}", file=sys.stderr)
         raise
     
+    # Store original document for cleanup
+    original_doc = doc
+    
     if page_limit > 0:
         doc = doc[:page_limit]
     total_pages = len(doc)
@@ -893,7 +925,7 @@ def extract_pdf_content(pdf_path: str,
     
     # Clean up document resources
     try:
-        doc.close()
+        original_doc.close()
     except Exception as e:
         print(f"⚠️  Failed to close PDF document: {e}", file=sys.stderr)
     

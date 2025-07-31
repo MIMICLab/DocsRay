@@ -42,6 +42,14 @@ from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.lib.utils import ImageReader
 import os
 
+# Import multimedia processing utilities
+try:
+    from docsray.multimedia_processor import process_audio_file, process_video_file
+    MULTIMEDIA_SUPPORT = True
+except ImportError:
+    MULTIMEDIA_SUPPORT = False
+    print("Warning: Multimedia support not available. Install whisper and ffmpeg for audio/video processing.", file=sys.stderr)
+
 def _save_text_images_to_pdf_korean(text: str, image_paths: List[str], output_file: Path) -> bool:
     """Save text and images to PDF with Korean font support"""
     try:          
@@ -233,6 +241,27 @@ class FileConverter:
         '.tiff': 'TIFF Image',
         '.tif': 'TIFF Image',
         '.webp': 'WebP Image',
+        
+        # Audio formats
+        '.mp3': 'MP3 Audio',
+        '.wav': 'WAV Audio',
+        '.m4a': 'M4A Audio',
+        '.flac': 'FLAC Audio',
+        '.ogg': 'OGG Audio',
+        '.wma': 'WMA Audio',
+        '.aac': 'AAC Audio',
+        
+        # Video formats
+        '.mp4': 'MP4 Video',
+        '.avi': 'AVI Video',
+        '.mov': 'MOV Video',
+        '.wmv': 'WMV Video',
+        '.flv': 'FLV Video',
+        '.mkv': 'MKV Video',
+        '.webm': 'WebM Video',
+        '.m4v': 'M4V Video',
+        '.mpg': 'MPEG Video',
+        '.mpeg': 'MPEG Video',
     }
     
     def __init__(self, output_dir: Optional[Path] = None):
@@ -314,6 +343,14 @@ class FileConverter:
         # Image formats
         elif file_ext in ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.tif', '.webp']:
             return self._convert_image_to_pdf(input_file, output_path)
+        
+        # Audio formats
+        elif file_ext in ['.mp3', '.wav', '.m4a', '.flac', '.ogg', '.wma', '.aac']:
+            return self._convert_audio_to_pdf(input_file, output_path)
+        
+        # Video formats
+        elif file_ext in ['.mp4', '.avi', '.mov', '.wmv', '.flv', '.mkv', '.webm', '.m4v', '.mpg', '.mpeg']:
+            return self._convert_video_to_pdf(input_file, output_path)
         
         # Fallback: try pandoc for anything else
         else:
@@ -1127,6 +1164,46 @@ class FileConverter:
                     shutil.rmtree(temp_dir)
                 except Exception as e:
                     print(f"Cleanup warning: {e}", file=sys.stderr)
+
+    def _convert_audio_to_pdf(self, input_file: Path, output_file: Path) -> Tuple[bool, str]:
+        """Convert audio file to PDF with transcription"""
+        if not MULTIMEDIA_SUPPORT:
+            return False, "Audio conversion requires whisper. Install with: pip install openai-whisper"
+        
+        try:
+            print(f"Converting audio file to PDF with transcription...", file=sys.stderr)
+            
+            # Process audio file
+            txt_path = process_audio_file(str(input_file), str(output_file.parent))
+            
+            # Convert the transcription text file to PDF
+            return self._convert_text_to_pdf(Path(txt_path), output_file)
+            
+        except Exception as e:
+            return False, f"Audio conversion failed: {str(e)}"
+    
+    def _convert_video_to_pdf(self, input_file: Path, output_file: Path) -> Tuple[bool, str]:
+        """Convert video file to PDF with frames and transcription"""
+        if not MULTIMEDIA_SUPPORT:
+            return False, "Video conversion requires whisper and ffmpeg. Install with: pip install openai-whisper && install ffmpeg"
+        
+        try:
+            print(f"Converting video file to PDF with frames and transcription...", file=sys.stderr)
+            print(f"This may take several minutes for large videos...", file=sys.stderr)
+            
+            # Process video file
+            pdf_path = process_video_file(str(input_file), str(output_file.parent))
+            
+            # If the output path is different from what we got, move the file
+            if Path(pdf_path) != output_file:
+                import shutil
+                shutil.move(pdf_path, str(output_file))
+                return True, str(output_file)
+            else:
+                return True, pdf_path
+            
+        except Exception as e:
+            return False, f"Video conversion failed: {str(e)}"
 
 def convert_file_to_pdf(input_path: str, output_dir: Optional[str] = None) -> Tuple[bool, str]:
     """

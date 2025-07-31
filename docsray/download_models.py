@@ -186,8 +186,28 @@ def check_models(model_type=None):
     if missing_models:
         print(f"\n⚠️  {len(missing_models)} models are missing.", file=sys.stderr)
         print("💡 Run 'docsray download-models' to download them.", file=sys.stderr)
+        
+        # Also check dependencies
+        try:
+            from docsray.auto_setup import check_dependencies
+            deps = check_dependencies()
+            if not deps['ffmpeg'] or (deps['gpu_type'] == 'cuda' and not deps['cuda_llama_cpp']):
+                print("\n⚠️  Some dependencies are also missing.", file=sys.stderr)
+                print("💡 Run 'docsray setup' to install dependencies automatically.", file=sys.stderr)
+        except:
+            pass
     else:
         print("\n✅ All models are ready for use!", file=sys.stderr)
+        
+        # Also check dependencies
+        try:
+            from docsray.auto_setup import check_dependencies
+            deps = check_dependencies()
+            if not deps['ffmpeg'] or (deps['gpu_type'] == 'cuda' and not deps['cuda_llama_cpp']):
+                print("\n⚠️  Note: Some optional dependencies are missing.", file=sys.stderr)
+                print("💡 Run 'docsray setup' to install them automatically.", file=sys.stderr)
+        except:
+            pass
     
     return {
         'available': len(available_models),

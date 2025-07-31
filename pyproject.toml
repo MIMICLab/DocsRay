@@ -1,6 +1,6 @@
 [project]
 name = "docsray"
-version = "1.7.2"
+version = "1.8.0"
 description = "Document Question-Answering System with MCP Integration"
 authors = [{name = "Taehoon Kim", email = "taehoonkim@sogang.ac.kr"}]
 readme = "README.md"
@@ -44,7 +44,8 @@ dependencies = [
     "openpyxl>=3.1.0",
     "olefile>=0.46",
     "markdown>=3.4.0",
-    "beautifulsoup4>=4.12.0"
+    "beautifulsoup4>=4.12.0",
+    "faster-whisper>=1.0.0"
 ]
 
 [project.scripts]

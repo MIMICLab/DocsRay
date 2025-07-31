@@ -18,6 +18,26 @@ class ProcessingTimeoutError(Exception):
     """Exception raised when document processing takes too long"""
     pass
 
+def check_and_warn_dependencies():
+    """Check dependencies and warn if missing"""
+    try:
+        from docsray.auto_setup import check_dependencies
+        deps = check_dependencies()
+        
+        warnings = []
+        if not deps['ffmpeg']:
+            warnings.append("ffmpeg (for audio/video processing)")
+        if deps['gpu_type'] == 'cuda' and not deps['cuda_llama_cpp']:
+            warnings.append("CUDA-enabled llama-cpp-python")
+            
+        if warnings:
+            print("\n⚠️  Missing optional dependencies:", file=sys.stderr)
+            for warning in warnings:
+                print(f"   - {warning}", file=sys.stderr)
+            print("💡 Run 'docsray setup' to install them automatically\n", file=sys.stderr)
+    except:
+        pass
+
 def main():
     parser = argparse.ArgumentParser(
         description="DocsRay - Document Question-Answering System",
@@ -66,6 +86,11 @@ Examples:
     )
     
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
+    
+    # Setup command
+    setup_parser = subparsers.add_parser("setup", help="Automatic setup and dependency installation")
+    setup_parser.add_argument("--check", action="store_true", help="Check dependencies only")
+    setup_parser.add_argument("--force", action="store_true", help="Force installation without prompts")
     
     # Download models command
     download_parser = subparsers.add_parser("download-models", help="Download required models")
@@ -150,7 +175,33 @@ Examples:
     
     args = parser.parse_args()
     
-    if args.command == "download-models":
+    if args.command == "setup":
+        from docsray.auto_setup import check_dependencies, run_setup
+        if args.check:
+            # Check mode
+            status = check_dependencies()
+            all_good = all([
+                status['ffmpeg'],
+                status['cuda_llama_cpp'] or status['gpu_type'] != 'cuda'
+            ])
+            
+            if all_good:
+                print("✅ All dependencies are properly installed!")
+                return 0
+            else:
+                print("\n⚠️  Missing dependencies detected:")
+                if not status['ffmpeg']:
+                    print("   - ffmpeg (required for audio/video processing)")
+                if status['gpu_type'] == 'cuda' and not status['cuda_llama_cpp']:
+                    print("   - CUDA-enabled llama-cpp-python")
+                print("\nRun 'docsray setup' to install missing dependencies")
+                return 1
+        else:
+            # Setup mode
+            success = run_setup(force=args.force)
+            return 0 if success else 1
+    
+    elif args.command == "download-models":
         # Set model type environment variable for download
         os.environ["DOCSRAY_MODEL_TYPE"] = args.model_type
         
@@ -188,6 +239,9 @@ Examples:
             asyncio.run(mcp_main())
     
     elif args.command == "web":
+        # Check dependencies before starting web interface
+        check_and_warn_dependencies()
+        
         # Set model type environment variable
         os.environ["DOCSRAY_MODEL_TYPE"] = args.model_type
         
@@ -245,6 +299,9 @@ Examples:
 
     
     elif args.command == "api":
+        # Check dependencies before starting API server
+        check_and_warn_dependencies()
+        
         # Set model type environment variable
         os.environ["DOCSRAY_MODEL_TYPE"] = args.model_type
         
