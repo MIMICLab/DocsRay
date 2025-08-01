@@ -8,6 +8,42 @@ import subprocess
 import shutil
 from pathlib import Path
 
+def is_root():
+    """Check if running as root user"""
+    return os.geteuid() == 0
+
+def has_sudo_privileges():
+    """Check if user can use sudo without password or is root"""
+    # Check if running as root
+    if os.geteuid() == 0:
+        return True
+    
+    # Check if sudo is available and user can use it
+    if shutil.which('sudo'):
+        try:
+            # Test sudo with a harmless command
+            result = subprocess.run(['sudo', '-n', 'true'], 
+                                  capture_output=True, stderr=subprocess.DEVNULL)
+            return result.returncode == 0
+        except:
+            pass
+    
+    return False
+
+def run_command(cmd, check=True):
+    """Run a command with or without sudo based on environment"""
+    # As root, don't use sudo
+    if is_root():
+        # Remove 'sudo' from command if present
+        if cmd[0] == 'sudo':
+            cmd = cmd[1:]
+    elif not has_sudo_privileges() and cmd[0] == 'sudo':
+        # If sudo is needed but not available, try without it
+        print("⚠️  Running without sudo privileges...")
+        cmd = cmd[1:]
+    
+    return subprocess.run(cmd, check=check)
+
 def get_gpu_type():
     """Detect GPU type (CUDA, MPS, or CPU)"""
     # Check for NVIDIA GPU (CUDA)
@@ -54,7 +90,7 @@ def install_ffmpeg():
         if system == "Darwin":  # macOS
             if shutil.which('brew'):
                 print("Using Homebrew to install ffmpeg...")
-                subprocess.run(['brew', 'install', 'ffmpeg'], check=True)
+                run_command(['brew', 'install', 'ffmpeg'])
                 return True
             else:
                 print("❌ Homebrew not found. Please install Homebrew first:")
@@ -64,20 +100,20 @@ def install_ffmpeg():
         elif system == "Linux":
             if shutil.which('apt-get'):
                 print("Using apt to install ffmpeg...")
-                subprocess.run(['sudo', 'apt', 'update'], check=True)
-                subprocess.run(['sudo', 'apt', 'install', '-y', 'ffmpeg'], check=True)
+                run_command(['sudo', 'apt', 'update'])
+                run_command(['sudo', 'apt', 'install', '-y', 'ffmpeg'])
                 return True
             elif shutil.which('yum'):
                 print("Using yum to install ffmpeg...")
-                subprocess.run(['sudo', 'yum', 'install', '-y', 'ffmpeg'], check=True)
+                run_command(['sudo', 'yum', 'install', '-y', 'ffmpeg'])
                 return True
             elif shutil.which('dnf'):
                 print("Using dnf to install ffmpeg...")
-                subprocess.run(['sudo', 'dnf', 'install', '-y', 'ffmpeg'], check=True)
+                run_command(['sudo', 'dnf', 'install', '-y', 'ffmpeg'])
                 return True
             elif shutil.which('pacman'):
                 print("Using pacman to install ffmpeg...")
-                subprocess.run(['sudo', 'pacman', '-S', '--noconfirm', 'ffmpeg'], check=True)
+                run_command(['sudo', 'pacman', '-S', '--noconfirm', 'ffmpeg'])
                 return True
             else:
                 print("❌ No supported package manager found")
@@ -283,6 +319,8 @@ def run_setup(force=False):
     print(f"   OS: {platform.system()} {platform.release()}")
     print(f"   Python: {sys.version.split()[0]}")
     print(f"   GPU Type: {gpu_type.upper()}")
+    if is_root():
+        print(f"   Running as: root")
     
     setup_needed = False
     

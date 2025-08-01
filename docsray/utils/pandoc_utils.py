@@ -7,6 +7,12 @@ import platform
 import subprocess
 import pypandoc
 from pathlib import Path
+import shutil
+
+
+def is_root():
+    """Check if running as root user"""
+    return os.geteuid() == 0
 
 
 def check_pandoc_installed():
@@ -68,15 +74,24 @@ def install_pandoc():
             print("macOS:", file=sys.stderr)
             print("  brew install pandoc", file=sys.stderr)
             print("or", file=sys.stderr)
-            print("  sudo port install pandoc", file=sys.stderr)
+            print("  port install pandoc", file=sys.stderr)
             
         elif system == "linux":
             print("Ubuntu/Debian:", file=sys.stderr)
-            print("  sudo apt-get update && sudo apt-get install pandoc", file=sys.stderr)
+            if is_root():
+                print("  apt-get update && apt-get install pandoc", file=sys.stderr)
+            else:
+                print("  sudo apt-get update && sudo apt-get install pandoc", file=sys.stderr)
             print("\nFedora/RedHat/CentOS:", file=sys.stderr)
-            print("  sudo dnf install pandoc", file=sys.stderr)
+            if is_root():
+                print("  dnf install pandoc", file=sys.stderr)
+            else:
+                print("  sudo dnf install pandoc", file=sys.stderr)
             print("\nArch Linux:", file=sys.stderr)
-            print("  sudo pacman -S pandoc", file=sys.stderr)
+            if is_root():
+                print("  pacman -S pandoc", file=sys.stderr)
+            else:
+                print("  sudo pacman -S pandoc", file=sys.stderr)
             
         elif system == "windows":
             print("Windows:", file=sys.stderr)

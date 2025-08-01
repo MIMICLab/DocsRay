@@ -5,6 +5,12 @@ import sys
 import platform
 import subprocess
 import shutil
+import os
+
+
+def is_root():
+    """Check if running as root user"""
+    return os.geteuid() == 0
 
 def check_ffmpeg():
     """Check if ffmpeg is installed"""
@@ -17,14 +23,17 @@ def get_ffmpeg_install_command():
         return "brew install ffmpeg"
     elif system == "Linux":
         # Check for different package managers
+        use_sudo = not is_root()
+        sudo_prefix = "sudo " if use_sudo else ""
+        
         if shutil.which('apt-get'):
-            return "sudo apt update && sudo apt install ffmpeg"
+            return f"{sudo_prefix}apt update && {sudo_prefix}apt install ffmpeg"
         elif shutil.which('yum'):
-            return "sudo yum install ffmpeg"
+            return f"{sudo_prefix}yum install ffmpeg"
         elif shutil.which('dnf'):
-            return "sudo dnf install ffmpeg"
+            return f"{sudo_prefix}dnf install ffmpeg"
         elif shutil.which('pacman'):
-            return "sudo pacman -S ffmpeg"
+            return f"{sudo_prefix}pacman -S ffmpeg"
         else:
             return "Please install ffmpeg using your system's package manager"
     elif system == "Windows":
