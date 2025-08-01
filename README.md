@@ -37,52 +37,26 @@ docsray setup
 # - Detect your GPU (NVIDIA CUDA, Apple Metal, or CPU)
 # - Install the optimized llama-cpp-python for your platform
 # - Install ffmpeg for audio/video processing
-# - Show additional recommendations for your OS
-
-# (If setup fails, manually install)
-# For CUDA support: CMAKE_ARGS="-DGGML_CUDA=on" pip install llama-cpp-python==0.3.9 --upgrade --force-reinstall --no-cache-dir
-# For ffmpeg: See "Audio/Video Processing" section below
-
+# - Show additional recommendations for your OS (including LibreOffice)
 
 # 3. Download models (default: lite)
 docsray download-models --model-type lite   # 4b model (~3GB)
 # docsray download-models --model-type base  # 12b model (~8GB) 
 # docsray download-models --model-type pro   # 27b model (~16GB)
 
+# 4. (Optional but Recommended) Install LibreOffice for better office document conversion
+# The setup command above will show you the appropriate installation command for your OS:
+# Ubuntu/Debian: sudo apt-get install libreoffice libreoffice-l10n-ko
+# macOS: brew install libreoffice
+# Windows: Download from https://www.libreoffice.org/download/
+# For HWP support, install h2orestart extension: https://extensions.libreoffice.org/en/extensions/show/27504
 
 ```
 
 ### Optional Components
 
-#### **LibreOffice for Better Office Document Support (Recommended)**
-```bash
-# Ubuntu/Debian
-sudo apt-get install libreoffice libreoffice-l10n-ko  # l10n-ko for Korean support
-
-# CentOS/RHEL/Fedora
-sudo yum install libreoffice
-# or
-sudo dnf install libreoffice
-
-# macOS
-brew install libreoffice
-# For HWP support on macOS, additionally install h2orestart extension:
-# https://extensions.libreoffice.org/en/extensions/show/27504
-
-# Windows
-# Download LibreOffice from: https://www.libreoffice.org/download/
-# For HWP support on Windows, additionally install h2orestart extension:
-# https://extensions.libreoffice.org/en/extensions/show/27504
-
-# Arch Linux
-sudo pacman -S libreoffice-fresh
-```
-
 #### **Audio/Video Processing (Optional)**
 ```bash
-# For audio transcription support
-pip install faster-whisper
-
 # FFmpeg for video processing
 # Ubuntu/Debian
 sudo apt-get install ffmpeg
@@ -106,9 +80,6 @@ sudo apt-get install pandoc
 
 # macOS
 brew install pandoc
-
-# For better HTML/Markdown processing
-pip install beautifulsoup4 markdown pdfkit
 
 # For Korean fonts (better HWP rendering)
 # Ubuntu/Debian
