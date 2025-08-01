@@ -2,6 +2,7 @@
 [![PyPI Status](https://badge.fury.io/py/docsray.svg)](https://badge.fury.io/py/docsray)
 [![license](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/MIMICLab/DocsRay/blob/main/LICENSE)
 [![Downloads](https://pepy.tech/badge/docsray)](https://pepy.tech/project/docsray)
+[![arXiv](https://img.shields.io/badge/arXiv-2507.23217-b31b1b.svg?style=flat)](http://arxiv.org/abs/2507.23217)
 [![Verified on MseeP](https://mseep.ai/badge.svg)](https://mseep.ai/app/f6dfcc65-8ee3-4ad1-9101-88b6dbdcf37b)
 
 **[🌐 Live Demo (Base Model)](https://docsray.com/)**
@@ -30,17 +31,17 @@ If the automatic setup doesn't work properly, you can run the setup manually:
 # 1. Install DocsRay
 pip install docsray
 
-# 2. Run manual setup
+# 2. Run setup (REQUIRED)
 docsray setup
+# This will:
+# - Detect your GPU (NVIDIA CUDA, Apple Metal, or CPU)
+# - Install the optimized llama-cpp-python for your platform
+# - Install ffmpeg for audio/video processing
+# - Show additional recommendations for your OS
 
-#(If above doesn't work)
-# 2-1. ffmpeg for Audio/Video processing (recommended)
-# macOS: brew install ffmpeg
-# Ubuntu/Debian: sudo apt update && sudo apt install ffmpeg
-# Windows: Download from https://ffmpeg.org/download.html
-
-# 2-2. CUDA support for faster processing
-# CMAKE_ARGS="-DGGML_CUDA=on" pip install llama-cpp-python==0.3.9 --upgrade --force-reinstall --no-cache-dir
+# (If setup fails, manually install)
+# For CUDA support: CMAKE_ARGS="-DGGML_CUDA=on" pip install llama-cpp-python==0.3.9 --upgrade --force-reinstall --no-cache-dir
+# For ffmpeg: See "Audio/Video Processing" section below
 
 
 # 3. Download models (default: lite)
@@ -53,10 +54,74 @@ docsray download-models --model-type lite   # 4b model (~3GB)
 
 ### Optional Components
 
+#### **LibreOffice for Better Office Document Support (Recommended)**
 ```bash
-# 1. Tesseract OCR (for enhanced OCR performance)
-# Ubuntu/Debian: sudo apt-get install tesseract-ocr tesseract-ocr-kor
-# macOS: brew install tesseract tesseract-lang
+# Ubuntu/Debian
+sudo apt-get install libreoffice libreoffice-l10n-ko  # l10n-ko for Korean support
+
+# CentOS/RHEL/Fedora
+sudo yum install libreoffice
+# or
+sudo dnf install libreoffice
+
+# macOS
+brew install libreoffice
+# For HWP support on macOS, additionally install h2orestart extension:
+# https://extensions.libreoffice.org/en/extensions/show/27504
+
+# Windows
+# Download LibreOffice from: https://www.libreoffice.org/download/
+# For HWP support on Windows, additionally install h2orestart extension:
+# https://extensions.libreoffice.org/en/extensions/show/27504
+
+# Arch Linux
+sudo pacman -S libreoffice-fresh
+```
+
+#### **Audio/Video Processing (Optional)**
+```bash
+# For audio transcription support
+pip install faster-whisper
+
+# FFmpeg for video processing
+# Ubuntu/Debian
+sudo apt-get install ffmpeg
+
+# macOS
+brew install ffmpeg
+
+# CentOS/RHEL
+sudo yum install epel-release
+sudo yum install ffmpeg
+
+# Windows (via Chocolatey)
+choco install ffmpeg
+```
+
+#### **Additional Format Support**
+```bash
+# For pandoc-based conversions
+# Ubuntu/Debian
+sudo apt-get install pandoc
+
+# macOS
+brew install pandoc
+
+# For better HTML/Markdown processing
+pip install beautifulsoup4 markdown pdfkit
+
+# For Korean fonts (better HWP rendering)
+# Ubuntu/Debian
+sudo apt-get install fonts-nanum fonts-nanum-coding fonts-nanum-extra
+```
+
+#### **Tesseract OCR (for enhanced OCR performance)**
+```bash
+# Ubuntu/Debian
+sudo apt-get install tesseract-ocr tesseract-ocr-kor
+
+# macOS
+brew install tesseract tesseract-lang
 ```
 
 ### Start Using DocsRay
@@ -79,34 +144,21 @@ docsray configure-claude                    # MCP for Claude Desktop
 - **📁 Universal Document Support**: 30+ file formats with automatic conversion
 - **🌍 Multi-Language**: Korean, English, and other languages supported
 
-## 🎯 What's New in v1.8.0
+## 🎯 What's New
 
-### Video and Audio Input Support
-- **Video Processing**: Extract and analyze content from video files
-  - Automatic audio extraction from video formats
-  - Frame extraction for visual content analysis
-  - Support for MP4, AVI, MOV, and other common formats
-- **Audio Processing**: Direct transcription and analysis of audio files
-  - Speech-to-text using faster-whisper
-  - Support for MP3, WAV, M4A, and other audio formats
-- **Multimedia Pipeline**: Unified processing for all media types
-- **Automatic Setup**: DocsRay now automatically installs dependencies and downloads models on first run
+### v1.9.0: Enhanced Document Conversion
+- **LibreOffice Integration**: Better quality conversions for Office documents when LibreOffice is installed
+- **Improved Format Support**: Enhanced handling of DOCX, XLSX, PPTX, ODT, ODS, ODP, HWP/HWPX
 
-## 📰 Recent Updates
+### v1.8.0: Multimedia Support
+- **Video/Audio Processing**: Extract and analyze content from video and audio files
+- **Automatic Setup**: DocsRay now automatically installs dependencies and downloads models
 
-### v1.7.1
+### Recent Updates
+- Auto-restart capability for all servers
+- Enhanced embedding method (v1.7.0) - requires reindexing existing documents
 
-### Auto-Restart and Timeout Features
-- **Auto-Restart Support**: Web, API, and MCP servers now support automatic restart on crashes
-- **Optional Timeout**: `--timeout` parameter only applies when explicitly specified
-- **Optional Page Limits**: `--pages` parameter only applies when explicitly specified  
-- **Request Timeout for API**: API server can auto-restart if request processing exceeds timeout
-- **Unlimited Retries**: `--max-retries` is optional; if not specified, servers will retry indefinitely
-
-### v1.7.0: Breaking Change - Enhanced Embedding Method
-- **Improved Embedding Synthesis**: Changed from element-wise addition to concatenation
-- **IMPORTANT**: This change requires reindexing of existing documents
-- **Better Accuracy**: Concatenation preserves more information from both embedding models
+For detailed changelog, see [CHANGELOG.md](CHANGELOG.md)
 
 ## 📖 Usage Guide
 
@@ -179,6 +231,9 @@ docsray perf-test document.pdf "What is this about?"
 # Advanced testing
 docsray perf-test document.pdf "Analyze key points" \
   --iterations 5 --port 8000 --host localhost
+
+# With custom timeout
+docsray perf-test document.pdf "What is this?" --timeout 600
 ```
 
 ### MCP Integration (Claude Desktop)
@@ -283,6 +338,21 @@ We welcome contributions! Please check our [GitHub repository](https://github.co
 ## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Open Source Dependencies
+
+DocsRay is built on top of these excellent open source projects:
+
+- **llama.cpp** - GGML/GGUF model inference (MIT License)
+- **PyMuPDF** - PDF processing (AGPL-3.0 License)
+- **pdfplumber** - PDF text extraction (MIT License)
+- **FastAPI** - Web framework (MIT License)
+- **Gradio** - Web UI components (Apache-2.0 License)
+- **OpenCV** - Image processing (Apache-2.0 License)
+- **faster-whisper** - Audio transcription (MIT License)
+- **Pandas** - Data manipulation (BSD-3-Clause License)
+- **NumPy** - Numerical computing (BSD-3-Clause License)
+- **scikit-learn** - Machine learning utilities (BSD-3-Clause License)
 
 ## 🔗 Links
 

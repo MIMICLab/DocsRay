@@ -26,9 +26,17 @@ def get_gpu_type():
     except FileNotFoundError:
         pass
     
-    # Check for Apple Silicon (MPS)
-    if platform.system() == "Darwin" and platform.processor() == "arm":
-        return "mps"
+    # Check for Apple Silicon (MPS/Metal)
+    if platform.system() == "Darwin":
+        # Check if it's ARM-based Mac (Apple Silicon)
+        try:
+            result = subprocess.run(['sysctl', '-n', 'hw.optional.arm64'], capture_output=True, text=True)
+            if result.returncode == 0 and result.stdout.strip() == "1":
+                return "metal"
+        except:
+            # Fallback check
+            if platform.processor() == "arm" or platform.machine() == "arm64":
+                return "metal"
     
     return "cpu"
 
@@ -90,9 +98,140 @@ def install_ffmpeg():
     
     return False
 
+def get_cuda_version():
+    """Detect installed CUDA version"""
+    try:
+        # Try nvidia-smi first
+        result = subprocess.run(['nvidia-smi'], capture_output=True, text=True)
+        if result.returncode == 0:
+            # Parse CUDA version from nvidia-smi output
+            for line in result.stdout.split('\n'):
+                if 'CUDA Version:' in line:
+                    # Extract version like "12.1" from "CUDA Version: 12.1"
+                    version = line.split('CUDA Version:')[1].strip().split()[0]
+                    major, minor = version.split('.')[:2]
+                    return f"{major}.{minor}"
+    except:
+        pass
+    
+    # Try nvcc
+    try:
+        result = subprocess.run(['nvcc', '--version'], capture_output=True, text=True)
+        if result.returncode == 0:
+            # Parse version from nvcc output
+            for line in result.stdout.split('\n'):
+                if 'release' in line:
+                    # Extract version like "12.1" from "Cuda compilation tools, release 12.1"
+                    parts = line.split('release')[1].strip().split(',')[0].strip()
+                    major, minor = parts.split('.')[:2]
+                    return f"{major}.{minor}"
+    except:
+        pass
+    
+    return None
+
+def setup_llama_cpp():
+    """Install appropriate llama-cpp-python wheel based on platform"""
+    gpu_type = get_gpu_type()
+    
+    if gpu_type == "cuda":
+        return setup_cuda_llama_cpp()
+    elif gpu_type == "metal":
+        return setup_metal_llama_cpp()
+    else:
+        return setup_cpu_llama_cpp()
+
+def setup_cpu_llama_cpp():
+    """Install CPU-optimized llama-cpp-python"""
+    print("💻 Installing CPU-optimized llama-cpp-python...")
+    
+    try:
+        subprocess.run([
+            sys.executable, '-m', 'pip', 'install', 
+            'llama-cpp-python==0.3.9',
+            '--extra-index-url', 'https://abetlen.github.io/llama-cpp-python/whl/cpu',
+            '--upgrade', '--force-reinstall', '--no-cache-dir'
+        ], check=True)
+        
+        print("✅ Successfully installed CPU-optimized llama-cpp-python!")
+        return True
+    except subprocess.CalledProcessError as e:
+        print(f"❌ Failed to install CPU llama-cpp-python: {e}")
+        return False
+
+def setup_metal_llama_cpp():
+    """Install Metal-accelerated llama-cpp-python for Apple Silicon"""
+    print("🍎 Installing Metal-accelerated llama-cpp-python for Apple Silicon...")
+    
+    try:
+        subprocess.run([
+            sys.executable, '-m', 'pip', 'install', 
+            'llama-cpp-python==0.3.9',
+            '--extra-index-url', 'https://abetlen.github.io/llama-cpp-python/whl/metal',
+            '--upgrade', '--force-reinstall', '--no-cache-dir'
+        ], check=True)
+        
+        print("✅ Successfully installed Metal-accelerated llama-cpp-python!")
+        return True
+    except subprocess.CalledProcessError as e:
+        print(f"❌ Failed to install Metal llama-cpp-python: {e}")
+        return False
+
 def setup_cuda_llama_cpp():
-    """Install llama-cpp-python with CUDA support"""
+    """Install llama-cpp-python with CUDA support using pre-built wheels"""
     print("🚀 Installing llama-cpp-python with CUDA support...")
+    
+    # Detect CUDA version
+    cuda_version = get_cuda_version()
+    if not cuda_version:
+        print("⚠️  Could not detect CUDA version, falling back to source build")
+        return setup_cuda_llama_cpp_from_source()
+    
+    print(f"🔍 Detected CUDA version: {cuda_version}")
+    
+    # Map CUDA version to wheel index
+    cuda_wheel_map = {
+        "12.1": "cu121",
+        "12.2": "cu122",
+        "12.3": "cu123",
+        "12.4": "cu124",
+        "12.5": "cu125",
+        "11.7": "cu117",
+        "11.8": "cu118",
+    }
+    
+    cuda_tag = cuda_wheel_map.get(cuda_version)
+    if not cuda_tag:
+        print(f"⚠️  No pre-built wheel for CUDA {cuda_version}, trying closest version...")
+        # Try to find closest version
+        if cuda_version.startswith("12."):
+            cuda_tag = "cu121"  # Use oldest 12.x wheel
+        elif cuda_version.startswith("11."):
+            cuda_tag = "cu118"  # Use newest 11.x wheel
+        else:
+            print("⚠️  Unsupported CUDA version, falling back to source build")
+            return setup_cuda_llama_cpp_from_source()
+    
+    try:
+        # Use pre-built CUDA wheel
+        print(f"📦 Using pre-built wheel for CUDA {cuda_tag}")
+        subprocess.run([
+            sys.executable, '-m', 'pip', 'install', 
+            'llama-cpp-python==0.3.9',
+            '--extra-index-url', f'https://abetlen.github.io/llama-cpp-python/whl/{cuda_tag}',
+            '--upgrade', '--force-reinstall', '--no-cache-dir'
+        ], check=True)
+        
+        print("✅ Successfully installed CUDA-enabled llama-cpp-python from pre-built wheel!")
+        return True
+    except subprocess.CalledProcessError as e:
+        print(f"❌ Failed to install from pre-built wheel: {e}")
+        print("Falling back to source build...")
+        return setup_cuda_llama_cpp_from_source()
+
+def setup_cuda_llama_cpp_from_source():
+    """Install llama-cpp-python with CUDA support from source"""
+    print("🔧 Building llama-cpp-python from source with CUDA support...")
     
     try:
         env = os.environ.copy()
@@ -106,7 +245,7 @@ def setup_cuda_llama_cpp():
         
         return True
     except subprocess.CalledProcessError as e:
-        print(f"❌ Failed to install CUDA-enabled llama-cpp-python: {e}")
+        print(f"❌ Failed to build CUDA-enabled llama-cpp-python from source: {e}")
         return False
 
 def check_dependencies():
@@ -159,24 +298,37 @@ def run_setup(force=False):
     else:
         print("\n✅ ffmpeg is already installed")
     
-    # 2. Setup CUDA if needed
-    if gpu_type == 'cuda' and not status['cuda_llama_cpp']:
-        print("\n🎮 NVIDIA GPU detected - CUDA acceleration available")
-        if force or input("Install CUDA-enabled llama-cpp-python? (y/N): ").lower() == 'y':
-            if setup_cuda_llama_cpp():
-                print("✅ CUDA support installed successfully!")
-            else:
-                print("⚠️  CUDA setup failed, will use CPU mode")
-                setup_needed = True
-    elif gpu_type == 'cuda':
-        print("\n✅ CUDA-enabled llama-cpp-python is already installed")
-    elif gpu_type == 'mps':
-        print("\n✅ Apple Silicon detected - MPS acceleration will be used")
+    # 2. Setup llama-cpp-python with appropriate acceleration
+    print(f"\n🔧 Installing llama-cpp-python for {gpu_type.upper()} acceleration...")
+    
+    # Always install llama-cpp-python (it's required and not in requirements.txt)
+    if setup_llama_cpp():
+        print(f"✅ {gpu_type.upper()}-optimized llama-cpp-python installed successfully!")
     else:
-        print("\n✅ CPU mode - No GPU acceleration setup needed")
+        print(f"⚠️  Failed to install optimized llama-cpp-python")
+        print("   Please install manually: pip install llama-cpp-python==0.3.9")
+        setup_needed = True
+    
+    # 3. Additional recommendations for macOS and Windows
+    system = platform.system()
+    if system in ["Darwin", "Windows"]:
+        print("\n📚 Additional Recommendations:")
+        print("\n1. LibreOffice for better Office document support:")
+        if system == "Darwin":
+            print("   brew install libreoffice")
+        else:  # Windows
+            print("   Download from: https://www.libreoffice.org/download/")
+        
+        print("\n2. For HWP/HWPX support, install h2orestart extension:")
+        print("   https://extensions.libreoffice.org/en/extensions/show/27504")
+        print("\n3. For document conversions, install pandoc:")
+        if system == "Darwin":
+            print("   brew install pandoc")
+        else:  # Windows
+            print("   Download from: https://pandoc.org/installing.html")
     
     if not setup_needed:
-        print("\n✅ All dependencies are properly installed!")
+        print("\n✅ All automatic dependencies are properly installed!")
         return True
     else:
         print("\n⚠️  Some dependencies could not be installed automatically")

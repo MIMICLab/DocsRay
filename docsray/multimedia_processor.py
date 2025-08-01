@@ -8,6 +8,7 @@ import tempfile
 import logging
 from pathlib import Path
 from typing import Tuple, List, Optional
+import re
 from faster_whisper import WhisperModel
 from PIL import Image
 from reportlab.lib.pagesizes import letter
@@ -71,10 +72,60 @@ class AudioProcessor:
         transcribed_text = " ".join([segment.text for segment in segments])
         detected_language = info.language
         
+        # Clean transcribed text
+        transcribed_text = self.clean_transcribed_text(transcribed_text)
+        
         logger.info(f"Detected language: {detected_language}")
         logger.info(f"Transcription length: {len(transcribed_text)} characters")
         
+        # Debug: Print transcribed text for audio files
+        logger.info(f"[DEBUG] Transcribed text: {transcribed_text[:500]}...")  # First 500 chars
+        
         return transcribed_text, detected_language
+    
+    @staticmethod
+    def clean_transcribed_text(text: str) -> str:
+        """
+        Clean transcribed text by removing unnecessary characters
+        
+        Args:
+            text: Raw transcribed text
+            
+        Returns:
+            Cleaned text
+        """
+        if not text:
+            return text
+            
+        # Define allowed punctuation marks
+        allowed_punctuation = set('.,!?;:\'"-()[]{}…')
+        
+        # Remove special characters except allowed punctuation, alphanumeric, and spaces
+        cleaned_chars = []
+        for char in text:
+            if char.isalnum() or char.isspace() or char in allowed_punctuation:
+                cleaned_chars.append(char)
+            elif ord(char) >= 0xAC00 and ord(char) <= 0xD7A3:  # Korean characters
+                cleaned_chars.append(char)
+        
+        text = ''.join(cleaned_chars)
+        
+        # Remove multiple spaces
+        text = re.sub(r'\s+', ' ', text)
+        
+        # Remove leading/trailing whitespace
+        text = text.strip()
+        
+        # Remove repeated punctuation (e.g., "..." becomes ".")
+        text = re.sub(r'([.!?])\1+', r'\1', text)
+        
+        # Fix spacing around punctuation
+        text = re.sub(r'\s+([,.!?;:])', r'\1', text)
+        text = re.sub(r'([,.!?;:])(?=[A-Za-z가-힣])', r'\1 ', text)
+        
+        # Keep repeated words as they may be meaningful (e.g., children repeating phrases)
+        
+        return text
     
     def save_transcription(self, text: str, output_path: str) -> str:
         """
@@ -294,8 +345,8 @@ class MultimediaPDFCreator:
             
             grid_data = []
             grid_size = 4  # 4x4 grid
-            frame_width = 1.5 * inch
-            frame_height = 1.125 * inch  # 4:3 aspect ratio
+            frame_width = 1.3 * inch
+            frame_height = 0.975 * inch  # 4:3 aspect ratio
             
             for row in range(grid_size):
                 row_data = []
@@ -333,13 +384,17 @@ class MultimediaPDFCreator:
             
             if grid_data:
                 # Create table with grid
-                table = Table(grid_data, colWidths=[frame_width + 0.2*inch] * grid_size, 
-                             rowHeights=[frame_height + 0.3*inch] * grid_size)
+                table = Table(grid_data, colWidths=[frame_width + 0.4*inch] * grid_size, 
+                             rowHeights=[frame_height + 0.5*inch] * grid_size)
                 table.setStyle(TableStyle([
                     ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
                     ('VALIGN', (0, 0), (-1, -1), 'TOP'),
                     ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
                     ('FONTSIZE', (0, 0), (-1, -1), 8),
+                    ('LEFTPADDING', (0, 0), (-1, -1), 6),
+                    ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+                    ('TOPPADDING', (0, 0), (-1, -1), 6),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
                 ]))
                 
                 story.append(table)

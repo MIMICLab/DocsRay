@@ -44,7 +44,7 @@ logger = logging.getLogger(__name__)
 
 # --- Liveness watchdog variables ---
 LAST_ACTIVITY = time.time()           # Timestamp of last successful UI update
-HEALTH_TIMEOUT = 300                 # Seconds of silence → watchdog restart
+HEALTH_TIMEOUT = 86400               # Seconds of silence → watchdog restart
 
 def safe_progress(cb, pct, msg):
     """
@@ -1027,6 +1027,7 @@ def main():
     global PDF_PROCESS_TIMEOUT
     if args.timeout is not None:
         PDF_PROCESS_TIMEOUT = args.timeout
+        HEALTH_TIMEOUT = min(2 * PDF_PROCESS_TIMEOUT, HEALTH_TIMEOUT)
     global PAGE_LIMIT
     if args.pages is not None:
         PAGE_LIMIT = args.pages

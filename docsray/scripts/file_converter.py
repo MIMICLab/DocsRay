@@ -235,6 +235,7 @@ class FileConverter:
         # Image formats
         '.jpg': 'JPEG Image',
         '.jpeg': 'JPEG Image',
+        '.jfif': 'JPEG Image',
         '.png': 'PNG Image',
         '.gif': 'GIF Image',
         '.bmp': 'Bitmap Image',
@@ -273,6 +274,11 @@ class FileConverter:
         """
         self.output_dir = output_dir or CACHE_DIR
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Check LibreOffice availability on initialization
+        self._libreoffice_available = self._check_libreoffice()
+        if self._libreoffice_available:
+            print("LibreOffice detected - will use for office document conversion", file=sys.stderr)
         
     @classmethod
     def get_supported_formats(cls) -> dict:
@@ -327,6 +333,9 @@ class FileConverter:
             return self._convert_excel_to_pdf(input_file, output_path)
         elif file_ext in ['.pptx', '.ppt']:
             return self._convert_ppt_to_pdf(input_file, output_path)
+        elif file_ext in ['.odt', '.ods', '.odp']:
+            # OpenDocument formats - use LibreOffice if available, otherwise try pandoc
+            return self._convert_opendocument_to_pdf(input_file, output_path)
         elif file_ext == '.hwp':
             return self._convert_hwp_to_pdf(input_file, output_path)
         elif file_ext == '.hwpx':
@@ -341,7 +350,7 @@ class FileConverter:
             return self._convert_text_to_pdf(input_file, output_path)
         
         # Image formats
-        elif file_ext in ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.tif', '.webp']:
+        elif file_ext in ['.jpg', '.jpeg', '.jfif', '.png', '.gif', '.bmp', '.tiff', '.tif', '.webp']:
             return self._convert_image_to_pdf(input_file, output_path)
         
         # Audio formats
@@ -355,12 +364,146 @@ class FileConverter:
         # Fallback: try pandoc for anything else
         else:
             return self._convert_with_pandoc_simple(input_file, output_path)
+    
+    def _check_libreoffice(self) -> bool:
+        """Check if LibreOffice is installed and available"""
+        import subprocess
+        
+        # Try different possible commands
+        commands = ['libreoffice', 'soffice']
+        
+        for cmd in commands:
+            try:
+                result = subprocess.run(
+                    [cmd, '--version'],
+                    capture_output=True,
+                    check=True,
+                    timeout=5
+                )
+                if result.returncode == 0:
+                    return True
+            except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+                continue
+        
+        return False
+    
+    def _convert_with_libreoffice(self, input_file: Path, output_file: Path) -> Tuple[bool, str]:
+        """Convert document to PDF using LibreOffice headless mode"""
+        import subprocess
+        import shutil
+        
+        # Find the correct LibreOffice command
+        libreoffice_cmd = None
+        for cmd in ['libreoffice', 'soffice']:
+            if shutil.which(cmd):
+                libreoffice_cmd = cmd
+                break
+        
+        if not libreoffice_cmd:
+            return False, "LibreOffice not found"
+        
+        try:
+            # Create output directory if it doesn't exist
+            output_file.parent.mkdir(parents=True, exist_ok=True)
+            
+            # LibreOffice outputs to the directory with the original filename + .pdf
+            # So we need to use a temp directory and move the file
+            temp_output_dir = output_file.parent / f"libreoffice_temp_{os.getpid()}"
+            temp_output_dir.mkdir(exist_ok=True)
+            
+            cmd = [
+                libreoffice_cmd,
+                '--headless',
+                '--invisible',
+                '--nodefault',
+                '--nolockcheck',
+                '--nologo',
+                '--norestore',
+                '--convert-to', 'pdf',
+                '--outdir', str(temp_output_dir),
+                str(input_file)
+            ]
+            
+            print(f"Running LibreOffice conversion: {' '.join(cmd)}", file=sys.stderr)
+            
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=120  # 2 minute timeout
+            )
+            
+            if result.returncode == 0:
+                # Find the output file (LibreOffice creates it with the input filename + .pdf)
+                expected_output = temp_output_dir / f"{input_file.stem}.pdf"
+                
+                if expected_output.exists():
+                    # Move to desired location
+                    shutil.move(str(expected_output), str(output_file))
+                    
+                    # Clean up temp directory
+                    try:
+                        shutil.rmtree(temp_output_dir)
+                    except:
+                        pass
+                    
+                    print(f"LibreOffice conversion successful: {output_file}", file=sys.stderr)
+                    return True, str(output_file)
+                else:
+                    return False, f"LibreOffice did not create expected output file: {expected_output}"
+            else:
+                error_msg = f"LibreOffice conversion failed with code {result.returncode}"
+                if result.stderr:
+                    error_msg += f": {result.stderr}"
+                return False, error_msg
+                
+        except subprocess.TimeoutExpired:
+            return False, "LibreOffice conversion timed out"
+        except Exception as e:
+            return False, f"LibreOffice conversion error: {str(e)}"
+        finally:
+            # Clean up temp directory if it still exists
+            if 'temp_output_dir' in locals() and temp_output_dir.exists():
+                try:
+                    shutil.rmtree(temp_output_dir)
+                except:
+                    pass
+    
+    def _convert_opendocument_to_pdf(self, input_file: Path, output_file: Path) -> Tuple[bool, str]:
+        """Convert OpenDocument formats (ODT, ODS, ODP) to PDF"""
+        # Try LibreOffice first if available (best for OpenDocument)
+        if self._libreoffice_available:
+            print(f"Using LibreOffice for {input_file.suffix} conversion...", file=sys.stderr)
+            success, result = self._convert_with_libreoffice(input_file, output_file)
+            if success:
+                return success, result
+            print(f"LibreOffice conversion failed: {result}", file=sys.stderr)
+        
+        # Fallback to pandoc for ODT files
+        if input_file.suffix.lower() == '.odt':
+            print(f"Trying pandoc for ODT conversion...", file=sys.stderr)
+            return self._convert_with_pandoc_simple(input_file, output_file)
+        
+        # For ODS and ODP without LibreOffice, we can't convert easily
+        return False, f"Cannot convert {input_file.suffix} files without LibreOffice installed"
         
     # ------------------------------------------------------------------
     # HWPX → PDF  (zip + XML)  — text + images via BeautifulSoup + ReportLab
     # ------------------------------------------------------------------
     def _convert_hwpx_to_pdf(self, input_file: Path, output_file: Path) -> Tuple[bool, str]:
         """Convert HWPX (Hangul OOXML) to PDF."""
+        # Try LibreOffice first if available
+        if self._libreoffice_available:
+            print(f"Trying LibreOffice for HWPX conversion...", file=sys.stderr)
+            success, result = self._convert_with_libreoffice(input_file, output_file)
+            if success:
+                return success, result
+            print(f"LibreOffice conversion failed: {result}", file=sys.stderr)
+            print(f"For better HWPX support, install h2orestart extension:", file=sys.stderr)
+            print(f"  https://extensions.libreoffice.org/en/extensions/show/27504", file=sys.stderr)
+            print(f"Falling back to manual parsing...", file=sys.stderr)
+        
+        # Fallback to manual HWPX parsing
         from zipfile import ZipFile
         texts, img_paths = [], []
         tmp_dir = output_file.with_suffix("")  # temp folder alongside output
@@ -461,6 +604,18 @@ class FileConverter:
 
     def _convert_hwp_to_pdf(self, input_file: Path, output_file: Path) -> Tuple[bool, str]:
         """Convert HWP to PDF"""
+        # Try LibreOffice first if available
+        if self._libreoffice_available:
+            print(f"Trying LibreOffice for HWP conversion...", file=sys.stderr)
+            success, result = self._convert_with_libreoffice(input_file, output_file)
+            if success:
+                return success, result
+            print(f"LibreOffice conversion failed: {result}", file=sys.stderr)
+            print(f"For better HWP support, install h2orestart extension:", file=sys.stderr)
+            print(f"  https://extensions.libreoffice.org/en/extensions/show/27504", file=sys.stderr)
+            print(f"Falling back to HWPReader...", file=sys.stderr)
+        
+        # Fallback to HWPReader
         try:
             reader = HWPReader()
             # llama_index HWPReader returns a list of Document objects
@@ -498,6 +653,15 @@ class FileConverter:
 
     def _convert_docx_to_pdf(self, input_file: Path, output_file: Path) -> Tuple[bool, str]:
         """Convert DOCX/DOC to PDF with multiple fallback methods"""
+        # Try LibreOffice first if available
+        if self._libreoffice_available:
+            print(f"Trying LibreOffice for {input_file.suffix} conversion...", file=sys.stderr)
+            success, result = self._convert_with_libreoffice(input_file, output_file)
+            if success:
+                return success, result
+            print(f"LibreOffice conversion failed, falling back to other methods: {result}", file=sys.stderr)
+        
+        # Fallback to existing methods
         temp_dir = None
         
         try:
@@ -729,7 +893,7 @@ class FileConverter:
                 media_dir = temp_dir / "media"
                 if media_dir.exists():
                     for img_file in media_dir.rglob('*'):
-                        if img_file.suffix.lower() in ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tiff']:
+                        if img_file.suffix.lower() in ['.png', '.jpg', '.jpeg', '.jfif', '.gif', '.bmp', '.tiff']:
                             image_files.append(str(img_file))
             except Exception as e:
                 print(f"Image extraction warning: {e}", file=sys.stderr)
@@ -782,7 +946,7 @@ class FileConverter:
                 media_dir = temp_dir / "media"
                 if media_dir.exists():
                     for img_file in media_dir.rglob('*'):
-                        if img_file.suffix.lower() in ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tiff']:
+                        if img_file.suffix.lower() in ['.png', '.jpg', '.jpeg', '.jfif', '.gif', '.bmp', '.tiff']:
                             image_files.append(str(img_file))
             except Exception as e:
                 print(f"Image extraction warning: {e}", file=sys.stderr)
@@ -802,6 +966,15 @@ class FileConverter:
 
     def _convert_excel_to_pdf(self, input_file: Path, output_file: Path) -> Tuple[bool, str]:
         """Convert Excel to PDF using openpyxl"""
+        # Try LibreOffice first if available
+        if self._libreoffice_available:
+            print(f"Trying LibreOffice for {input_file.suffix} conversion...", file=sys.stderr)
+            success, result = self._convert_with_libreoffice(input_file, output_file)
+            if success:
+                return success, result
+            print(f"LibreOffice conversion failed, falling back to openpyxl: {result}", file=sys.stderr)
+        
+        # Fallback to openpyxl
         try:
             import openpyxl
             
@@ -837,6 +1010,15 @@ class FileConverter:
 
     def _convert_ppt_to_pdf(self, input_file: Path, output_file: Path) -> Tuple[bool, str]:
         """Convert PowerPoint to PDF using python-pptx"""
+        # Try LibreOffice first if available
+        if self._libreoffice_available:
+            print(f"Trying LibreOffice for {input_file.suffix} conversion...", file=sys.stderr)
+            success, result = self._convert_with_libreoffice(input_file, output_file)
+            if success:
+                return success, result
+            print(f"LibreOffice conversion failed, falling back to python-pptx: {result}", file=sys.stderr)
+        
+        # Fallback to python-pptx
         try:
             from pptx import Presentation
             from PIL import Image
@@ -1069,12 +1251,25 @@ class FileConverter:
         return pdf
     
     def _convert_image_to_pdf(self, input_file: Path, output_file: Path) -> Tuple[bool, str]:
-        """Convert image to PDF"""       
+        """Convert image to PDF with high quality preservation"""       
         try:
             # Open image
             img = Image.open(input_file)
             
-            # Convert to RGB if necessary
+            # Get original DPI if available, default to 300 for high quality
+            original_dpi = img.info.get('dpi', (300, 300))
+            if isinstance(original_dpi, tuple):
+                dpi = max(original_dpi[0], 300)  # Use at least 300 DPI
+            else:
+                dpi = max(float(original_dpi), 300)
+            
+            # Log image info
+            print(f"Converting image: {input_file.name}", file=sys.stderr)
+            print(f"  Original size: {img.size}", file=sys.stderr)
+            print(f"  Original DPI: {original_dpi}", file=sys.stderr)
+            print(f"  Using DPI: {dpi}", file=sys.stderr)
+            
+            # Convert to RGB if necessary (preserving quality)
             if img.mode in ('RGBA', 'LA'):
                 # Create white background
                 background = Image.new('RGB', img.size, (255, 255, 255))
@@ -1083,11 +1278,24 @@ class FileConverter:
                 else:
                     background.paste(img)
                 img = background
-            elif img.mode not in ('RGB', 'L'):
+            elif img.mode == 'P':
+                # Convert palette images to RGB for better quality
+                img = img.convert('RGB')
+            elif img.mode not in ('RGB', 'L', 'CMYK'):
                 img = img.convert('RGB')
             
-            # Save as PDF
-            img.save(str(output_file), 'PDF', resolution=100.0)
+            # Save as PDF with high quality
+            # Use high quality settings
+            img.save(
+                str(output_file), 
+                'PDF', 
+                resolution=dpi,
+                quality=95,  # High JPEG quality for embedded images
+                optimize=True,  # Optimize file size without quality loss
+                dpi=(dpi, dpi)  # Explicitly set DPI metadata
+            )
+            
+            print(f"  Converted to PDF with {dpi} DPI", file=sys.stderr)
             return True, str(output_file)
             
         except Exception as e:
@@ -1137,7 +1345,7 @@ class FileConverter:
                 media_dir = temp_dir / "media"
                 if media_dir.exists():
                     for img_file in media_dir.rglob('*'):
-                        if img_file.suffix.lower() in ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tiff']:
+                        if img_file.suffix.lower() in ['.png', '.jpg', '.jpeg', '.jfif', '.gif', '.bmp', '.tiff']:
                             image_files.append(str(img_file))
             except subprocess.TimeoutExpired:
                 print(f"Image extraction timed out, continuing without images", file=sys.stderr)
