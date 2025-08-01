@@ -1024,7 +1024,7 @@ def main():
     args = parser.parse_args()
     
     # Update global timeout if specified
-    global PDF_PROCESS_TIMEOUT
+    global PDF_PROCESS_TIMEOUT, HEALTH_TIMEOUT
     if args.timeout is not None:
         PDF_PROCESS_TIMEOUT = args.timeout
         HEALTH_TIMEOUT = min(2 * PDF_PROCESS_TIMEOUT, HEALTH_TIMEOUT)

@@ -26,7 +26,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="DocsRay API",
     description="Universal Document Question-Answering System API",
-    version="1.9.0",
+    version="1.9.1",
     lifespan=lifespan
 )
 
@@ -130,7 +130,7 @@ async def root():
     """Root endpoint with API information."""
     return {
         "message": "DocsRay Universal Document Question-Answering API",
-        "version": "1.6.0",
+        "version": "1.9.1",
         "status": "ready",
         "cached_documents": len(document_cache),
         "supported_formats": [
