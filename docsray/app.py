@@ -26,7 +26,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="DocsRay API",
     description="Universal Document Question-Answering System API",
-    version="1.9.1",
+    version="1.9.2",
     lifespan=lifespan
 )
 

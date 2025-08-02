@@ -45,7 +45,7 @@ def run_command(cmd, check=True):
     return subprocess.run(cmd, check=check)
 
 def get_gpu_type():
-    """Detect GPU type (CUDA, MPS, or CPU)"""
+    """Detect GPU type (CUDA, ROCm, Metal, or CPU)"""
     # Check for NVIDIA GPU (CUDA)
     try:
         import torch
@@ -60,6 +60,29 @@ def get_gpu_type():
         if result.returncode == 0:
             return "cuda"
     except FileNotFoundError:
+        pass
+    
+    # Check for AMD GPU (ROCm)
+    try:
+        # Check rocm-smi command
+        result = subprocess.run(['rocm-smi'], capture_output=True, text=True)
+        if result.returncode == 0:
+            return "rocm"
+    except FileNotFoundError:
+        pass
+    
+    # Alternative AMD GPU check
+    try:
+        # Check for AMD GPU devices
+        result = subprocess.run(['lspci'], capture_output=True, text=True)
+        if result.returncode == 0:
+            # Look for AMD GPU indicators
+            for line in result.stdout.split('\n'):
+                if 'AMD' in line and ('Radeon' in line or 'GPU' in line):
+                    # Check if ROCm is installed
+                    if os.path.exists('/opt/rocm') or shutil.which('rocminfo'):
+                        return "rocm"
+    except:
         pass
     
     # Check for Apple Silicon (MPS/Metal)
@@ -79,6 +102,18 @@ def get_gpu_type():
 def check_ffmpeg():
     """Check if ffmpeg is installed"""
     return shutil.which('ffmpeg') is not None
+
+def check_libreoffice():
+    """Check if LibreOffice is installed"""
+    # Check common LibreOffice executables
+    return any([
+        shutil.which('libreoffice'),
+        shutil.which('soffice'),
+        os.path.exists('/Applications/LibreOffice.app'),  # macOS
+        os.path.exists('/usr/bin/libreoffice'),  # Linux
+        os.path.exists('/usr/local/bin/libreoffice'),  # brew install location
+    ])
+
 
 def install_ffmpeg():
     """Install ffmpeg based on the operating system"""
@@ -172,102 +207,61 @@ def setup_llama_cpp():
     
     if gpu_type == "cuda":
         return setup_cuda_llama_cpp()
+    elif gpu_type == "rocm":
+        return setup_rocm_llama_cpp()
     elif gpu_type == "metal":
         return setup_metal_llama_cpp()
     else:
         return setup_cpu_llama_cpp()
 
 def setup_cpu_llama_cpp():
-    """Install CPU-optimized llama-cpp-python"""
-    print("💻 Installing CPU-optimized llama-cpp-python...")
+    """Install CPU-optimized llama-cpp-python with OpenBLAS"""
+    print("💻 Building CPU-optimized llama-cpp-python with OpenBLAS...")
     
     try:
+        env = os.environ.copy()
+        env['CMAKE_ARGS'] = '-DGGML_BLAS=ON -DGGML_BLAS_VENDOR=OpenBLAS'
+        
         subprocess.run([
             sys.executable, '-m', 'pip', 'install', 
             'llama-cpp-python==0.3.9',
-            '--extra-index-url', 'https://abetlen.github.io/llama-cpp-python/whl/cpu',
             '--upgrade', '--force-reinstall', '--no-cache-dir'
-        ], check=True)
+        ], env=env, check=True)
         
-        print("✅ Successfully installed CPU-optimized llama-cpp-python!")
+        print("✅ Successfully built CPU-optimized llama-cpp-python with OpenBLAS!")
         return True
     except subprocess.CalledProcessError as e:
-        print(f"❌ Failed to install CPU llama-cpp-python: {e}")
+        print(f"❌ Failed to build CPU llama-cpp-python: {e}")
         return False
 
 def setup_metal_llama_cpp():
     """Install Metal-accelerated llama-cpp-python for Apple Silicon"""
-    print("🍎 Installing Metal-accelerated llama-cpp-python for Apple Silicon...")
+    print("🍎 Building Metal-accelerated llama-cpp-python for Apple Silicon...")
     
     try:
+        env = os.environ.copy()
+        env['CMAKE_ARGS'] = '-DGGML_METAL=on'
+        
         subprocess.run([
             sys.executable, '-m', 'pip', 'install', 
             'llama-cpp-python==0.3.9',
-            '--extra-index-url', 'https://abetlen.github.io/llama-cpp-python/whl/metal',
             '--upgrade', '--force-reinstall', '--no-cache-dir'
-        ], check=True)
+        ], env=env, check=True)
         
-        print("✅ Successfully installed Metal-accelerated llama-cpp-python!")
+        print("✅ Successfully built Metal-accelerated llama-cpp-python!")
         return True
     except subprocess.CalledProcessError as e:
-        print(f"❌ Failed to install Metal llama-cpp-python: {e}")
+        print(f"❌ Failed to build Metal llama-cpp-python: {e}")
         return False
 
 def setup_cuda_llama_cpp():
-    """Install llama-cpp-python with CUDA support using pre-built wheels"""
-    print("🚀 Installing llama-cpp-python with CUDA support...")
-    
-    # Detect CUDA version
-    cuda_version = get_cuda_version()
-    if not cuda_version:
-        print("⚠️  Could not detect CUDA version, falling back to source build")
-        return setup_cuda_llama_cpp_from_source()
-    
-    print(f"🔍 Detected CUDA version: {cuda_version}")
-    
-    # Map CUDA version to wheel index
-    cuda_wheel_map = {
-        "12.1": "cu121",
-        "12.2": "cu122",
-        "12.3": "cu123",
-        "12.4": "cu124",
-        "12.5": "cu125",
-        "11.7": "cu117",
-        "11.8": "cu118",
-    }
-    
-    cuda_tag = cuda_wheel_map.get(cuda_version)
-    if not cuda_tag:
-        print(f"⚠️  No pre-built wheel for CUDA {cuda_version}, trying closest version...")
-        # Try to find closest version
-        if cuda_version.startswith("12."):
-            cuda_tag = "cu121"  # Use oldest 12.x wheel
-        elif cuda_version.startswith("11."):
-            cuda_tag = "cu118"  # Use newest 11.x wheel
-        else:
-            print("⚠️  Unsupported CUDA version, falling back to source build")
-            return setup_cuda_llama_cpp_from_source()
-    
-    try:
-        # Use pre-built CUDA wheel
-        print(f"📦 Using pre-built wheel for CUDA {cuda_tag}")
-        subprocess.run([
-            sys.executable, '-m', 'pip', 'install', 
-            'llama-cpp-python==0.3.9',
-            '--extra-index-url', f'https://abetlen.github.io/llama-cpp-python/whl/{cuda_tag}',
-            '--upgrade', '--force-reinstall', '--no-cache-dir'
-        ], check=True)
-        
-        print("✅ Successfully installed CUDA-enabled llama-cpp-python from pre-built wheel!")
-        return True
-    except subprocess.CalledProcessError as e:
-        print(f"❌ Failed to install from pre-built wheel: {e}")
-        print("Falling back to source build...")
-        return setup_cuda_llama_cpp_from_source()
-
-def setup_cuda_llama_cpp_from_source():
     """Install llama-cpp-python with CUDA support from source"""
-    print("🔧 Building llama-cpp-python from source with CUDA support...")
+    print("🚀 Building llama-cpp-python with CUDA support...")
+    
+    # Detect CUDA version for information
+    cuda_version = get_cuda_version()
+    if cuda_version:
+        print(f"🔍 Detected CUDA version: {cuda_version}")
     
     try:
         env = os.environ.copy()
@@ -279,9 +273,30 @@ def setup_cuda_llama_cpp_from_source():
             '--upgrade', '--force-reinstall', '--no-cache-dir'
         ], env=env, check=True)
         
+        print("✅ Successfully built CUDA-enabled llama-cpp-python!")
         return True
     except subprocess.CalledProcessError as e:
-        print(f"❌ Failed to build CUDA-enabled llama-cpp-python from source: {e}")
+        print(f"❌ Failed to build CUDA-enabled llama-cpp-python: {e}")
+        return False
+
+def setup_rocm_llama_cpp():
+    """Install llama-cpp-python with ROCm/hipBLAS support for AMD GPUs"""
+    print("🔴 Building llama-cpp-python with ROCm/hipBLAS support for AMD GPUs...")
+    
+    try:
+        env = os.environ.copy()
+        env['CMAKE_ARGS'] = '-DGGML_HIPBLAS=on'
+        
+        subprocess.run([
+            sys.executable, '-m', 'pip', 'install', 
+            'llama-cpp-python==0.3.9',
+            '--upgrade', '--force-reinstall', '--no-cache-dir'
+        ], env=env, check=True)
+        
+        print("✅ Successfully built ROCm-enabled llama-cpp-python for AMD GPUs!")
+        return True
+    except subprocess.CalledProcessError as e:
+        print(f"❌ Failed to build ROCm-enabled llama-cpp-python: {e}")
         return False
 
 def check_dependencies():
@@ -347,23 +362,36 @@ def run_setup(force=False):
         print("   Please install manually: pip install llama-cpp-python==0.3.9")
         setup_needed = True
     
-    # 3. Additional recommendations for macOS and Windows
+    # 3. Optional dependencies for better document support
     system = platform.system()
-    if system in ["Darwin", "Windows"]:
-        print("\n📚 Additional Recommendations:")
-        print("\n1. LibreOffice for better Office document support:")
-        if system == "Darwin":
-            print("   brew install libreoffice")
-        else:  # Windows
-            print("   Download from: https://www.libreoffice.org/download/")
-        
-        print("\n2. For HWP/HWPX support, install h2orestart extension:")
+    print("\n📚 Installing optional dependencies for better document support...")
+    
+    # Install LibreOffice
+    if not check_libreoffice():
+        if system == "Darwin" and shutil.which('brew'):
+            print("\n📄 LibreOffice not found. Installing for better Office document support...")
+            if force or input("Install LibreOffice automatically? (y/N): ").lower() == 'y':
+                try:
+                    print("Installing LibreOffice via Homebrew (this may take a while)...")
+                    run_command(['brew', 'install', '--cask', 'libreoffice'])
+                    print("✅ LibreOffice installed successfully!")
+                except subprocess.CalledProcessError:
+                    print("⚠️  Failed to install LibreOffice automatically")
+                    print("   Please install manually: brew install --cask libreoffice")
+        elif system == "Darwin":
+            print("\n⚠️  LibreOffice not found. Please install manually:")
+            print("   brew install --cask libreoffice")
+        elif system == "Windows":
+            print("\n⚠️  LibreOffice not found. Please download from:")
+            print("   https://www.libreoffice.org/download/")
+    else:
+        print("\n✅ LibreOffice is already installed")
+    
+    
+    # HWP extension info (can't be automated)
+    if check_libreoffice():
+        print("\n💡 For HWP/HWPX support, install h2orestart extension:")
         print("   https://extensions.libreoffice.org/en/extensions/show/27504")
-        print("\n3. For document conversions, install pandoc:")
-        if system == "Darwin":
-            print("   brew install pandoc")
-        else:  # Windows
-            print("   Download from: https://pandoc.org/installing.html")
     
     if not setup_needed:
         print("\n✅ All automatic dependencies are properly installed!")
