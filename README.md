@@ -5,8 +5,6 @@
 [![arXiv](https://img.shields.io/badge/arXiv-2507.23217-b31b1b.svg?style=flat)](http://arxiv.org/abs/2507.23217)
 [![Verified on MseeP](https://mseep.ai/badge.svg)](https://mseep.ai/app/f6dfcc65-8ee3-4ad1-9101-88b6dbdcf37b)
 
-**[🌐 Live Demo (Base Model)](https://docsray.com/)**
-
 A powerful Universal Document Question-Answering System that uses advanced embedding models and multimodal LLMs with Coarse-to-Fine search (RAG) approach. Features seamless MCP (Model Context Protocol) integration with Claude Desktop, comprehensive directory management capabilities, visual content analysis, and intelligent hybrid OCR system.
 
 ## 🚀 Quick Start
